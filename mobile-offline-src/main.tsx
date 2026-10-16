@@ -12,6 +12,7 @@ import React, {
 import { createRoot } from "react-dom/client";
 import {
   assertLocalOfflineAvailable,
+  connectLocalSafDirectory,
   getCloudOfflineCacheByCloudSource,
   getLocalArchiveByCloudSource,
   createLocalArchive,
@@ -52,8 +53,7 @@ import {
   type StoredLocalOwnerContext,
 } from "@/lib/local-owner-context";
 import { migrateLegacyLocalOrigin } from "@/lib/local-origin-migration";
-import { regrantSavedSafDirectory } from "@/lib/local-saf-directory";
-import { getLocalSafDirectory } from "@/lib/local-saf-native";
+import { getLocalSafDirectory, isAndroidSafAvailable } from "@/lib/local-saf-native";
 import { retireBundledLegacyServiceWorkers } from "@/lib/android-service-worker";
 import { normalizeLocalImageBlob } from "@/lib/local-image-blob";
 import {
@@ -397,6 +397,8 @@ const text = {
     offlineTitle: "当前离线，本地记录可用",
     offlineBody: "项目、记录和照片先保存在本机。联网后可手动上传待上传的云端内容；明确选择本地免费使用的项目不会自动上传。",
     migrationWarning: "旧版本地资料暂未完成迁移。现有资料不会被删除，请稍后重新打开 App 再试。",
+    safConnectWarning: "本地资料文件夹尚未连接。如已有 LifeSpace 资料，请选择原来的 Documents/LifeSpace 文件夹。",
+    safConnectAction: "授权访问",
     safRegrantWarning: "本地资料文件夹的授权已失效。请重新授权原文件夹，资料不会被重建或覆盖。",
     safRegrantAction: "重新授权原文件夹", safRegranting: "正在验证原文件夹…",
     safRegrantCanceled: "已取消授权，原资料未改变；可以再次尝试。",
@@ -474,6 +476,8 @@ const text = {
     offlineTitle: "Cloud is temporarily unavailable. Local records still work.",
     offlineBody: "Projects, records and photos are saved on this device first. Upload pending cloud changes manually after reconnecting. Projects you mark as local-only stay local.",
     migrationWarning: "Previous local data has not finished migrating. Nothing was deleted; reopen the app later to retry.",
+    safConnectWarning: "Your local data folder is not connected. If you have LifeSpace data, select the original Documents/LifeSpace folder.",
+    safConnectAction: "Grant access",
     safRegrantWarning: "Access to your local data folder was lost. Reauthorize the original folder; existing data will not be replaced.",
     safRegrantAction: "Reauthorize original folder", safRegranting: "Checking original folder…",
     safRegrantCanceled: "Authorization canceled. Your data is unchanged; try again when ready.",
@@ -875,6 +879,9 @@ function App() {
   const firstUseCheckStarted = useRef(false);
   const [migrationWarning, setMigrationWarning] = useState(false);
   const [safRegrantNeeded, setSafRegrantNeeded] = useState(false);
+  const [safConnectionMissing, setSafConnectionMissing] = useState(false);
+  const safConnectAttempted = useRef(false);
+  const safConnectRunning = useRef(false);
   const [safRegrantRunning, setSafRegrantRunning] = useState(false);
   const [safRegrantError, setSafRegrantError] = useState("");
   const [toast, setToast] = useState("");
@@ -920,7 +927,7 @@ function App() {
     firstUseCheckStarted.current = true;
     void shouldShowAndroidWelcome({
       signedIn: auth.status === "signed-in",
-      hasLocalContent: migrationWarning || safRegrantNeeded || archives.length > 0 || cloudCaches.length > 0 || pendingSync.length > 0 || unownedCount > 0,
+      hasLocalContent: migrationWarning || (safRegrantNeeded && !safConnectionMissing) || archives.length > 0 || cloudCaches.length > 0 || pendingSync.length > 0 || unownedCount > 0,
       hasRememberedOwner: Boolean(loadRememberedLocalOwnerContext()) || readLocalSpaceVisibilityPreference() !== null,
       explicitlySignedOut: wasLocalOwnerExplicitlySignedOut(),
     }).then((show) => {
@@ -1053,6 +1060,37 @@ function App() {
       })
       .catch((error) => console.warn("local taxonomy", error));
   }, []);
+
+  const connectSaf = useCallback(async () => {
+    if (safConnectRunning.current) return;
+    safConnectRunning.current = true;
+    safConnectAttempted.current = true;
+    setSafRegrantRunning(true);
+    setSafRegrantError("");
+    try {
+      await connectLocalSafDirectory();
+      await migrateLegacyLocalOrigin();
+      await loadList();
+      setSafRegrantNeeded(false);
+      setMigrationWarning(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      setSafRegrantError(message.includes("No LifeSpace data directory was selected")
+        ? copy.safRegrantCanceled
+        : message.includes("Select the original LifeSpace data folder")
+          ? copy.safRegrantWrong : copy.safRegrantFailed);
+    } finally {
+      safConnectRunning.current = false;
+      setSafRegrantRunning(false);
+    }
+  }, [loadList, copy.safRegrantCanceled, copy.safRegrantWrong, copy.safRegrantFailed]);
+
+  useEffect(() => {
+    if (loading || !firstUseChecked || screen.kind !== "list" ||
+        localSpacePreference === false || sourceFilter === "cloud" ||
+        !safRegrantNeeded || safConnectAttempted.current) return;
+    void connectSaf();
+  }, [loading, firstUseChecked, screen.kind, localSpacePreference, sourceFilter, safRegrantNeeded, connectSaf]);
 
   const loadCloudList = useCallback(async (userId?: string | null) => {
     const requestId = ++cloudListRequestRef.current;
@@ -1269,7 +1307,8 @@ function App() {
         assertLocalOfflineAvailable();
         const savedSaf = await getLocalSafDirectory();
         const needsRegrant = Boolean(savedSaf.uri && !savedSaf.available);
-        setSafRegrantNeeded(needsRegrant);
+        setSafRegrantNeeded(isAndroidSafAvailable() && !savedSaf.available);
+        setSafConnectionMissing(!savedSaf.uri);
         // Do not run legacy handoff while the committed SAF source is inaccessible.
         const migration = needsRegrant ? null : await migrateLegacyLocalOrigin();
         if (cancelled) return;
@@ -2339,24 +2378,13 @@ function App() {
         />
       ) : null}
 
-      {safRegrantNeeded ? (
+      {safRegrantNeeded && (!safConnectionMissing || (screen.kind === "list" && localSpacePreference !== false && sourceFilter !== "cloud")) ? (
         <section className="notice warning" role="status">
-          <p>{copy.safRegrantWarning}</p>
+          <p>{safConnectionMissing ? copy.safConnectWarning : copy.safRegrantWarning}</p>
           {safRegrantError ? <p>{safRegrantError}</p> : null}
-          <button type="button" disabled={safRegrantRunning} onClick={() => {
-            setSafRegrantRunning(true);
-            setSafRegrantError("");
-            void regrantSavedSafDirectory().then(() => {
-              // Resume the existing startup and mirror flow only after a verified regrant.
-              window.location.reload();
-            }).catch((error) => {
-              const message = error instanceof Error ? error.message : "";
-              setSafRegrantError(message.includes("No LifeSpace data directory was selected")
-                ? copy.safRegrantCanceled
-                : message.includes("Select the original LifeSpace data folder")
-                  ? copy.safRegrantWrong : copy.safRegrantFailed);
-            }).finally(() => setSafRegrantRunning(false));
-          }}>{safRegrantRunning ? copy.safRegranting : copy.safRegrantAction}</button>
+          <button type="button" disabled={safRegrantRunning} onClick={() => void connectSaf()}>
+            {safRegrantRunning ? copy.safRegranting : safConnectionMissing ? copy.safConnectAction : copy.safRegrantAction}
+          </button>
         </section>
       ) : null}
       {migrationWarning ? (

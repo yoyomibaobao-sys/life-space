@@ -51,8 +51,8 @@ public final class LocalSafPlugin extends Plugin {
         boolean english = !Locale.getDefault().getLanguage().equals("zh");
         new AlertDialog.Builder(getActivity())
             .setMessage(english
-                ? "LifeSpace needs access to your local data folder to save and restore projects, records and photos."
-                : "LifeSpace 需要访问手机上的本地资料文件夹，用于保存和恢复项目、记录及照片。")
+                ? "LifeSpace needs access to your local data folder to save and restore projects, records and photos. If you already have LifeSpace data, select the original Documents/LifeSpace folder."
+                : "LifeSpace 需要访问手机上的本地资料文件夹，用于保存和恢复项目、记录及照片。如已有 LifeSpace 资料，请选择原来的 Documents/LifeSpace 文件夹。")
             .setPositiveButton(english ? "Grant access" : "授权访问", (dialog, which) -> {
                 Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
                 // The system picker may ignore this hint; permission always remains user-granted.

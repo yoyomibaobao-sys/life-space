@@ -40,6 +40,42 @@ const reset = () => { fixture.files.clear(); fixture.confirmations = 0; fixture.
   fixture.available = false; fixture.expectedId = null; fixture.canceled = false; };
 test.beforeEach(reset);
 
+test("a surviving private identity prevents empty initialization after the saved URI is lost", async () => {
+  fixture.expectedId = crypto.randomUUID();
+  await assert.rejects(directory.chooseAndValidateSafDirectory(), /identity or committed data/);
+  assert.equal(fixture.files.size, 0);
+  assert.equal(fixture.confirmations, 0);
+  assert.equal(fixture.discards, 1);
+});
+
+test("a candidate with another localSpaceId cannot replace a surviving private identity", async () => {
+  await directory.chooseAndValidateSafDirectory();
+  const original = new Map(fixture.files);
+  fixture.confirmations = 0;
+  fixture.expectedId = crypto.randomUUID();
+  await assert.rejects(directory.chooseAndValidateSafDirectory(), /identity or committed data/);
+  assert.equal(fixture.confirmations, 0);
+  assert.deepEqual(fixture.files, original);
+});
+
+test("first connection cancellation creates no identity or commit", async () => {
+  fixture.canceled = true;
+  await assert.rejects(directory.chooseAndValidateSafDirectory(), /No LifeSpace data directory was selected/);
+  assert.equal(fixture.files.size, 0);
+  assert.equal(fixture.confirmations, 0);
+});
+
+test("a corrupted snapshot or missing media never initializes or confirms an existing candidate", async () => {
+  await directory.chooseAndValidateSafDirectory();
+  const manifest = JSON.parse(new TextDecoder().decode(fixture.files.get("manifest.json")));
+  fixture.files.set("snapshots/" + manifest.committedRevision + ".json", Uint8Array.of(1));
+  const original = new Map(fixture.files);
+  fixture.confirmations = 0;
+  await assert.rejects(directory.chooseAndValidateSafDirectory(), /No valid SAF commit/);
+  assert.equal(fixture.confirmations, 0);
+  assert.deepEqual(fixture.files, original);
+});
+
 test("empty directory gets one identity and committed empty revision before connection", async () => {
   const first = await directory.chooseAndValidateSafDirectory();
   assert.equal(first.kind, "new");

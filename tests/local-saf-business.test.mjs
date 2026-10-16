@@ -6,7 +6,7 @@ import { IDBFactory } from "fake-indexeddb";
 
 globalThis.crypto ??= webcrypto;
 const backing = { files: new Map(), connected: false, cancel: false, fail: "",
-  failMirrorAfterMarker: false, restoreOpen: null, afterMarker: null };
+  failMirrorAfterMarker: false, restoreOpen: null, afterMarker: null, savedUri: null, selections: 0 };
 const storage = {
   async list(path) {
     const prefix = path ? `${path}/` : "";
@@ -35,8 +35,9 @@ const output = await build({ entryPoints: ["lib/local-offline-db.ts", "lib/local
       ctx.onResolve({ filter: /^@\/lib\/local-saf-native$/ }, () => ({ path: "saf-native", namespace: "test" }));
       ctx.onLoad({ filter: /^saf-native$/, namespace: "test" }, () => ({ loader: "js", contents: `
         export function isAndroidSafAvailable() { return true; }
-        export async function getLocalSafDirectory() { return { available: globalThis.__safBusiness.backing.connected }; }
+        export async function getLocalSafDirectory() { return { uri: globalThis.__safBusiness.backing.savedUri, available: globalThis.__safBusiness.backing.connected }; }
         export async function chooseLocalSafDirectory() {
+          globalThis.__safBusiness.backing.selections++;
           if (globalThis.__safBusiness.backing.cancel) throw Error("Folder selection cancelled");
           return { uri: "content://com.android.externalstorage.documents/tree/primary%3ADocuments%2FLifeSpace" };
         }
@@ -70,7 +71,7 @@ function freshMirror() {
 }
 function reset() { backing.files.clear(); backing.connected = false; backing.cancel = false;
   backing.fail = ""; backing.failMirrorAfterMarker = false; backing.restoreOpen = null;
-  backing.afterMarker = null; freshMirror(); }
+  backing.afterMarker = null; backing.savedUri = null; backing.selections = 0; freshMirror(); }
 test.beforeEach(reset);
 const project = (userId = null) => local.createLocalArchive({ title: "番茄", category: "system",
   system_name: "番茄", local_owner_user_id: userId });
@@ -119,6 +120,74 @@ test("cancelled folder selection cannot create a project in SAF or IndexedDB", a
   await assert.rejects(project(), /cancelled/);
   assert.equal((await local.readLegacySafRows()).archives.length, 0);
   assert.equal(backing.files.size, 0);
+});
+
+test("first local-space connection after reinstall restores projects, records, photos and taxonomy without a SAF write", async () => {
+  const archive = await project(ownerA);
+  const record = await local.createLocalRecord({ archive_id: archive.id, note: "preserved",
+    image_files: [new File([Uint8Array.of(1, 3, 5)], "original.jpg", { type: "image/jpeg" })] });
+  for (const category of ["plant", "system", "insect_fish", "other"]) {
+    await local.createLocalTaxonomyItem({ kind: "group", label: category, category });
+  }
+  const original = new Map(backing.files);
+  const head = await committed();
+  backing.connected = false;
+  backing.selections = 0;
+  freshMirror(); // Uninstall lost private IDB and permission; external data is untouched.
+  const result = await local.connectLocalSafDirectory();
+  assert.equal(result.localSpaceId, head.manifest.localSpaceId);
+  assert.equal(result.revision, head.commit.revision);
+  assert.equal(backing.selections, 1);
+  const restored = await local.getLocalArchiveDetail(archive.id);
+  assert.equal(restored.archive.saf_local_space_id, archive.saf_local_space_id);
+  assert.deepEqual(restored.records.map((row) => row.id), [record.id]);
+  assert.deepEqual(new Uint8Array(await restored.records[0].images[0].blob.arrayBuffer()), Uint8Array.of(1, 3, 5));
+  assert.equal((await local.listVisibleLocalTaxonomyItems(null)).length, 4);
+  for (const online of [true, false, true]) {
+    Object.defineProperty(globalThis.navigator ??= {}, "onLine", { configurable: true, value: online });
+    assert.equal((await local.listVisibleLocalArchiveSummaries(null)).archives.length, 1);
+  }
+  freshMirror(); // A later startup reads the same source without another picker.
+  assert.deepEqual(await local.connectLocalSafDirectory(), result);
+  assert.equal((await local.listVisibleLocalArchiveSummaries(null)).archives.length, 1);
+  assert.equal(backing.selections, 1);
+  assert.deepEqual(backing.files, original);
+});
+
+test("an already valid grant automatically materializes its existing commit without a chooser", async () => {
+  const archive = await project();
+  const original = new Map(backing.files);
+  const selections = backing.selections;
+  freshMirror();
+  const result = await local.listVisibleLocalArchiveSummaries(null);
+  assert.deepEqual(result.archives.map((row) => row.id), [archive.id]);
+  assert.equal(backing.selections, selections);
+  assert.deepEqual(backing.files, original);
+});
+
+test("first local-space authorization cancellation preserves data and can be retried", async () => {
+  const archive = await project();
+  const original = new Map(backing.files);
+  freshMirror();
+  backing.connected = false;
+  backing.cancel = true;
+  await assert.rejects(local.connectLocalSafDirectory(), /cancelled/);
+  assert.equal((await local.readLegacySafRows()).archives.length, 0);
+  assert.deepEqual(backing.files, original);
+  backing.cancel = false;
+  await local.connectLocalSafDirectory();
+  assert.deepEqual((await local.listVisibleLocalArchiveSummaries(null)).archives.map((row) => row.id), [archive.id]);
+  assert.deepEqual(backing.files, original);
+});
+
+test("lost existing grant uses the original identity regrant and resumes the same business mirror", async () => {
+  const archive = await project();
+  const original = new Map(backing.files);
+  backing.connected = false;
+  backing.savedUri = "content://com.android.externalstorage.documents/tree/primary%3ADocuments%2FLifeSpace";
+  await local.connectLocalSafDirectory();
+  assert.deepEqual((await local.listVisibleLocalArchiveSummaries(null)).archives.map((row) => row.id), [archive.id]);
+  assert.deepEqual(backing.files, original);
 });
 
 test("create, text/photo, edits, cycle, taxonomy, recycle and force hydrate use committed SAF state", async () => {

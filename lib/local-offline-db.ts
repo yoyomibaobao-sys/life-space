@@ -5,7 +5,7 @@ import { isLocalDateBefore, toLocalDateEndIso } from "@/lib/archive-cycle-dates"
 import { standardizeRecordPhotoFile } from "@/lib/image-compression";
 import { normalizeLocalImageBlob } from "@/lib/local-image-blob";
 import { commitSafContent, readSafCommitted, type SafContent, type SafState } from "@/lib/local-saf-repository";
-import { chooseAndValidateSafDirectory } from "@/lib/local-saf-directory";
+import { chooseAndValidateSafDirectory, regrantSavedSafDirectory } from "@/lib/local-saf-directory";
 import { createNativeSafStorage, getLocalSafDirectory, isAndroidSafAvailable } from "@/lib/local-saf-native";
 import { hydrateSafGeneration, readActiveSafGeneration } from "@/lib/local-saf-generation";
 import { classifyLegacySafArchive } from "@/lib/local-saf-contract";
@@ -1536,6 +1536,19 @@ async function connectedLocalSafState(createIfMissing = false): Promise<SafState
     await mirrorCommittedLocalSaf(state);
   }
   return state;
+}
+
+/** First local-space access uses the same verified source and mirror as ordinary reads. */
+export async function connectLocalSafDirectory() {
+  if (!isAndroidSafAvailable()) throw Error("Android SAF storage is required.");
+  const saved = await getLocalSafDirectory();
+  if (!saved.available) {
+    if (saved.uri) await regrantSavedSafDirectory();
+    else await chooseAndValidateSafDirectory();
+  }
+  const state = await connectedLocalSafState();
+  if (!state) throw Error("LifeSpace data directory has no valid committed revision.");
+  return { localSpaceId: state.manifest.localSpaceId, revision: state.commit.revision };
 }
 
 /** A read must recover a committed SAF revision before showing the business mirror. */

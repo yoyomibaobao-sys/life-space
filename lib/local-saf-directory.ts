@@ -16,17 +16,19 @@ function isDefaultLocalDirectory(uri: string) {
   }
 }
 
-/** Explicit adapter entry point; no page or startup path calls it yet. */
+/** Connect a validated existing space, or explicitly initialize only a truly empty default folder. */
 export async function chooseAndValidateSafDirectory() {
   const saved = await getLocalSafDirectory();
   if (saved.uri && !saved.available) {
     throw Error("Reauthorize the original LifeSpace data folder before creating local data.");
   }
+  const active = await readActiveSafGeneration();
   const selected = await chooseLocalSafDirectory();
   try {
     const storage = createNativeSafStorage();
     const root = await storage.list("");
     if (!root.length) {
+      if (active) throw Error("The original LifeSpace identity or committed data could not be verified.");
       if (!isDefaultLocalDirectory(selected.uri)) {
         throw Error("Select the Documents/LifeSpace folder to create a new local space.");
       }
@@ -37,6 +39,9 @@ export async function chooseAndValidateSafDirectory() {
     }
     const restored = await readSafCommitted(storage);
     if (!restored) throw Error("LifeSpace directory has no complete commit; recovery required.");
+    if (active && restored.manifest.localSpaceId !== active.pointer.localSpaceId) {
+      throw Error("The original LifeSpace identity or committed data could not be verified.");
+    }
     await confirmLocalSafDirectory();
     return { localSpaceId: restored.manifest.localSpaceId, kind: "existing" as const };
   } catch (error) {
