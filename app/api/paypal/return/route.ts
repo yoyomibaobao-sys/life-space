@@ -7,7 +7,10 @@ import {
   PAYPAL_MEMBERSHIP_AMOUNT,
   PAYPAL_MEMBERSHIP_CURRENCY,
 } from "@/lib/paypal";
-import { confirmMembershipFromPayPalOrder } from "@/lib/paypal-membership";
+import {
+  beginPayPalMembershipCapture,
+  confirmMembershipFromPayPalOrder,
+} from "@/lib/paypal-membership";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
@@ -69,7 +72,10 @@ export async function GET(request: Request) {
   try {
     let paypalOrder = await getPayPalOrder(paypalOrderId);
     if (paypalOrder.status === "APPROVED") {
-      paypalOrder = await capturePayPalOrder(paypalOrderId);
+      const intent = await beginPayPalMembershipCapture(payment.id);
+      if (!intent.already_confirmed) {
+        paypalOrder = await capturePayPalOrder(paypalOrderId);
+      }
     } else if (paypalOrder.status !== "COMPLETED") {
       throw new Error("PayPal return order is not ready to capture.");
     }

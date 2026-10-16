@@ -193,8 +193,8 @@ test("registration, membership, and admin copy use the claim and handling rules"
   assert.match(docs, /LSa-2026-0001/);
   assert.match(docs, /700MB安全线/);
   assert.match(docs, /处理期结束后/);
-  assert.match(docs, /处理期结束前7天额外发送一次站内提醒/);
-  assert.match(docs, /最后7天节点同步发送一封关键邮件/);
+  assert.match(docs, /处理期结束前7天额外发送一次站内关键提醒/);
+  assert.match(docs, /可在同一节点发送一封 SMTP 邮件/);
   assert.match(docs, /曾经至少有一笔确认成功且未被撤销的付费会员记录/);
   assert.match(docs, /公开转私密/);
   assert.match(zhCopy, /trial_handling_period: "体验已到期，云端数据处于30天只读处理期/);

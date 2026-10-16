@@ -189,7 +189,7 @@ export default function MembershipPage() {
             <p style={mutedTextStyle}>
               {membershipLoadFailed
                 ? t.membership_page.load_failed
-                : getMembershipSummary(membership, language)}
+                : getMembershipSummary(membership, language, trialOfferLoadFailed ? null : trialOffer?.lifecycle_status)}
             </p>
           </div>
 

@@ -520,13 +520,13 @@ test("market activation is serialized for inserts and reactivation", async () =>
 test("the approved matrix and transition rules are documented", async () => {
   const docs = await source("docs/membership-access.md");
 
-  assert.match(docs, /游客（未注册）.*本地用户（免费）.*云会员/);
-  assert.match(docs, /植物指引基础概要 \| — \| ✓ \| ✓/);
-  assert.match(docs, /少量核心静态参数 \| — \| ✓ \| ✓/);
-  assert.match(docs, /完整参数、生长周期和完整养护指引 \| — \| — \| ✓/);
-  assert.match(docs, /评论、回复、点赞、有帮助反馈和关注 \| — \| — \| ✓/);
-  assert.match(docs, /集市咨询和联系发布者 \| — \| ✓ \| ✓/);
-  assert.match(docs, /未来：作者主动公开的单张经验卡.*\| ✓ \| ✓ \| ✓/);
+  assert.match(docs, /\| 游客 \| 注册免费 \| 有效云体验 \| 有效 Plus \|/);
+  assert.match(docs, /植物基础概要与少量核心静态参数 \| ✓ \| ✓ \| ✓ \| ✓/);
+  assert.match(docs, /云空间容量 \| 0 \| 0 \| 30MB \| 1GB/);
+  assert.match(docs, /已提供的完整参数、生长周期与养护指引 \| — \| — \| ✓ \| ✓/);
+  assert.match(docs, /创建经验卡及社区评论、回复、点赞、关注 \| — \| — \| ✓ \| ✓/);
+  assert.match(docs, /集市咨询联系发布者 \| — \| ✓ \| ✓ \| ✓/);
+  assert.match(docs, /作者主动公开的单张经验卡直接链接 \| ✓ \| ✓ \| ✓ \| ✓/);
   assert.match(docs, /只有报名时仍有效的云会员可以申请试用／试种/);
   assert.match(docs, /商社会员面向个人经营者、苗圃、农场、工作室、小型商家和协作团队/);
   assert.match(docs, /商社空间＋成员账号/);
@@ -539,9 +539,11 @@ test("the approved matrix and transition rules are documented", async () => {
   assert.match(docs, /已结束的集市条目不占 30 条额度/);
   assert.match(docs, /先执行可领取云体验 migration，再发布/);
   assert.match(docs, /存储安全线只暂停新领取，不阻断注册/);
-  assert.match(docs, /处理期结束后的清理只作用于从未转为有效付费会员/);
-  assert.match(docs, /处理期结束前7天额外发送一次站内提醒/);
-  assert.match(docs, /最后7天节点同步发送一封关键邮件/);
+  assert.match(docs, /处理期结束后立即停止访问原体验云资料，但不自动物理删除/);
+  assert.match(docs, /管理员按五个互不重叠的区间多选、预览、二次确认及分批重试/);
+  assert.match(docs, /已确认且未撤销的付费历史永久排除/);
+  assert.match(docs, /处理期结束前7天额外发送一次站内关键提醒/);
+  assert.match(docs, /可在同一节点发送一封 SMTP 邮件/);
   assert.match(docs, /会员到期未续费后，未由用户主动删除的云端内容长期保留并只读/);
   assert.match(docs, /可随时、多次保存到本机/);
   assert.match(docs, /允许查看、导出、删除和公开转私密/);

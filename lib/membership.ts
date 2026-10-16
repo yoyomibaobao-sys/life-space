@@ -179,9 +179,15 @@ export function getMembershipEndDate(membership?: MyMembership | null) {
 
 export function getMembershipSummary(
   membership?: MyMembership | null,
-  language: Language = "zh"
+  language: Language = "zh",
+  trialLifecycle?: CloudTrialOffer["lifecycle_status"]
 ) {
   if (!membership) {
+    if (["cleanup_due", "cleanup_in_progress", "cleanup_completed"].includes(trialLifecycle || "")) {
+      return language === "en"
+        ? "The 30-day cloud trial handling period has ended. Trial cloud data is no longer accessible; local data remains available."
+        : "云体验30天处理期已结束，体验云资料不再可访问；本地资料不受影响。";
+    }
     return language === "en"
       ? "Registered user · Free local features"
       : "注册用户 · 免费使用本地功能";
@@ -192,10 +198,34 @@ export function getMembershipSummary(
   const endDate = getMembershipEndDate(membership);
   const days = getDaysRemaining(endDate);
 
-  if (membership.can_create_content === false) {
+  if (membership.plan === "trial") {
+    if (membership.can_create_content === false) {
+      if (trialLifecycle === "handling_period") {
+        return language === "en"
+          ? "The 90-day cloud trial has ended. During the 30-day read-only handling period, you can export or save your cloud projects locally one by one."
+          : "90天云体验已结束。30天只读处理期内可导出资料，或逐个保存本人云项目到本机。";
+      }
+      if (["cleanup_due", "cleanup_in_progress", "cleanup_completed"].includes(trialLifecycle || "")) {
+        return language === "en"
+          ? "The 30-day cloud trial handling period has ended. Trial cloud data is no longer accessible; local data remains available."
+          : "云体验30天处理期已结束，体验云资料不再可访问；本地资料不受影响。";
+      }
+      return language === "en"
+        ? "The 90-day cloud trial has ended. Connect to verify whether the 30-day handling period is still open."
+        : "90天云体验已结束。请联网确认是否仍处于30天处理期。";
+    }
     return language === "en"
-      ? `${label} · ${status}. Existing content can still be viewed, saved locally, exported, and deleted.`
-      : `${label} · ${status}。已有内容仍可查看、保存到本机、导出和删除。`;
+      ? `${label} · ${status}. The 90-day trial ends ${formatMembershipDate(endDate, language)}; check the server for remaining time.`
+      : `${label} · ${status}。90天云体验截至 ${formatMembershipDate(endDate, language)}；剩余时间以云端为准。`;
+  }
+
+  if (membership.can_create_content === false) {
+    if (["basic", "large", "seller"].includes(membership.plan)) {
+      return language === "en"
+        ? `${label} · ${status}. Cloud data remains read-only for the long term; you can export or save projects locally one by one.`
+        : `${label} · ${status}。云端资料长期只读保留，可导出或逐个保存到本机。`;
+    }
+    return `${label} · ${status}`;
   }
 
   if (typeof days === "number") {
@@ -213,16 +243,11 @@ export function canCreateMembershipContent(membership?: MyMembership | null) {
 
 export type CloudToLocalMode = "copy" | "move";
 
-/**
- * Active cloud access uses a true move so that only one editable project
- * remains. An ended never-paid trial also moves projects back to local use.
- * Paid memberships that have ended keep their promised read-only cloud copy.
- */
+/** Saving a project locally always retains its cloud original. */
 export function getCloudToLocalMode(
-  membership?: MyMembership | null
+  _membership?: MyMembership | null
 ): CloudToLocalMode {
-  if (membership?.plan === "trial") return "move";
-  return canCreateMembershipContent(membership) ? "move" : "copy";
+  return "copy";
 }
 
 export function canCreateMembershipMarketPost(membership?: MyMembership | null) {

@@ -8,7 +8,10 @@ import {
   PAYPAL_MEMBERSHIP_CURRENCY,
   verifyPayPalWebhookSignature,
 } from "@/lib/paypal";
-import { confirmMembershipFromPayPalOrder } from "@/lib/paypal-membership";
+import {
+  beginPayPalMembershipCapture,
+  confirmMembershipFromPayPalOrder,
+} from "@/lib/paypal-membership";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
@@ -143,7 +146,10 @@ async function handleApprovedOrder(event: PayPalWebhookEvent) {
 
   let order = await getPayPalOrder(paypalOrderId);
   if (order.status === "APPROVED") {
-    order = await capturePayPalOrder(paypalOrderId);
+    const intent = await beginPayPalMembershipCapture(payment.id);
+    if (!intent.already_confirmed) {
+      order = await capturePayPalOrder(paypalOrderId);
+    }
   } else if (order.status !== "COMPLETED") {
     throw new Error("PayPal approved order is not ready to capture.");
   }

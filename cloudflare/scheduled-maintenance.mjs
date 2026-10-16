@@ -21,6 +21,7 @@ export async function runScheduledMaintenance(app, env, ctx) {
       method: "GET",
       headers: {
         authorization: `Bearer ${getCronSecret(env)}`,
+        "x-lifespace-maintenance-source": "cloudflare",
       },
     }
   );

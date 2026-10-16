@@ -105,6 +105,8 @@ test("PayPal checkout is authenticated, server-priced, and bound to the existing
   assert.match(route, /payment\.payment_method !== "paypal"/);
   assert.match(route, /bind_paypal_membership_order_json/);
   assert.match(route, /createPayPalMembershipOrder/);
+  assert.match(route, /beginPayPalMembershipCapture/);
+  assert.ok(route.indexOf("await beginPayPalMembershipCapture") < route.indexOf("capturePayPalOrder(payment.provider_order_id)"));
   assert.match(route, /confirmMembershipFromPayPalOrder/);
   assert.match(route, /getPayPalSiteOrigin/);
   assert.match(route, /orderNumber: payment\.order_number/);
@@ -114,6 +116,8 @@ test("PayPal return and verified webhooks can complete membership even if the pa
   const returnRoute = read("app/api/paypal/return/route.ts");
   const webhook = read("app/api/paypal/webhook/route.ts");
 
+  assert.match(returnRoute, /beginPayPalMembershipCapture/);
+  assert.ok(returnRoute.indexOf("await beginPayPalMembershipCapture") < returnRoute.indexOf("capturePayPalOrder(paypalOrderId)"));
   assert.match(returnRoute, /capturePayPalOrder/);
   assert.match(returnRoute, /confirmMembershipFromPayPalOrder/);
   assert.match(returnRoute, /provider_order_id/);
@@ -127,8 +131,16 @@ test("PayPal return and verified webhooks can complete membership even if the pa
   assert.match(webhook, /if \(!payment\) return/);
   assert.ok(
     webhook.indexOf("findPaymentByProviderOrderId(paypalOrderId)") <
+      webhook.indexOf("beginPayPalMembershipCapture(payment.id)") &&
+    webhook.indexOf("beginPayPalMembershipCapture(payment.id)") <
       webhook.indexOf("capturePayPalOrder(paypalOrderId)")
   );
+  const completedHandler = webhook.slice(
+    webhook.indexOf("async function handleCompletedCapture"),
+    webhook.indexOf("export async function POST"),
+  );
+  assert.equal(completedHandler.includes("capturePayPalOrder"), false);
+  assert.equal(completedHandler.includes("beginPayPalMembershipCapture"), false);
   assert.match(webhook, /status: 503/);
 
   const membership = read("lib/paypal-membership.ts");
