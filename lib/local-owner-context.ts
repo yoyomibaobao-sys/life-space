@@ -13,6 +13,16 @@ export function wasLocalOwnerExplicitlySignedOut() {
   return window.localStorage.getItem(EXPLICIT_LOCAL_SIGN_OUT_KEY) === "1";
 }
 
+export function markLocalOwnerExplicitlySignedOut() {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(EXPLICIT_LOCAL_SIGN_OUT_KEY, "1");
+}
+
+export function clearLocalOwnerExplicitSignOut() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(EXPLICIT_LOCAL_SIGN_OUT_KEY);
+}
+
 function normalizeOwnerContext(
   value?: Partial<StoredLocalOwnerContext> | null,
 ): StoredLocalOwnerContext | null {
@@ -37,7 +47,7 @@ export function rememberLocalOwnerContext(
     LOCAL_OWNER_CONTEXT_STORAGE_KEY,
     JSON.stringify(normalized),
   );
-  window.localStorage.removeItem(EXPLICIT_LOCAL_SIGN_OUT_KEY);
+  clearLocalOwnerExplicitSignOut();
 }
 
 export function loadRememberedLocalOwnerContext(): StoredLocalOwnerContext | null {
@@ -56,5 +66,5 @@ export function loadRememberedLocalOwnerContext(): StoredLocalOwnerContext | nul
 export function clearRememberedLocalOwnerContext() {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(LOCAL_OWNER_CONTEXT_STORAGE_KEY);
-  window.localStorage.setItem(EXPLICIT_LOCAL_SIGN_OUT_KEY, "1");
+  markLocalOwnerExplicitlySignedOut();
 }

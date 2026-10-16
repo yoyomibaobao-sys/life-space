@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import InternalLink from "@/components/navigation/InternalLink";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
 import UiIcon from "@/components/ui/UiIcon";
@@ -17,6 +17,7 @@ import type {
 } from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
 import { buildLoginHref } from "@/lib/auth-return";
+import { publicExperienceCardUrl, sharePublicCard } from "@/lib/android-native-share";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type CardListItem = ExperienceCardListItem & {
@@ -25,6 +26,10 @@ type CardListItem = ExperienceCardListItem & {
 
 export default function MyExperienceCardsPage() {
   const router = useRouter();
+  return <MyExperienceCardsContent onRequireLogin={() => router.replace(buildLoginHref("/experience-cards"))} />;
+}
+
+export function MyExperienceCardsContent({ onRequireLogin }: { onRequireLogin: () => void }) {
   const { language, t } = useLanguage();
   const [items, setItems] = useState<CardListItem[]>([]);
   const [savedItems, setSavedItems] = useState<ExperienceCardListItem[]>([]);
@@ -40,7 +45,7 @@ export default function MyExperienceCardsPage() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      router.replace(buildLoginHref("/experience-cards"));
+      onRequireLogin();
       return;
     }
 
@@ -142,16 +147,17 @@ export default function MyExperienceCardsPage() {
   }
 
   async function shareExperienceCard(item: CardListItem) {
-    const url = getExperienceCardShareUrl(item.id);
-
     try {
-      if (navigator.share) {
-        await navigator.share({ title: item.title, url });
-        return;
-      }
+      const url = getExperienceCardShareUrl(item.id);
+      const outcome = await sharePublicCard(item.title, url);
+      if (outcome === "shared" || outcome === "canceled") return;
       await copyExperienceCardLink(item);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
+      if (error instanceof Error && error.message === "qa_share_origin_required") {
+        showToast(t.experience.share_failed_browser);
+        return;
+      }
       showToast(t.experience.share_failed_use_copy);
     }
   }
@@ -162,9 +168,9 @@ export default function MyExperienceCardsPage() {
     <main style={pageStyle}>
       <header style={headerStyle}>
         <div>
-          <Link href="/archive" style={backLinkStyle}>
+          <InternalLink href="/archive" style={backLinkStyle}>
             <UiIcon name="arrow-left" size={15} /> {t.experience.my_projects}
-          </Link>
+          </InternalLink>
           <h1 style={titleStyle}>{t.experience.my_cards}</h1>
         </div>
       </header>
@@ -191,7 +197,7 @@ export default function MyExperienceCardsPage() {
               : t.experience.no_saved_cards_hint}
           </p>
           {activeTab === "mine" ? (
-            <Link href="/archive" style={primaryLinkStyle}>{t.experience.choose_project}</Link>
+            <InternalLink href="/archive" style={primaryLinkStyle}>{t.experience.choose_project}</InternalLink>
           ) : null}
         </section>
       ) : (
@@ -221,7 +227,7 @@ export default function MyExperienceCardsPage() {
               actions={
                 activeTab === "saved" ? (
                   <>
-                    <Link href={`/experience-cards/${item.id}`} style={primaryLinkStyle}>{t.experience.open}</Link>
+                    <InternalLink href={`/experience-cards/${item.id}`} style={primaryLinkStyle}>{t.experience.open}</InternalLink>
                     <button
                       type="button"
                       disabled={busyId === item.id}
@@ -233,12 +239,12 @@ export default function MyExperienceCardsPage() {
                   </>
                 ) : (
                 <>
-                <Link
+                <InternalLink
                   href={`/experience-cards/${item.id}`}
                   style={primaryLinkStyle}
                 >
                   {t.experience.open_manage}
-                </Link>
+                </InternalLink>
                 {(item as CardListItem).isPubliclyAvailable ? (
                   <>
                     <button
@@ -292,7 +298,7 @@ export default function MyExperienceCardsPage() {
 }
 
 function getExperienceCardShareUrl(cardId: string) {
-  return new URL(`/experience-cards/${cardId}`, window.location.origin).toString();
+  return publicExperienceCardUrl(window.location.origin, cardId);
 }
 
 const pageStyle: CSSProperties = {

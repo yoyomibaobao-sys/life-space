@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { CSSProperties } from "react";
 import { showToast } from "@/components/Toast";
@@ -20,7 +19,6 @@ export default function DeleteRecordButton({
 }) {
   const { t } = useLanguage();
   const copy = t.archive;
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCheckingReferences, setIsCheckingReferences] = useState(false);
@@ -61,7 +59,6 @@ export default function DeleteRecordButton({
       showToast(copy.moved_to_trash);
       setOpen(false);
       onDeleted?.(id);
-      router.refresh();
     } catch {
       showToast(copy.action_failed);
     } finally {

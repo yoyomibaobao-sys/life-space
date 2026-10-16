@@ -1,12 +1,9 @@
 "use client";
 import ReportLink from "@/components/support/ReportLink";
-import RecordLocationField from "@/components/record/RecordLocationField";
-import { normalizeRecordLocation, type RecordLocation } from "@/lib/record-location";
-import { readRecordLocations } from "@/lib/record-location-cloud";
 import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-time";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
-import Link from "next/link";
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import InternalLink from "@/components/navigation/InternalLink";
 import DeleteRecordButton from "@/app/archive/[id]/DeleteRecordButton";
 import EditRecord from "@/components/EditRecord";
 import TagList from "@/components/TagList";
@@ -72,6 +69,7 @@ type ArchiveRecordCardProps = {
   cycleOptions?: Array<{ id: string; label: string }>;
   onCycleChange?: (recordId: string, cycleId: string | null) => void | Promise<void>;
   isMobileViewport?: boolean;
+  canOpenMediaLightbox?: boolean;
 };
 
 export default function ArchiveRecordCard({
@@ -100,6 +98,7 @@ export default function ArchiveRecordCard({
   cycleOptions = [],
   onCycleChange,
   isMobileViewport = false,
+  canOpenMediaLightbox = true,
 }: ArchiveRecordCardProps) {
   const { language, t } = useLanguage();
   const copy = t.record;
@@ -239,6 +238,7 @@ export default function ArchiveRecordCard({
               <MobileRecordMediaGrid
                 mediaList={mediaList}
                 mediaItems={item.media || []}
+                canOpen={canOpenMediaLightbox}
                 onOpen={(mediaIndex) =>
                   onOpenLightbox(item.media || [], mediaIndex, item)
                 }
@@ -353,6 +353,9 @@ export default function ArchiveRecordCard({
                     await onAddTag(item.id, newTag);
                     setTagEditorOpen(false);
                   }}
+                  onSetHelpStatus={async (nextStatus) => {
+                    await onSetHelpStatus(item.id, nextStatus);
+                  }}
                 />
 
                 <ArchiveCommentsSection
@@ -401,6 +404,7 @@ export default function ArchiveRecordCard({
                 mode={mode}
                 canDeleteMedia={!isLocalMode && mode === "owner"}
                 recordId={item.id}
+                canOpen={canOpenMediaLightbox}
                 onOpen={(mediaIndex) =>
                   onOpenLightbox(item.media || [], mediaIndex, item)
                 }
@@ -692,7 +696,7 @@ function DesktopAndMobileRecordActions({
           >
             {copy.take_photo}
           </button>
-          <Link
+          <InternalLink
             href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
             style={{
               ...smallActionButtonStyle("#fffaf0", "#7a6636", "#f1e3c7"),
@@ -700,7 +704,7 @@ function DesktopAndMobileRecordActions({
             }}
           >
             {copy.publish_to_market}
-          </Link>
+          </InternalLink>
         </>
       ) : null}
 
@@ -892,10 +896,12 @@ function MobileRecordFileInputs({
 function MobileRecordMediaGrid({
   mediaList,
   mediaItems,
+  canOpen = true,
   onOpen,
 }: {
   mediaList: Array<{ url: string; alt: string }>;
   mediaItems: MediaItem[];
+  canOpen?: boolean;
   onOpen: (mediaIndex: number) => void;
 }) {
   const { t } = useLanguage();
@@ -906,8 +912,15 @@ function MobileRecordMediaGrid({
     <div style={mobileRecordMediaGridStyle}>
       {mediaList.map((media, mediaIndex) => {
         const target = mediaItems[mediaIndex];
+        const image = (
+            <img
+              src={target?.display_thumb_url || media.url}
+              alt={media.alt}
+              style={mobileRecordMediaImageStyle}
+            />
+        );
 
-        return (
+        return canOpen ? (
           <button
             key={media.url}
             type="button"
@@ -915,14 +928,16 @@ function MobileRecordMediaGrid({
             onClick={() => onOpen(mediaIndex)}
             style={mobileRecordMediaButtonStyle}
           >
-            <img
-              src={target?.display_thumb_url || media.url}
-              alt={media.alt}
-              loading="lazy"
-              decoding="async"
-              style={mobileRecordMediaImageStyle}
-            />
+            {image}
           </button>
+        ) : (
+          <div
+            key={media.url}
+            data-media-lightbox="disabled"
+            style={mobileRecordMediaButtonStyle}
+          >
+            {image}
+          </div>
         );
       })}
     </div>
@@ -935,6 +950,7 @@ function DesktopRecordMediaGrid({
   mode,
   canDeleteMedia,
   recordId,
+  canOpen = true,
   onOpen,
   onDeleteMedia,
 }: {
@@ -943,6 +959,7 @@ function DesktopRecordMediaGrid({
   mode: ArchiveMode;
   canDeleteMedia: boolean;
   recordId: string;
+  canOpen?: boolean;
   onOpen: (mediaIndex: number) => void;
   onDeleteMedia: (recordId: string, mediaId: string) => Promise<void>;
 }) {
@@ -962,17 +979,18 @@ function DesktopRecordMediaGrid({
         return (
           <div
             key={media.url}
-            role="button"
-            tabIndex={0}
-            aria-label={t.record.open_image_preview}
-            onClick={() => onOpen(mediaIndex)}
-            onKeyDown={(event) => {
+            role={canOpen ? "button" : undefined}
+            tabIndex={canOpen ? 0 : undefined}
+            aria-label={canOpen ? t.record.open_image_preview : undefined}
+            data-media-lightbox={canOpen ? undefined : "disabled"}
+            onClick={canOpen ? () => onOpen(mediaIndex) : undefined}
+            onKeyDown={canOpen ? (event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
                 onOpen(mediaIndex);
               }
-            }}
-            style={{ position: "relative", cursor: "pointer" }}
+            } : undefined}
+            style={{ position: "relative", cursor: canOpen ? "pointer" : "default" }}
           >
             <img
               src={target?.display_thumb_url || media.url}
@@ -1045,12 +1063,6 @@ function MobileRecordMoreMenu({
   const copy = t.record;
   const visibility =
     item.visibility === "private" || !archive.is_public ? "private" : "public";
-  const nextHelp =
-    item.status_tag === "help"
-      ? { label: copy.mark_resolved, value: "resolved" as const }
-      : item.status_tag === "resolved"
-        ? { label: copy.cancel_help, value: null }
-        : { label: copy.start_help, value: "help" as const };
   const nextVisibility =
     visibility === "public"
       ? { label: copy.set_private, value: "private" }
@@ -1066,13 +1078,20 @@ function MobileRecordMoreMenu({
           <button type="button" onClick={onAlbum} style={mobileRecordMenuItemStyle}>
             {copy.add_from_album}
           </button>
-          <Link
+          <InternalLink
             href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
             style={mobileRecordMenuLinkStyle}
           >
             {copy.forward_to_market}
-          </Link>
-          <button type="button" onClick={() => onSetHelpStatus(nextHelp.value)} style={mobileRecordMenuItemStyle}>{nextHelp.label}</button>
+          </InternalLink>
+          {item.status_tag === "help" ? (
+            <div style={mobileRecordHelpActionRowStyle}>
+              <button type="button" onClick={() => onSetHelpStatus("resolved")} style={mobileRecordHelpActionStyle}>{copy.resolved}</button>
+              <button type="button" onClick={() => onSetHelpStatus(null)} style={mobileRecordHelpActionStyle}>{copy.cancel_help}</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => onSetHelpStatus("help")} style={mobileRecordMenuItemStyle}>{copy.start_help}</button>
+          )}
         </>
       ) : null}
       {!readOnly || visibility === "public" ? (
@@ -1139,6 +1158,7 @@ function MobileRecordMetaRow({
   onToggleTagEditor,
   onRemoveTag,
   onAddTag,
+  onSetHelpStatus,
 }: {
   item: RecordItem;
   archive: ArchiveDetailArchive;
@@ -1149,6 +1169,7 @@ function MobileRecordMetaRow({
   onToggleTagEditor: () => void;
   onRemoveTag: (recordId: string, tag: string) => void;
   onAddTag: (tag: string) => Promise<void>;
+  onSetHelpStatus: (nextStatus: "help" | "resolved" | null) => Promise<void>;
 }) {
   const { t } = useLanguage();
   const copy = t.record;
@@ -1187,7 +1208,21 @@ function MobileRecordMetaRow({
           </button>
         ) : null}
 
-        {statusBadge ? (
+        {canEdit ? (
+          <select
+            aria-label={copy.help_status}
+            value={item.status_tag || ""}
+            onChange={(event) => {
+              const value = event.target.value;
+              void onSetHelpStatus(value === "help" || value === "resolved" ? value : null);
+            }}
+            style={mobileRecordHelpSelectStyle(item.status_tag)}
+          >
+            <option value="">{copy.no_help}</option>
+            <option value="help">{copy.help_in_progress}</option>
+            <option value="resolved">{copy.resolved}</option>
+          </select>
+        ) : statusBadge ? (
           <span style={mobileRecordInlineStatusStyle(statusBadge.kind)}>
             {statusBadge.label}
           </span>
@@ -1243,39 +1278,8 @@ function MobileRecordEditPanel({
   const [timeValue, setTimeValue] = useState(toDateTimeLocalValue(item.record_time));
   const [saving, setSaving] = useState(false);
 
-  const [location, setLocation] = useState<RecordLocation | null>(item.location || null);
-  const [locationAttempt, setLocationAttempt] = useState(0);
-  const local = Boolean(onSaveOverride);
-  const locationRequestKey = `${item.id}:${locationAttempt}`;
-  const [locationLoad, setLocationLoad] = useState<{
-    requestKey: string;
-    status: "ready" | "error";
-  } | null>(null);
-  const locationReady = local || (
-    locationLoad?.requestKey === locationRequestKey &&
-    locationLoad.status === "ready"
-  );
-  const locationError = !local &&
-    locationLoad?.requestKey === locationRequestKey &&
-    locationLoad.status === "error";
-  useEffect(() => {
-    if (local) return;
-    let canceled = false;
-    void readRecordLocations(supabase, [item.id]).then((locations) => {
-      if (!canceled) {
-        setLocation(locations.get(item.id) || null);
-        setLocationLoad({ requestKey: locationRequestKey, status: "ready" });
-      }
-    }).catch(() => {
-      if (!canceled) {
-        setLocationLoad({ requestKey: locationRequestKey, status: "error" });
-      }
-    });
-    return () => { canceled = true; };
-  }, [item.id, local, locationAttempt, locationRequestKey]);
-
   async function save() {
-    if (saving || !locationReady) return;
+    if (saving) return;
 
     const recordTime = localDateTimeInputToIso(timeValue, item.record_time);
     if (!recordTime) {
@@ -1285,7 +1289,7 @@ function MobileRecordEditPanel({
 
     const patch = {
       note: note.trim(),
-      location: normalizeRecordLocation(location),
+      location: null,
       record_time: recordTime,
     };
 
@@ -1300,7 +1304,7 @@ function MobileRecordEditPanel({
     } else {
       const result = await supabase.rpc("save_record_details", {
         p_record_id: item.id, p_note: patch.note, p_record_time: patch.record_time,
-        p_location: patch.location,
+        p_location: null,
       });
       error = result.error;
     }
@@ -1351,13 +1355,10 @@ function MobileRecordEditPanel({
           />
         </label>
 
-        <RecordLocationField value={location} onChange={setLocation} language={language} disabled={saving || !locationReady} />
-        {locationError ? <p role="alert" style={mobileEditHintStyle}>{language === "zh" ? "地点读取失败，请重试后保存。" : "Location could not be loaded. Retry before saving."}<button type="button" onClick={() => setLocationAttempt((value) => value + 1)}>{language === "zh" ? "重试" : "Retry"}</button></p> : null}
-
         <button
           type="button"
           onClick={() => void save()}
-          disabled={saving || !locationReady}
+          disabled={saving}
           style={mobileEditSaveButtonStyle}
         >
           {saving ? t.saving : t.save}
@@ -1475,6 +1476,21 @@ const mobileRecordMenuLinkStyle = {
   boxSizing: "border-box",
 } as const;
 
+const mobileRecordHelpActionRowStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 4,
+} as const;
+
+const mobileRecordHelpActionStyle = {
+  ...mobileRecordMenuItemStyle,
+  minWidth: 0,
+  padding: "0 6px",
+  textAlign: "center",
+  background: "#f7faf5",
+  fontSize: 12,
+} as const;
+
 const mobileRecordMenuDangerItemStyle = {
   ...mobileRecordMenuItemStyle,
   color: "#a44848",
@@ -1538,6 +1554,23 @@ function mobileRecordInlineStatusStyle(kind: "help" | "resolved") {
     color: kind === "help" ? "#9a6232" : "#3f7a49",
     fontWeight: 650,
   } as const;
+}
+
+function mobileRecordHelpSelectStyle(status: RecordItem["status_tag"]): CSSProperties {
+  const kind = status === "help" ? "help" : status === "resolved" ? "resolved" : null;
+  return {
+    width: "auto",
+    maxWidth: 116,
+    height: 28,
+    borderRadius: 999,
+    border: `1px solid ${kind === "help" ? "#ead3bd" : kind === "resolved" ? "#cfe0d1" : "#dfe8da"}`,
+    background: kind === "help" ? "#fff8f1" : kind === "resolved" ? "#f2f8f2" : "#fff",
+    color: kind === "help" ? "#8d5a2c" : kind === "resolved" ? "#3f7448" : "#6f7d6a",
+    fontSize: 12,
+    fontWeight: 650,
+    padding: "0 8px",
+    fontFamily: "inherit",
+  };
 }
 
 const mobileRecordTagEditorSelectStyle = {

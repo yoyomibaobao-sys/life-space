@@ -9,7 +9,7 @@ import {
 export async function clearCloudOfflineCacheOnExplicitLogout(owner?: {
   userId?: string | null;
   email?: string | null;
-} | null) {
+} | null, options: { preserveLocalOwner?: boolean } = {}) {
   const remembered = loadRememberedLocalOwnerContext();
   const userId = String(owner?.userId || remembered?.userId || "").trim();
   if (userId) {
@@ -18,5 +18,5 @@ export async function clearCloudOfflineCacheOnExplicitLogout(owner?: {
       email: owner?.email || remembered?.email || null,
     });
   }
-  clearRememberedLocalOwnerContext();
+  if (!options.preserveLocalOwner) clearRememberedLocalOwnerContext();
 }

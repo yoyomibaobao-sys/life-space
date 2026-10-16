@@ -33,6 +33,10 @@ export type MediaUrlSupabaseClient = {
 };
 
 export type MediaUrlSource = {
+  id?: string | null;
+  user_id?: string | null;
+  record_id?: string | null;
+  type?: string | null;
   url?: string | null;
   file_url?: string | null;
   path?: string | null;
@@ -45,6 +49,19 @@ export type MediaDisplayUrls = {
   display_url: string | null;
   display_thumb_url: string | null;
 };
+
+// Opt-in migration path only; production keeps all existing signers until
+// the server route, owner chain, cache behaviour and Android are QA-proven.
+function guardedRecordImageUrl(source: MediaUrlSource, variant: "full" | "thumb") {
+  if (process.env.NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED !== "true") return null;
+  if (source.type !== "image" || !source.record_id || !source.user_id || !source.id) return null;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(source.id)) return null;
+  const path = getMediaObjectPath(source);
+  if (!path || path.split("/")[0] !== source.user_id) return null;
+  const thumb = getMediaThumbObjectPath(source);
+  if (thumb && thumb.split("/")[0] !== source.user_id) return null;
+  return `/api/media/record-image?id=${encodeURIComponent(source.id)}&variant=${variant}`;
+}
 
 function cleanPath(value?: string | null) {
   const next = String(value || "").trim();
@@ -110,7 +127,8 @@ export async function createMediaSignedUrl(
 export async function createMediaSignedUrls(
   supabase: MediaUrlSupabaseClient,
   paths: Array<string | null | undefined>,
-  expiresIn = MEDIA_SIGNED_URL_EXPIRES_IN
+  expiresIn = MEDIA_SIGNED_URL_EXPIRES_IN,
+  failOnError = false,
 ) {
   const uniquePaths = Array.from(
     new Set(paths.map(cleanPath).filter((path): path is string => Boolean(path)))
@@ -122,6 +140,7 @@ export async function createMediaSignedUrls(
   const bucket = supabase.storage.from(MEDIA_BUCKET);
 
   const { data, error } = await bucket.createSignedUrls(uniquePaths, expiresIn);
+  if (error && failOnError) throw error;
   if (!error && data) {
     data.forEach((row) => {
       if (row.path && row.signedUrl) {
@@ -139,6 +158,8 @@ export async function resolveMediaDisplayUrl(
   options?: { preferThumb?: boolean; expiresIn?: number }
 ) {
   const preferThumb = Boolean(options?.preferThumb);
+  const protectedUrl = guardedRecordImageUrl(source, preferThumb ? "thumb" : "full");
+  if (protectedUrl) return protectedUrl;
   const path = preferThumb
     ? getMediaThumbObjectPath(source) || getMediaObjectPath(source)
     : getMediaObjectPath(source);
@@ -153,14 +174,18 @@ export async function resolveMediaDisplayUrls(
   options?: { preferThumb?: boolean; expiresIn?: number }
 ) {
   const preferThumb = Boolean(options?.preferThumb);
-  const paths = sources.map((source) =>
+  const protectedUrls = sources.map((source) =>
+    guardedRecordImageUrl(source, preferThumb ? "thumb" : "full")
+  );
+  const paths = sources.map((source, index) => protectedUrls[index] ? null : (
     preferThumb
       ? getMediaThumbObjectPath(source) || getMediaObjectPath(source)
       : getMediaObjectPath(source)
-  );
+  ));
   const signedUrlMap = await createMediaSignedUrls(supabase, paths, options?.expiresIn);
 
   return sources.map((source, index) => {
+    if (protectedUrls[index]) return protectedUrls[index];
     const path = cleanPath(paths[index]);
     return (path && signedUrlMap.get(path)) || null;
   });
@@ -169,15 +194,25 @@ export async function resolveMediaDisplayUrls(
 export async function resolveMediaDisplayPairs<T extends MediaUrlSource>(
   supabase: MediaUrlSupabaseClient,
   sources: T[],
-  options?: { expiresIn?: number }
+  options?: { expiresIn?: number; failOnError?: boolean }
 ) {
-  const paths = sources.flatMap((source) => [
+  const protectedUrls = sources.map((source) => ({
+    full: guardedRecordImageUrl(source, "full"),
+    thumb: guardedRecordImageUrl(source, "thumb"),
+  }));
+  const paths = sources.flatMap((source, index) => protectedUrls[index].full ? [] : [
     getMediaObjectPath(source),
     getMediaThumbObjectPath(source),
   ]);
-  const signedUrlMap = await createMediaSignedUrls(supabase, paths, options?.expiresIn);
+  const signedUrlMap = await createMediaSignedUrls(supabase, paths, options?.expiresIn, options?.failOnError);
 
-  return sources.map((source) => {
+  return sources.map((source, index) => {
+    if (protectedUrls[index].full) {
+      return {
+        display_url: protectedUrls[index].full,
+        display_thumb_url: protectedUrls[index].thumb,
+      } satisfies MediaDisplayUrls;
+    }
     const imagePath = getMediaObjectPath(source);
     const thumbPath = getMediaThumbObjectPath(source);
     const displayUrl =

@@ -2,16 +2,13 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { buildAuthEmailRedirect } from "@/lib/auth-return";
+import { registerAccount } from "@/lib/registration";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
 import AuthCaptcha, { AUTH_CAPTCHA_ENABLED } from "@/components/AuthCaptcha";
 import { trackAnalyticsEvent } from "@/lib/analytics-events";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, getSafeReturnTo } from "@/lib/auth-return";
-
-const LEGAL_VERSION = "2026-09-01";
 
 function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -99,21 +96,8 @@ export default function RegisterPage() {
 
     try {
       const returnTo = getSafeReturnTo(new URLSearchParams(window.location.search).get("returnTo"));
-      const { data, error } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password,
-        options: {
-          captchaToken: captchaToken || undefined,
-          emailRedirectTo: buildAuthEmailRedirect("signup", returnTo),
-          data: {
-            legal_terms_accepted: true,
-            legal_terms_version: LEGAL_VERSION,
-            privacy_notice_accepted: true,
-            privacy_notice_version: LEGAL_VERSION,
-            cross_border_consent: true,
-            cross_border_consent_version: LEGAL_VERSION,
-          },
-        },
+      const { data, error } = await registerAccount({
+        email: cleanEmail, password, captchaToken, returnTo,
       });
 
       if (error) {

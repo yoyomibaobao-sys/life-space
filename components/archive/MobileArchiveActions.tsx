@@ -34,10 +34,13 @@ type Props = {
   ended?: boolean;
   isPublic?: boolean;
   allowTaxonomyEdit?: boolean;
+  taxonomyUnavailableLabel?: string;
   onChangeCategory: (value: string) => void;
   onChangeGroup: (value: string) => void;
   onToggleEnded?: () => void;
   onTogglePublic?: () => void;
+  helpStatus?: "open" | "resolved" | "none" | string | null;
+  onSetHelpStatus?: (nextStatus: "open" | "resolved" | "none") => void;
   onMoveToTrash?: () => void;
   extraActions?: Array<{
     label: string;
@@ -58,10 +61,13 @@ export default function MobileArchiveActions({
   ended,
   isPublic,
   allowTaxonomyEdit = true,
+  taxonomyUnavailableLabel,
   onChangeCategory,
   onChangeGroup,
   onToggleEnded,
   onTogglePublic,
+  helpStatus,
+  onSetHelpStatus,
   onMoveToTrash,
   extraActions = [],
 }: Props) {
@@ -141,6 +147,8 @@ export default function MobileArchiveActions({
                   }}
                   trailing={<UiIcon name="chevron-right" size={16} />}
                 />
+              ) : taxonomyUnavailableLabel ? (
+                <ActionButton label={taxonomyUnavailableLabel} disabled onClick={() => undefined} />
               ) : null}
               {onTogglePublic ? (
                 <ActionButton
@@ -153,6 +161,25 @@ export default function MobileArchiveActions({
                   label={ended ? t.archive_workspace.restore : t.archive_workspace.end}
                   onClick={(event) => run(event, onToggleEnded)}
                 />
+              ) : null}
+              {onSetHelpStatus ? (
+                helpStatus === "open" ? (
+                  <>
+                    <ActionButton
+                      label={t.record.mark_resolved}
+                      onClick={(event) => run(event, () => onSetHelpStatus("resolved"))}
+                    />
+                    <ActionButton
+                      label={t.record.cancel_help}
+                      onClick={(event) => run(event, () => onSetHelpStatus("none"))}
+                    />
+                  </>
+                ) : (
+                  <ActionButton
+                    label={helpStatus === "resolved" ? (language === "zh" ? "重新求助" : "Reopen help") : t.record.start_help}
+                    onClick={(event) => run(event, () => onSetHelpStatus("open"))}
+                  />
+                )
               ) : null}
               {extraActions.filter((action) => !action.danger).map((action) => (
                 <ActionButton
@@ -279,18 +306,21 @@ function ActionButton({
   onClick,
   danger = false,
   trailing,
+  disabled = false,
 }: {
   label: string;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   danger?: boolean;
   trailing?: ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       role="menuitem"
       onClick={onClick}
-      style={danger ? dangerActionStyle : actionStyle}
+      disabled={disabled}
+      style={{ ...(danger ? dangerActionStyle : actionStyle), ...(disabled ? { opacity: 0.56 } : {}) }}
     >
       <span>{label}</span>
       {trailing}

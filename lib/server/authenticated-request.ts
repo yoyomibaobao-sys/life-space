@@ -55,6 +55,17 @@ export function hasValidMutationOrigin(request: Request) {
 export async function getAuthenticatedRequestClient(
   request: Request
 ): Promise<{ supabase: SupabaseClient; userId: string } | null> {
+  // CapacitorHttp may send WebView cookies through Android's CookieHandler.
+  // An explicit Bearer token must determine the owner even if a stale cookie
+  // belongs to a different account; invalid Bearer never falls back to cookie.
+  const accessToken = getBearerToken(request);
+  if (accessToken) {
+    const tokenClient = createSupabaseWithBearerToken(accessToken);
+    const tokenUser = await tokenClient.auth.getUser(accessToken);
+    if (tokenUser.error || !tokenUser.data.user?.id) return null;
+    return { supabase: tokenClient, userId: tokenUser.data.user.id };
+  }
+
   const cookieClient = await getSupabaseServer();
   const cookieUser = await cookieClient.auth.getUser();
 
@@ -65,16 +76,5 @@ export async function getAuthenticatedRequestClient(
     };
   }
 
-  const accessToken = getBearerToken(request);
-  if (!accessToken) return null;
-
-  const tokenClient = createSupabaseWithBearerToken(accessToken);
-  const tokenUser = await tokenClient.auth.getUser(accessToken);
-
-  if (tokenUser.error || !tokenUser.data.user?.id) return null;
-
-  return {
-    supabase: tokenClient,
-    userId: tokenUser.data.user.id,
-  };
+  return null;
 }

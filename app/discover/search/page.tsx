@@ -23,7 +23,7 @@ import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
 import type { FeedItem } from "@/lib/discover-types";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
-export default function DiscoverSearchPage() {
+export default function DiscoverSearchPage({ onBack, onOpenProject }: { onBack?: () => void; onOpenProject?: (item: DiscoveryProjectFeedItem) => void } = {}) {
   const { t } = useLanguage();
   const [filters, setFilters] = useState<SearchFilters>(emptySearchFilters);
   const [searchKind, setSearchKind] = useState<ActivitySearchScope>("all");
@@ -163,6 +163,7 @@ const hasFilters = Object.entries(filters).some(([key, value]) =>
       <DiscoverSearchHeader
         searchKind={searchKind}
         onSearchKindChange={changeSearchKind}
+        onBack={onBack}
       />
       <main
       style={{
@@ -194,6 +195,7 @@ const hasFilters = Object.entries(filters).some(([key, value]) =>
       {searchKind !== "records" ? (
         <DiscoverSearchResults
           kind="projects"
+          onOpenProject={onOpenProject}
           projectItems={projectResults}
           recordItems={[]}
           experienceItems={[]}

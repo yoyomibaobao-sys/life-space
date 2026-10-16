@@ -290,7 +290,7 @@ test("market replacement and deletion use trusted rows and the deletion queue", 
   const helper = await source("lib/market-media-storage.ts");
   const service = await source("lib/server/safe-market-media-request.ts");
   const editPage = await source("app/market/[id]/edit/page.tsx");
-  const detailPage = await source("app/market/[id]/page.tsx");
+  const detailPage = await source("components/market/MarketDetailController.tsx");
 
   for (const name of [
     "set_market_post_cover",
@@ -314,6 +314,7 @@ test("normal market pages have no direct Storage or table deletion bypass", asyn
     source("app/market/new/page.tsx"),
     source("app/market/[id]/edit/page.tsx"),
     source("app/market/[id]/page.tsx"),
+    source("components/market/MarketDetailController.tsx"),
   ]);
 
   for (const page of pages) {

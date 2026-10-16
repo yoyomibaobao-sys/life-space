@@ -1,5 +1,6 @@
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import { supabase } from "@/lib/supabase";
+import { isAndroidSafAvailable } from "@/lib/local-saf-native";
 
 export type ArchiveCategoryDepth = 1 | 2 | 3;
 export type ArchiveCategoryDepths = Record<ArchiveCategory, ArchiveCategoryDepth>;
@@ -51,6 +52,10 @@ export function getLocalArchiveCategoryDepths(ownerId?: string | null) {
   if (typeof window === "undefined") return { ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS };
 
   try {
+    if (isAndroidSafAvailable()) {
+      const safRaw = window.localStorage.getItem("lifespace:saf:category-depths");
+      if (safRaw) return normalizeDepths(JSON.parse(safRaw));
+    }
     const raw = window.localStorage.getItem(getLocalSettingsKey(ownerId));
     return raw ? normalizeDepths(JSON.parse(raw)) : { ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS };
   } catch {
@@ -58,11 +63,16 @@ export function getLocalArchiveCategoryDepths(ownerId?: string | null) {
   }
 }
 
-export function saveLocalArchiveCategoryDepths(
+export async function saveLocalArchiveCategoryDepths(
   depths: ArchiveCategoryDepths,
   ownerId?: string | null,
 ) {
   if (typeof window === "undefined") return;
+  if (isAndroidSafAvailable()) {
+    const { saveSafLocalCategoryDepths } = await import("@/lib/local-offline-db");
+    await saveSafLocalCategoryDepths(normalizeDepths(depths));
+    return;
+  }
   window.localStorage.setItem(
     getLocalSettingsKey(ownerId),
     JSON.stringify(normalizeDepths(depths)),

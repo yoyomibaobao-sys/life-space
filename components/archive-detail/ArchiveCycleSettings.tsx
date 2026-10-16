@@ -52,21 +52,26 @@ export default function ArchiveCycleSettings({
 
 const panelStyle: CSSProperties = {
   marginTop: 10,
-  padding: 13,
-  border: "1px solid #e1e9dd",
-  borderRadius: 15,
-  background: "#fbfdf9",
+  marginBottom: 14,
+  padding: "0 14px",
+  border: "1px solid #e6ece1",
+  borderRadius: 16,
+  background: "#fff",
+  overflow: "hidden",
 };
 
 const headingStyle: CSSProperties = {
-  marginBottom: 10,
+  minHeight: 44,
+  display: "flex",
+  alignItems: "center",
+  borderBottom: "1px solid #f0f3ed",
   color: "#293c29",
   fontSize: 15,
   fontWeight: 850,
 };
 
 const toggleRowStyle: CSSProperties = {
-  minHeight: 44,
+  minHeight: 52,
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",

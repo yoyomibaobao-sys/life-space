@@ -2,8 +2,7 @@ import { formatPlantingRegion, type PlantingRegion } from "@/lib/planting-region
 import { formatAccountNumber } from "@/lib/account-number";
 import { readRecordLocations } from "@/lib/record-location-cloud";
 import type { RecordLocation } from "@/lib/record-location";
-import { createClient } from "@supabase/supabase-js";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { getAuthenticatedRequestClient } from "@/lib/server/authenticated-request";
 import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 import { SimpleZipBuilder } from "@/lib/export-zip";
 import { getMediaStoragePathFromUrl } from "@/lib/media-urls";
@@ -98,7 +97,7 @@ type MediaCompatRow = Omit<MediaRow, "captured_at"> & {
 
 export const runtime = "nodejs";
 
-type SupabaseServerClient = Awaited<ReturnType<typeof getSupabaseServer>>;
+type SupabaseServerClient = NonNullable<Awaited<ReturnType<typeof getAuthenticatedRequestClient>>>["supabase"];
 
 function getSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -112,29 +111,6 @@ function getSupabaseEnv() {
   }
 
   return { url, anonKey };
-}
-
-function createSupabaseWithBearerToken(accessToken: string) {
-  const { url, anonKey } = getSupabaseEnv();
-
-  return createClient(url, anonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-    global: {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    },
-  });
-}
-
-function getBearerToken(request: Request) {
-  const authorization = request.headers.get("authorization") || "";
-  const match = authorization.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || null;
 }
 
 function escapeHtml(value: unknown) {
@@ -422,35 +398,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0
 }
 
 export async function GET(request: Request) {
+  // Check the API's Supabase identity without sending an Android bearer token.
+  if (new URL(request.url).searchParams.get("environment") === "1") {
+    const { url } = getSupabaseEnv();
+    return Response.json({ supabaseUrl: url.replace(/\/$/, "") }, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
   const timeZone = normalizeTimeZone(request.headers.get("X-Client-Timezone"));
   const estimateOnly = new URL(request.url).searchParams.get("estimate") === "1";
-  let supabase = await getSupabaseServer();
-  let {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  // 当前项目的登录态主要保存在浏览器 localStorage 中；
-  // 直接打开 API 链接时，服务端不一定能读到 Supabase Cookie。
-  // 因此导出按钮会携带 Authorization Bearer token，这里作为补充认证方式。
-  if (userError || !user) {
-    const accessToken = getBearerToken(request);
-
-    if (accessToken) {
-      const tokenSupabase = createSupabaseWithBearerToken(accessToken);
-      const tokenUserResult = await tokenSupabase.auth.getUser(accessToken);
-
-      if (!tokenUserResult.error && tokenUserResult.data.user) {
-        supabase = tokenSupabase as unknown as SupabaseServerClient;
-        user = tokenUserResult.data.user;
-        userError = null;
-      }
-    }
-  }
-
-  if (userError || !user) {
-    return new Response("请先登录后再导出。", { status: 401 });
-  }
+  const authenticated = await getAuthenticatedRequestClient(request);
+  if (!authenticated) return new Response("请先登录后再导出。", { status: 401 });
+  const { supabase } = authenticated;
+  const user = { id: authenticated.userId };
 
   const [profileResult, archivesResult, accountResult] = await Promise.all([
     supabase
@@ -664,6 +624,8 @@ export async function GET(request: Request) {
         );
         const coverPath = uniquePath(`${archiveDir}images/cover.${ext}`, usedPaths);
         zip.addFile(coverPath, downloaded.bytes);
+      } else {
+        failedDownloads.push(`${archive.title || archive.id} / 封面`);
       }
     }
   }

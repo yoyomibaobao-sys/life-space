@@ -18,6 +18,7 @@ import {
   shortText,
 } from "@/lib/discover-utils";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { useInternalNavigate } from "@/components/navigation/InternalLink";
 
 
 export function getFeedItemDisplayImageUrl(record: FeedItem) {
@@ -146,6 +147,7 @@ export function RecordTagPill({
   enableLink?: boolean;
 }) {
   const { language } = useLanguage();
+  const navigate = useInternalNavigate();
   return (
     <span
       onClick={
@@ -154,12 +156,11 @@ export function RecordTagPill({
               e.preventDefault();
               e.stopPropagation();
 
-              if (record.species_id) {
-                window.location.href = `/discover/search?type=records&tag=${encodeURIComponent(tag)}&species=${record.species_id}`;
-                return;
-              }
-
-              window.location.href = `/discover/search?type=records&tag=${encodeURIComponent(tag)}`;
+              const href = record.species_id
+                ? `/discover/search?type=records&tag=${encodeURIComponent(tag)}&species=${record.species_id}`
+                : `/discover/search?type=records&tag=${encodeURIComponent(tag)}`;
+              if (navigate?.(href)) return;
+              window.location.href = href;
             }
           : undefined
       }

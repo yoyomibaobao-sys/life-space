@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/navigation/InternalLink";
 import { formatAccountNumber, matchesAccountConfirmation } from "@/lib/account-number";
 import { buildLoginHref } from "@/lib/auth-return";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
@@ -8,6 +8,8 @@ import { supabase } from "@/lib/supabase";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
+import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
+import AdminTrialCleanupPreview from "@/components/admin/AdminTrialCleanupPreview";
 import {
   formatMembershipDate,
   formatStorageBytes,
@@ -471,7 +473,7 @@ function logSupabaseError(label: string, error: unknown) {
   }
 }
 
-export default function AdminMembershipsPage() {
+export default function AdminMembershipsPage({ onBack }: { onBack?: () => void } = {}) {
   const { language, t } = useLanguage();
   const [currentUserId, setCurrentUserId] = useState("");
   const [userEmail, setUserEmail] = useState("");
@@ -536,12 +538,6 @@ export default function AdminMembershipsPage() {
     setSelected(null);
     requestAnimationFrame(() => window.scrollTo({ top: memberListScroll.current }));
   }
-  function changeAdminSection(section: string) {
-    setSelected(null);
-    setActiveAdminSection(section);
-    window.history.replaceState(null, "", `#${section}`);
-    window.scrollTo({ top: 0 });
-  }
   const paymentSubmittingRef = useRef(false);
 
   const isMobileViewport = viewportWidth < 760;
@@ -592,6 +588,7 @@ export default function AdminMembershipsPage() {
       "refund-review",
       "capacity",
       "account-closures",
+      "trial-cleanup",
     ];
     const sections = sectionIds
       .map((id) => document.getElementById(id))
@@ -1489,12 +1486,23 @@ export default function AdminMembershipsPage() {
   }
 
   return (
-    <main style={currentPageStyle}>
-      <Link href="/profile" style={adminBackLinkStyle}>
+    <>
+      {onBack ? (
+        <MobilePageHeaderView
+          className="mobile-app-grid-only"
+          title={t.admin_memberships.title}
+          titleText={t.admin_memberships.title}
+          showBack
+          ariaLabel={t.admin_memberships.back_profile}
+          onBack={onBack}
+        />
+      ) : null}
+      <main style={currentPageStyle}>
+      {!onBack ? <Link href="/profile" style={adminBackLinkStyle}>
         <UiIcon name="arrow-left" size={15} />
         {t.admin_memberships.back_profile}
-      </Link>
-      <section style={currentHeaderStyle}>
+      </Link> : null}
+      <section style={onBack ? { display: "none" } : currentHeaderStyle}>
         <div>
           <div style={eyebrowStyle}>{t.admin_memberships.admin_eyebrow}</div>
           <h1 style={titleStyle}>{t.admin_memberships.title}</h1>
@@ -1505,38 +1513,25 @@ export default function AdminMembershipsPage() {
         <Link href="/membership" style={secondaryButtonStyle}>{t.admin_memberships.view_membership_page}</Link>
       </section>
 
-      <nav
+      {!isMobileViewport ? <nav
         id="admin-section-navigation"
         style={adminAnchorNavStyle(isMobileViewport)}
         aria-label={t.admin_memberships.admin_sections_aria}
       >
-        {isMobileViewport ? <label style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", alignItems: "center", gap: 10, width: "100%", fontSize: 14 }}>
-          {t.admin_memberships.title}
-          <select aria-label={t.admin_memberships.admin_sections_aria} value={activeAdminSection} onChange={(e) => changeAdminSection(e.target.value)} style={{ ...inputStyle, margin: 0, minWidth: 0 }}>
-            <option value="overview">{t.admin_memberships.nav_overview}</option>
-            <option value="traffic">{t.admin_memberships.nav_traffic}</option>
-            <option value="registrations">{t.admin_memberships.nav_registrations}</option>
-            <option value="payment-review">{t.admin_memberships.nav_payments}</option>
-            <option value="refund-review">{t.admin_memberships.nav_refunds}</option>
-            <option value="capacity">{t.admin_memberships.nav_capacity}</option>
-            <option value="account-closures">{t.admin_memberships.nav_account_closures}</option>
-          </select>
-        </label> : <>
         <a href="#overview" style={adminAnchorLinkStyle(activeAdminSection === "overview")} onClick={() => setActiveAdminSection("overview")}>{t.admin_memberships.nav_overview}</a>
         <a href="#traffic" style={adminAnchorLinkStyle(activeAdminSection === "traffic")} onClick={() => setActiveAdminSection("traffic")}>{t.admin_memberships.nav_traffic}</a>
         <a href="#registrations" style={adminAnchorLinkStyle(activeAdminSection === "registrations")} onClick={() => setActiveAdminSection("registrations")}>{t.admin_memberships.nav_registrations}</a>
         <a href="#payment-review" style={adminAnchorLinkStyle(activeAdminSection === "payment-review")} onClick={() => setActiveAdminSection("payment-review")}>{t.admin_memberships.nav_payments}</a>
         <a href="#refund-review" style={adminAnchorLinkStyle(activeAdminSection === "refund-review")} onClick={() => setActiveAdminSection("refund-review")}>{t.admin_memberships.nav_refunds}</a>
         <a href="#capacity" style={adminAnchorLinkStyle(activeAdminSection === "capacity")} onClick={() => setActiveAdminSection("capacity")}>{t.admin_memberships.nav_capacity}</a>
+        <a href="#trial-cleanup" style={adminAnchorLinkStyle(activeAdminSection === "trial-cleanup")} onClick={() => setActiveAdminSection("trial-cleanup")}>{language === "zh" ? "过期云端资料清理" : "Expired trial cleanup"}</a>
         <a href="#account-closures" style={adminAnchorLinkStyle(activeAdminSection === "account-closures")} onClick={() => setActiveAdminSection("account-closures")}>{t.admin_memberships.nav_account_closures}</a>
-        </>}
-      </nav>
+      </nav> : null}
 
       <section
         id="overview"
         style={{
           ...currentCardStyle,
-          display: isMobileViewport && activeAdminSection !== "overview" ? "none" : undefined,
           marginBottom: isMobileViewport ? 12 : 16,
           scrollMarginTop: adminSectionScrollMarginTop,
         }}
@@ -1638,7 +1633,6 @@ export default function AdminMembershipsPage() {
         id="traffic"
         style={{
           ...currentCardStyle,
-          display: isMobileViewport && activeAdminSection !== "traffic" ? "none" : undefined,
           marginBottom: isMobileViewport ? 12 : 16,
           scrollMarginTop: adminSectionScrollMarginTop,
         }}
@@ -1710,7 +1704,6 @@ export default function AdminMembershipsPage() {
         id="payment-review"
         style={{
           ...currentCardStyle,
-          display: isMobileViewport && activeAdminSection !== "payment-review" ? "none" : undefined,
           ...pendingPaymentQueueStyle(pendingPaymentRows.length > 0),
           marginBottom: isMobileViewport ? 12 : 16,
           scrollMarginTop: adminSectionScrollMarginTop,
@@ -1793,7 +1786,6 @@ export default function AdminMembershipsPage() {
         id="refund-review"
         style={{
           ...currentCardStyle,
-          display: isMobileViewport && activeAdminSection !== "refund-review" ? "none" : undefined,
           ...refundQueueStyle(openRefundCount > 0),
           marginBottom: isMobileViewport ? 12 : 16,
           scrollMarginTop: adminSectionScrollMarginTop,
@@ -1925,7 +1917,6 @@ export default function AdminMembershipsPage() {
         id="capacity"
         style={{
           ...currentCardStyle,
-          display: isMobileViewport && activeAdminSection !== "capacity" ? "none" : undefined,
           marginBottom: isMobileViewport ? 12 : 16,
           scrollMarginTop: adminSectionScrollMarginTop,
         }}
@@ -2049,10 +2040,22 @@ export default function AdminMembershipsPage() {
       </section>
 
       <section
+        id="trial-cleanup"
+        style={{
+          ...currentCardStyle,
+          marginBottom: isMobileViewport ? 12 : 16,
+          scrollMarginTop: adminSectionScrollMarginTop,
+        }}>
+        <h2 style={sectionTitleStyle}>
+          {language === "zh" ? "过期云端资料清理" : "Expired cloud trial cleanup"}
+        </h2>
+        <AdminTrialCleanupPreview language={language} />
+      </section>
+
+      <section
         id="registrations"
         style={{
           ...currentCardStyle,
-          display: isMobileViewport && activeAdminSection !== "registrations" ? "none" : undefined,
           marginBottom: isMobileViewport ? 12 : 16,
           scrollMarginTop: adminSectionScrollMarginTop,
         }}
@@ -2507,7 +2510,6 @@ export default function AdminMembershipsPage() {
         id="account-closures"
         style={{
           ...currentCardStyle,
-          display: isMobileViewport && activeAdminSection !== "account-closures" ? "none" : undefined,
           scrollMarginTop: adminSectionScrollMarginTop,
         }}
       >
@@ -2652,6 +2654,7 @@ export default function AdminMembershipsPage() {
         ) : null}
       </ConfirmDialog>
     </main>
+    </>
   );
 }
 

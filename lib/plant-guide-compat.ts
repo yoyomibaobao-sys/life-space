@@ -1,10 +1,58 @@
 import { supabase } from "@/lib/supabase";
 import { isMissingDatabaseFunction } from "@/lib/supabase-schema-compat";
+import { loadGuideDirectoryRows } from "@/lib/guide-directory-search";
 
 export type PlantBasicOverviewCompatRow = {
   species_id: string;
   summary?: string | null;
 };
+
+export type PublicPlantCatalogRow = {
+  id: string;
+  slug?: string | null;
+  common_name?: string | null;
+  scientific_name?: string | null;
+  family?: string | null;
+  category?: string | null;
+  sub_category?: string | null;
+  growth_type?: string | null;
+  entry_type?: string | null;
+  sort_order?: number | null;
+  is_active: boolean;
+  aliases: Array<{ species_id: string; alias_name: string; relation_type?: string | null }>;
+  translations: Array<{ plant_id: string; language_code: string; common_name?: string | null; family?: string | null }>;
+  summary_zh?: string | null;
+  summary_en?: string | null;
+};
+
+export function loadPublicPlantCatalogPage(from: number, to: number) {
+  return supabase.rpc("get_public_plant_catalog", {
+    p_lookup: null,
+    p_offset: from,
+    p_limit: to - from + 1,
+  });
+}
+
+export async function loadPublicPlantCatalogDetail(lookup: string) {
+  const direct = await supabase.rpc("get_public_plant_catalog", {
+    p_lookup: lookup,
+    p_offset: 0,
+    p_limit: 1,
+  });
+  if (direct.error || direct.data?.length) return direct;
+
+  // Built-in directory labels can be exact aliases rather than species names.
+  // Resolve only a unique active species through the same public, basic-only RPC.
+  const catalog = await loadGuideDirectoryRows<PublicPlantCatalogRow>(loadPublicPlantCatalogPage);
+  if (catalog.error) return { ...direct, error: catalog.error };
+  const name = lookup.normalize("NFKC").trim().toLowerCase();
+  const matches = catalog.data.filter((plant) =>
+    plant.is_active && plant.aliases?.some((alias) =>
+      alias.relation_type === "exact" && alias.alias_name.normalize("NFKC").trim().toLowerCase() === name
+    )
+  );
+  return matches.length === 1 ? { ...direct, data: matches } : direct;
+}
 
 export type PlantCoreParametersCompatRow = {
   species_id: string;

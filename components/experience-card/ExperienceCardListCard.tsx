@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import InternalLink from "@/components/navigation/InternalLink";
 import type { ReactNode } from "react";
 import styles from "@/components/experience-card/ExperienceCardListCard.module.css";
 import CompactActivityTime from "@/components/ui/CompactActivityTime";
@@ -31,7 +31,7 @@ export default function ExperienceCardListCard({
 
   return (
     <div className={styles.card}>
-      <Link href={`/experience-cards/${item.id}`} aria-label={item.title}>
+      <InternalLink href={`/experience-cards/${item.id}`} aria-label={item.title}>
         {item.coverUrl ? (
           <img
             src={item.coverUrl}
@@ -42,7 +42,7 @@ export default function ExperienceCardListCard({
         ) : (
           <div className={styles.placeholder}>{t.experience.no_image}</div>
         )}
-      </Link>
+      </InternalLink>
 
       {summaryLayout ? (
         <div className={styles.content}>
@@ -50,9 +50,9 @@ export default function ExperienceCardListCard({
         </div>
       ) : <div className={styles.content}>
         <div className={styles.headerRow}>
-          <Link href={`/experience-cards/${item.id}`} className={styles.title}>
+          <InternalLink href={`/experience-cards/${item.id}`} className={styles.title}>
             {item.title}
-          </Link>
+          </InternalLink>
           {status || dateValue || dateText ? (
             <div className={styles.statusRow}>
               {status}

@@ -21,6 +21,26 @@ type ExpectedMembershipPayment = {
   paypalOrderId: string;
 };
 
+export async function beginPayPalMembershipCapture(paymentId: string) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase.rpc("begin_paypal_membership_capture", {
+    p_payment_id: paymentId,
+  });
+  if (error) {
+    console.error("begin PayPal capture RPC error:", error);
+    throw new Error("paypal_capture_not_authorized");
+  }
+  const result = (Array.isArray(data) ? data[0] : data) as {
+    ok?: boolean;
+    already_confirmed?: boolean;
+    error_message?: string | null;
+  } | null;
+  if (!result?.ok) {
+    throw new Error(result?.error_message || "paypal_capture_not_authorized");
+  }
+  return result;
+}
+
 export async function confirmMembershipFromPayPalOrder(
   order: PayPalOrder,
   expected: ExpectedMembershipPayment

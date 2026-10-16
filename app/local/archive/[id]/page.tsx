@@ -16,11 +16,9 @@ import {
 } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
-import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
-import ArchiveCycleSettings from "@/components/archive-detail/ArchiveCycleSettings";
-import ArchiveCycleTimeline from "@/components/archive-detail/ArchiveCycleTimeline";
-import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
-import ArchiveDetailHeaderView, {
+import ArchiveProjectDetailView from "@/components/archive-ui/ArchiveProjectDetailView";
+import DeviceOwnedProjectDetail from "@/components/archive-ui/DeviceOwnedProjectDetail";
+import {
   type ArchiveProfileFieldSave,
 } from "@/components/archive-ui/ArchiveDetailHeaderView";
 import ArchiveRecordComposer from "@/components/archive-ui/ArchiveRecordComposer";
@@ -57,6 +55,7 @@ import {
   endLocalArchiveCycle,
   getLocalArchiveDetail,
   listPendingCloudSyncSummaries,
+  listVisibleLocalTaxonomyItems,
   markLocalArchiveForOwner,
   preparePendingCloudSyncQueue,
   restoreLocalArchiveCycle,
@@ -67,6 +66,7 @@ import {
   type LocalArchiveOwnerContext,
   type LocalArchiveDetail,
   type LocalRecordWithImages,
+  type LocalTaxonomyItem,
   type PendingCloudSyncSummary,
 } from "@/lib/local-offline-db";
 import {
@@ -98,6 +98,8 @@ import {
   type ArchiveCategoryDepths,
 } from "@/lib/archive-category-settings";
 import { LOCAL_ORIGIN_MIGRATED_EVENT } from "@/lib/local-origin-migration";
+import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 
 function formatDate(value?: string | null) {
   return formatPreciseDateTime(value);
@@ -185,12 +187,17 @@ export default function LocalArchiveDetailPage() {
     useState<PendingCloudSyncProgress | null>(null);
   const [pendingSyncError, setPendingSyncError] = useState("");
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [activeDetailTab, setActiveDetailTab] = useState<"records" | "profile" | "experience">(
+    "records",
+  );
   const [ownerContext, setOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [systemNameCandidates, setSystemNameCandidates] = useState<SystemNameCandidate[]>([]);
   const [candidatesLoading, setCandidatesLoading] = useState(true);
   const [categoryDepths, setCategoryDepths] = useState<ArchiveCategoryDepths>({
     ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
   });
+  const [localTaxonomyItems, setLocalTaxonomyItems] = useState<LocalTaxonomyItem[]>([]);
+  const [ownerSettingsBusy, setOwnerSettingsBusy] = useState(false);
   const localRecordObjectUrlsRef = useRef<string[]>([]);
   const loadedQuickCaptureIdRef = useRef("");
   const cycleTerminology = getArchiveCycleTerminology(detail?.archive.category, language);
@@ -213,11 +220,13 @@ export default function LocalArchiveDetailPage() {
       setOwnerContext(ownerContext);
       setCategoryDepths(getLocalArchiveCategoryDepths(ownerContext?.userId));
       await preparePendingCloudSyncQueue(ownerContext);
-      const [nextDetail, pendingSummaries] = await Promise.all([
+      const [nextDetail, pendingSummaries, taxonomyItems] = await Promise.all([
         getLocalArchiveDetail(archiveId, ownerContext),
         listPendingCloudSyncSummaries(ownerContext),
+        listVisibleLocalTaxonomyItems(ownerContext),
       ]);
       setDetail(nextDetail);
+      setLocalTaxonomyItems(taxonomyItems);
       setPendingSyncSummary(
         pendingSummaries.find((item) => item.local_archive_id === archiveId) ||
           null
@@ -880,6 +889,22 @@ export default function LocalArchiveDetailPage() {
     }
   }
 
+  async function saveLocalOwnerFields(
+    updates: Parameters<typeof updateLocalArchiveFields>[1],
+  ) {
+    if (!archiveId || ownerSettingsBusy) return;
+    setOwnerSettingsBusy(true);
+    try {
+      const nextArchive = await updateLocalArchiveFields(archiveId, updates, ownerContext);
+      setDetail((current) => current ? { ...current, archive: nextArchive } : current);
+      showToast(archiveCopy.saved);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : archiveCopy.local_update_failed);
+    } finally {
+      setOwnerSettingsBusy(false);
+    }
+  }
+
   async function saveLocalArchiveProfileField(change: ArchiveProfileFieldSave) {
     if (!detail) return;
 
@@ -1035,10 +1060,14 @@ export default function LocalArchiveDetailPage() {
     systemName: archive.system_name || archive.species_name || archiveCopy.not_filled,
     subcategoryLabel: categoryDepth >= 2 ? archive.subcategory : null,
     groupLabel: categoryDepth >= 3 ? archive.group_name : null,
-    visibilityLabel: null,
+    visibilityLabel: archive.local_role === "cloud-offline-cache" ? null : archiveCopy.local_project,
     visibilityTone: "neutral",
-    storageLabel: archiveCopy.device,
+    storageLabel: archive.local_role === "cloud-offline-cache" ? archiveCopy.device : null,
     storageTone: "device",
+    recordCount: records.length,
+    durationDays: ongoingDays,
+    latestTime: latestUpdate,
+    ended: archive.status === "ended",
   };
   const localProfileRows = [
     {
@@ -1056,6 +1085,23 @@ export default function LocalArchiveDetailPage() {
       value: localCategoryLabel,
       field: "category" as const,
     },
+    ...(archive.category === "plant"
+      ? [{
+          label: archiveCopy.planting_region_required,
+          content: (
+            <PlantingRegionEditor
+              layout="attribute"
+              language={language}
+              value={archive.planting_region}
+              canEdit
+              onSave={async (region) => {
+                const updated = await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
+                setDetail((current) => current ? { ...current, archive: updated } : current);
+              }}
+            />
+          ),
+        }]
+      : []),
     {
       label: archiveCopy.source,
       value: archive.source || archiveCopy.not_filled,
@@ -1117,158 +1163,26 @@ export default function LocalArchiveDetailPage() {
           : null,
       ].filter(Boolean)
     : [];
+  const archiveDisplayName = archive.system_name || archive.species_name || "";
 
   return (
-    <main style={pageStyle}>
-      <section style={headerStyle}>
-        <Link href="/archive?source=local" style={backLinkStyle}>
-          {archiveCopy.back_to_local_projects}
-        </Link>
-        <ArchiveDetailHeaderView
-          project={projectView}
-          eyebrow={archiveCopy.local_archive}
-          latestUpdateText={
-            `${archiveCopy.latest_update} ${formatDate(latestUpdate) || archiveCopy.none}`
-          }
-          recordCountText={`${archiveCopy.records} ${records.length}`}
-          durationText={ongoingDays ? durationText : undefined}
-          hint={
-            archive.source_cloud_archive_id
-              ? archiveCopy.cloud_local_copy_hint
-              : archiveCopy.local_hint
-          }
-          actionSlot={
-            <div style={headerActionSlotStyle}>
-              {!archive.local_owner_user_id && ownerContext?.userId ? (
-                <button
-                  type="button"
-                  onClick={markCurrentLocalArchiveAsMine}
-                  style={markOwnerButtonStyle}
-                >
-                  {archiveCopy.mark_owner}
-                </button>
-              ) : null}
-              {archive.source_cloud_archive_id ? (
-                pendingSyncSummary ? (
-                  <button
-                    type="button"
-                    onClick={openPendingSyncPrompt}
-                    disabled={pendingSyncRunning}
-                    style={{
-                      ...transferActionButtonStyle,
-                      opacity: pendingSyncRunning ? 0.55 : 1,
-                      cursor: pendingSyncRunning ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {pendingSyncRunning
-                      ? archiveCopy.pending_sync_uploading
-                      : archiveCopy.pending_sync_upload}
-                  </button>
-                ) : (
-                  <Link
-                    href={`/archive/${archive.source_cloud_archive_id}`}
-                    style={transferActionLinkStyle}
-                  >
-                    {archiveCopy.view_cloud_project}
-                  </Link>
-                )
-              ) : (
-                <button
-                  type="button"
-                  onClick={openTransferPrompt}
-                  disabled={transferRunning || archive.migration_status === "migrating"}
-                  style={{
-                    ...transferActionButtonStyle,
-                    opacity:
-                      transferRunning || archive.migration_status === "migrating"
-                        ? 0.55
-                        : 1,
-                    cursor:
-                      transferRunning || archive.migration_status === "migrating"
-                        ? "not-allowed"
-                        : "pointer",
-                  }}
-                >
-                  {archiveCopy.transfer_to_cloud}
-                </button>
-              )}
-            </div>
-          }
-          profileRows={localProfileRows}
-          profileEditor={{
-            values: {
-              title: archive.title || "",
-              category: archive.category,
-              systemName: archive.system_name || archive.species_name || "",
-              source: archive.source || "",
-              note: archive.note || "",
-              archiveSummary: archive.archive_summary || "",
-            },
-            onSaveField: saveLocalArchiveProfileField,
-            systemNameMode: "candidate",
-            systemNameCandidates,
-            systemNameCandidatesLoading: candidatesLoading,
-            systemNameHint: archiveCopy.system_name_helper,
-          }}
-          profileActions={
-            <div style={localProfileActionsStyle}>
-              <button type="button" onClick={() => setDeleteArchiveOpen(true)} style={localProfileDangerButtonStyle}>
-                {archiveCopy.delete_local_project}
-              </button>
-            </div>
-          }
-          profileExtra={
-            <div style={localCycleProfileExtraStyle}>
-              {archive.category === "plant" ? <PlantingRegionEditor key={archive.id} language={language} value={archive.planting_region} canEdit onSave={async (region) => {
-                const updated = await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
-                setDetail((current) => current ? { ...current, archive: updated } : current);
-              }} /> : null}
-              <ArchiveCycleSettings
-                key={archive.id}
-                enabled={cycleEnabled}
-                busy={cycleSettingsSaving}
-                onSave={saveLocalCycleSettings}
-              />
-              {(archive.trashed_cycles || []).length > 0 ? (
-                <section style={localCycleTrashStyle}>
-                  <div style={localCycleTrashTitleStyle}>
-                    {archiveCopy.deleted_cycles}（{archive.trashed_cycles?.length || 0}）
-                  </div>
-                  <div style={localCycleTrashHintStyle}>
-                    {archiveCopy.deleted_cycles_hint}
-                  </div>
-                  <div style={localCycleTrashListStyle}>
-                    {(archive.trashed_cycles || []).map((item) => (
-                      <div key={item.id} style={localCycleTrashRowStyle}>
-                        <div style={localCycleTrashNameStyle}>
-                          <strong>
-                            {item.cycle.display_name ||
-                              cycleTerminology.cycleLabel(item.cycle.cycle_no)}
-                          </strong>
-                          <span>
-                            {formatLocalCycleDate(item.cycle.started_at)} · {item.record_ids.length}
-                            {language === "en" ? ` ${archiveCopy.records}` : `条${archiveCopy.records}`}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => restoreLocalCycle(item.id)}
-                          disabled={cycleBusy}
-                          style={localCycleRestoreButtonStyle}
-                        >
-                          {archiveCopy.restore_cycle}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-            </div>
-          }
-        />
-      </section>
-
-      {pendingSyncError && !pendingSyncPromptOpen ? (
+    <>
+      <DeviceOwnedProjectDetail
+        view={ArchiveProjectDetailView}
+        detail={detail}
+        ownerContext={ownerContext}
+        onBack={() => router.push("/archive?source=local")}
+        onChanged={async () => {
+          const nextDetail = await getLocalArchiveDetail(archive.id, ownerContext);
+          setDetail(nextDetail);
+        }}
+        onAddRecord={() => setAddRecordOpen(true)}
+        onDeleteArchive={() => setDeleteArchiveOpen(true)}
+        onDeleteRecord={(recordId) => {
+          const target = records.find((item) => item.id === recordId);
+          if (target) setRecordToDelete(target);
+        }}
+        extra={<>      {pendingSyncError && !pendingSyncPromptOpen ? (
         <div style={transferErrorStyle}>{pendingSyncError}</div>
       ) : transferError ? (
         <div style={transferErrorStyle}>
@@ -1444,7 +1358,8 @@ export default function LocalArchiveDetailPage() {
           </section>
         </div>
       ) : null}
-
+        </>}
+        recordComposer={
       <ArchiveRecordComposer
         mobileMode={isMobileViewport}
         open={!isMobileViewport || addRecordOpen}
@@ -1597,105 +1512,9 @@ export default function LocalArchiveDetailPage() {
             </div>
           </form>
       </ArchiveRecordComposer>
-
-      <ArchiveCycleTimeline
-        cycles={cycleEnabled ? cycles : []}
-        records={localRecordItems}
-        category={archive.category}
-        mobileMode={isMobileViewport}
-        canManage={cycleEnabled}
-        busy={cycleBusy}
-        onStartCycle={cycleEnabled ? startLocalCycle : undefined}
-        onEndCycle={cycleEnabled ? endLocalCycle : undefined}
-        onUpdateCycleDates={cycleEnabled ? updateLocalCycleDates : undefined}
-        onRenameCycle={cycleEnabled ? renameLocalCycle : undefined}
-        onDeleteCycle={cycleEnabled ? deleteLocalCycle : undefined}
-        emptyState={
-          <div style={emptyRecordsStyle}>
-            <div>{recordCopy.no_local_records}</div>
-          </div>
         }
-        renderRecord={(record, index) => (
-            <ArchiveRecordCard
-              key={record.id}
-              variant="local"
-              archive={localArchiveRecordShell}
-              item={record}
-              index={index}
-              mode="owner"
-              startTime={startTime}
-              isHighlighted={false}
-              sameTagLinks={[]}
-              onOpenLightbox={(media, mediaIndex, item) =>
-                openLocalRecordItemLightbox(media, mediaIndex, item)
-              }
-              onDeleteMedia={async () => undefined}
-              onVisibilityChange={async () => undefined}
-              onSetHelpStatus={async () => undefined}
-              onRemoveTag={() => undefined}
-              onAddTag={async () => undefined}
-              onRecordUpdated={async (recordId, patch) => {
-                await updateLocalRecordFields(recordId, {
-                  location: patch.location,
-                  note: typeof patch.note === "string" ? patch.note : undefined,
-                  record_time:
-                    typeof patch.record_time === "string"
-                      ? patch.record_time
-                      : undefined,
-                });
-                await loadDetail();
-              }}
-              onNoteSaved={async () => undefined}
-              onRecordDeleted={(recordId) => {
-                const target = records.find((item) => item.id === recordId);
-                if (target) setRecordToDelete(target);
-              }}
-              cycleOptions={cycleOptions}
-              onCycleChange={async (recordId, cycleId) => {
-                try {
-                  await updateLocalRecordFields(recordId, { cycle_id: cycleId });
-                  showToast(
-                    cycleId
-                      ? cycleTerminology.recordAssignedSuccess
-                      : cycleTerminology.recordUnassignedSuccess
-                  );
-                  await loadDetail();
-                } catch (err) {
-                  showToast(
-                    err instanceof Error
-                      ? err.message
-                      : recordCopy.adjust_failed
-                  );
-                }
-              }}
-              isMobileViewport={isMobileViewport}
-            />
-        )}
       />
-
-      {localLightboxImages.length > 0 ? (
-        <ArchiveLightbox
-          images={localLightboxImages}
-          index={localLightboxIndex}
-          onChange={setLocalLightboxIndex}
-          isMobileViewport={isMobileViewport}
-          metaText={localLightboxMetaText}
-          note={localLightboxRecord?.note || ""}
-          onClose={closeLocalLightbox}
-        />
-      ) : null}
-
-      {isMobileViewport && !addRecordOpen ? (
-        <button
-          type="button"
-          onClick={() => setAddRecordOpen(true)}
-          style={mobileFloatingAddButtonStyle}
-        >
-          {recordCopy.add_record_short}
-        </button>
-      ) : null}
-
-      <ConfirmDialog
+            <ConfirmDialog
         open={Boolean(recordToDelete)}
         title={recordCopy.delete_local_record_title}
         message={recordCopy.delete_local_record_message}
@@ -1714,7 +1533,8 @@ export default function LocalArchiveDetailPage() {
         onClose={() => setDeleteArchiveOpen(false)}
         onConfirm={confirmDeleteArchive}
       />
-    </main>
+
+    </>
   );
 }
 
@@ -1726,17 +1546,38 @@ const pageStyle = {
   color: "#263326",
 } satisfies CSSProperties;
 
-const headerStyle = {
-  margin: "0 auto 12px",
-} satisfies CSSProperties;
+const projectPageHeaderStyle: CSSProperties = {
+  minHeight: 48,
+  display: "grid",
+  gridTemplateColumns: "auto minmax(0, 1fr) auto",
+  alignItems: "center",
+  gap: 10,
+  marginBottom: 8,
+};
 
-const backLinkStyle = {
+const projectPageBackLinkStyle: CSSProperties = {
+  minWidth: 0,
   display: "inline-flex",
-  color: "#617258",
-  fontSize: 13,
+  alignItems: "center",
+  gap: 4,
+  color: "#52694f",
+  fontSize: 14,
+  fontWeight: 730,
   textDecoration: "none",
-  marginBottom: 10,
-} satisfies CSSProperties;
+  whiteSpace: "nowrap",
+};
+
+const projectPageTitleStyle: CSSProperties = {
+  minWidth: 0,
+  margin: 0,
+  overflow: "hidden",
+  color: "#243424",
+  fontSize: "clamp(19px, 4.6vw, 28px)",
+  lineHeight: 1.25,
+  textAlign: "center",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
 
 const localProfileDangerButtonStyle = {
   border: "1px solid #efd8d5",
@@ -2356,30 +2197,6 @@ const countTextStyle = {
   fontSize: 13,
 } satisfies CSSProperties;
 
-const emptyRecordsStyle = {
-  padding: 18,
-  borderRadius: 14,
-  background: "#f8fbf4",
-  color: "#697663",
-  fontSize: 14,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  flexWrap: "wrap",
-} satisfies CSSProperties;
-
-const emptyAddButtonStyle = {
-  height: 34,
-  padding: "0 12px",
-  borderRadius: 999,
-  border: "1px solid #cfe0c8",
-  background: "#fff",
-  color: "#2f5d2b",
-  fontSize: 13,
-  fontWeight: 700,
-} satisfies CSSProperties;
-
 const timelineListStyle = {
   display: "grid",
   gap: 12,
@@ -2508,22 +2325,6 @@ const recordFooterStyle = {
   flexWrap: "wrap",
   color: "#8a9584",
   fontSize: 12,
-} satisfies CSSProperties;
-
-const mobileFloatingAddButtonStyle = {
-  position: "fixed",
-  right: 16,
-  bottom: "calc(78px + var(--app-safe-area-bottom))",
-  zIndex: 60,
-  height: 42,
-  padding: "0 16px",
-  borderRadius: 999,
-  border: "1px solid #bcd8b5",
-  background: "#3f7d3d",
-  color: "#fff",
-  fontSize: 14,
-  fontWeight: 800,
-  boxShadow: "0 12px 28px rgba(49, 90, 45, 0.22)",
 } satisfies CSSProperties;
 
 const dangerPanelStyle = {

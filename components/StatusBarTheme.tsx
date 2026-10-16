@@ -101,6 +101,13 @@ export function setAppStatusBarTheme(color: string) {
   });
 }
 
+export function setAppStatusBarHidden(hidden: boolean) {
+  if (!Capacitor.isNativePlatform()) return;
+  void (hidden ? StatusBar.hide() : StatusBar.show()).catch(() => {
+    // Older/native shells can safely keep their existing status-bar state.
+  });
+}
+
 export default function StatusBarTheme() {
   const pathname = usePathname();
 

@@ -1,4 +1,4 @@
-import type { PublicGuideContent, PublicGuideLanguage } from "./public-guide-library";
+import type { PublicGuideContent, PublicGuideLanguage } from "../../lib/public-guide-library";
 
 type Pair = readonly [zh: string, en: string];
 type Example = {

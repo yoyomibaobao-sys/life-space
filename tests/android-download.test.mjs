@@ -209,7 +209,7 @@ test("website exposes one download page before and after login", () => {
   const page = read("app/download/android/page.tsx");
   const home = read("app/page.tsx");
   const login = read("app/login/page.tsx");
-  const profile = read("app/profile/page.tsx");
+  const profile = read("app/profile/page.tsx") + read("components/profile/MobileProfilePresentation.tsx");
   const footer = read("components/SiteFooter.tsx");
   const experience = read("app/experience-cards/[id]/page.tsx");
 
@@ -223,7 +223,7 @@ test("website exposes one download page before and after login", () => {
   assert.match(login, /href="\/download\/android"/);
   assert.match(profile, /href: "\/download\/android"/);
   assert.match(profile, /href: "\/"/);
-  assert.match(profile, /isNativeApp === true[\s\S]*\? \[\]/);
+  assert.match(profile, /native: isNativeApp === true/);
   assert.match(footer, /href="\/download\/android"/);
   assert.match(experience, /<AndroidAppDownloadPrompt \/>/);
 });
@@ -235,7 +235,8 @@ test("main-branch signed builds publish and verify the R2 release", () => {
 
   assert.match(worker, /url\.pathname === "\/download\/android"/);
   assert.match(worker, /source", "official_download"/);
-  assert.match(updatePage, /api\/download\/android\?source=app_update_fallback/);
+  assert.match(updatePage, /openAndroidOfficialDownload\(\)/);
+  assert.match(updatePage, /OFFICIAL_DOWNLOAD_PAGE = "https:\/\/life-space\.uk\/download\/android"/);
   assert.match(workflow, /Verify permanent release signature/);
   assert.match(workflow, /ccc03e33fed7ce95dd4d203aa3451a08cdc175874e4a6ae159b81c367164635d/);
   assert.match(workflow, /write-android-release-manifest\.mjs/);

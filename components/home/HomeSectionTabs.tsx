@@ -10,11 +10,15 @@ export default function HomeSectionTabs({
   searchEnabled = true,
   showNotification = false,
   onSearch,
+  onSelect,
+  showGuestLanguageSwitcher = true,
 }: {
   active: HomeSection;
   searchEnabled?: boolean;
   showNotification?: boolean;
   onSearch?: () => void;
+  onSelect?: (section: HomeSection) => void;
+  showGuestLanguageSwitcher?: boolean;
 }) {
   const { t } = useLanguage();
   const items = [
@@ -42,8 +46,11 @@ export default function HomeSectionTabs({
       onSearch={searchEnabled ? onSearch : undefined}
       searchLabel={t.nav.search}
       showNotification={showNotification}
+      showGuestLanguageSwitcher={showGuestLanguageSwitcher}
       items={items.map((item) => ({
         ...item,
+        href: onSelect ? undefined : item.href,
+        onClick: onSelect ? () => onSelect(item.key) : undefined,
         active: item.key === active,
       }))}
     />

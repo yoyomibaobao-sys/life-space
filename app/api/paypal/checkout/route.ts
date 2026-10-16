@@ -9,7 +9,10 @@ import {
   PAYPAL_MEMBERSHIP_AMOUNT,
   PAYPAL_MEMBERSHIP_CURRENCY,
 } from "@/lib/paypal";
-import { confirmMembershipFromPayPalOrder } from "@/lib/paypal-membership";
+import {
+  beginPayPalMembershipCapture,
+  confirmMembershipFromPayPalOrder,
+} from "@/lib/paypal-membership";
 import {
   getAuthenticatedRequestClient,
   hasValidMutationOrigin,
@@ -50,7 +53,10 @@ async function finishExistingPayPalOrder(payment: MembershipPaymentRow) {
   let paypalOrder = await getPayPalOrder(payment.provider_order_id);
 
   if (paypalOrder.status === "APPROVED") {
-    paypalOrder = await capturePayPalOrder(payment.provider_order_id);
+    const intent = await beginPayPalMembershipCapture(payment.id);
+    if (!intent.already_confirmed) {
+      paypalOrder = await capturePayPalOrder(payment.provider_order_id);
+    }
   }
 
   if (paypalOrder.status === "COMPLETED") {

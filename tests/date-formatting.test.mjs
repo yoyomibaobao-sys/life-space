@@ -13,7 +13,7 @@ test("dates use one numeric card and precise-time contract", async () => {
     source("lib/archive-page-utils.ts"),
     source("app/notifications/page.tsx"),
     source("lib/market-types.ts"),
-    source("app/market/[id]/page.tsx"),
+    source("components/market/MarketDetailView.tsx"),
     source("lib/user-profile-shared.ts"),
   ]);
 

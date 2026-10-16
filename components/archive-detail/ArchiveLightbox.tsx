@@ -6,10 +6,14 @@ import { getTouchDistance } from "@/lib/archive-detail-utils";
 import {
   APP_STATUS_BAR_DARK,
   APP_STATUS_BAR_LIGHT,
+  setAppStatusBarHidden,
   setAppStatusBarTheme,
 } from "@/components/StatusBarTheme";
 import UiIcon from "@/components/ui/UiIcon";
+import AppConfirmDialog from "@/components/mobile/AppConfirmDialog";
+import { showToast } from "@/components/Toast";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { saveViewedImage } from "@/lib/image-save";
 
 type PanOffset = {
   x: number;
@@ -23,6 +27,7 @@ export default function ArchiveLightbox({
   onChange,
   isMobileViewport = false,
   metaText = "",
+  dayText = "",
   note = "",
   onDeleteCurrentImage,
   deleteActionLabel,
@@ -34,6 +39,7 @@ export default function ArchiveLightbox({
   onChange: (next: number) => void;
   isMobileViewport?: boolean;
   metaText?: string;
+  dayText?: string;
   note?: string;
   onDeleteCurrentImage?: (
     image: LightboxImage,
@@ -42,7 +48,7 @@ export default function ArchiveLightbox({
   deleteActionLabel?: string;
   deleteConfirmMessage?: string;
 }) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const copy = t.record;
   const resolvedDeleteActionLabel = deleteActionLabel || copy.delete_current_image;
   const resolvedDeleteConfirmMessage =
@@ -50,7 +56,8 @@ export default function ArchiveLightbox({
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState<PanOffset>({ x: 0, y: 0 });
   const [mobileToolbarVisible, setMobileToolbarVisible] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [trashConfirmOpen, setTrashConfirmOpen] = useState(false);
+  const [imageActionBusy, setImageActionBusy] = useState(false);
   const [isDeletingCurrentImage, setIsDeletingCurrentImage] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const touchCurrentX = useRef<number | null>(null);
@@ -81,7 +88,7 @@ export default function ArchiveLightbox({
     mousePanStartOffset.current = { x: 0, y: 0 };
     setIsMousePanning(false);
     setMobileToolbarVisible(false);
-    setMobileMenuOpen(false);
+    setTrashConfirmOpen(false);
     interactedRef.current = false;
     suppressClickRef.current = false;
   }, [index, images.length]);
@@ -90,6 +97,7 @@ export default function ArchiveLightbox({
     if (!isMobileViewport || typeof window === "undefined") return;
 
     setAppStatusBarTheme(APP_STATUS_BAR_DARK);
+    setAppStatusBarHidden(true);
     document.documentElement.dataset.mobileOverlayOpen = "true";
 
     window.history.pushState(
@@ -100,6 +108,16 @@ export default function ArchiveLightbox({
     pushedMobileHistoryRef.current = true;
 
     function handlePopState() {
+      if (document.visibilityState === "hidden") {
+        if (pushedMobileHistoryRef.current && !window.history.state?.__archiveLightbox) {
+          window.history.pushState(
+            { ...(window.history.state || {}), __archiveLightbox: true },
+            "",
+            window.location.href,
+          );
+        }
+        return;
+      }
       pushedMobileHistoryRef.current = false;
       onClose();
     }
@@ -108,7 +126,14 @@ export default function ArchiveLightbox({
 
     return () => {
       window.removeEventListener("popstate", handlePopState);
+      if (pushedMobileHistoryRef.current && window.history.state?.__archiveLightbox) {
+        pushedMobileHistoryRef.current = false;
+        const rest = { ...window.history.state };
+        delete rest.__archiveLightbox;
+        window.history.replaceState(rest, "", window.location.href);
+      }
       delete document.documentElement.dataset.mobileOverlayOpen;
+      setAppStatusBarHidden(false);
       setAppStatusBarTheme(APP_STATUS_BAR_LIGHT);
     };
     // Run once for this mobile lightbox mount so the Android back key exits it.
@@ -238,19 +263,31 @@ export default function ArchiveLightbox({
   async function deleteCurrentMobileImage() {
     if (!onDeleteCurrentImage || isDeletingCurrentImage) return;
 
-    const ok = window.confirm(resolvedDeleteConfirmMessage);
-    if (!ok) return;
-
+    setTrashConfirmOpen(false);
     setIsDeletingCurrentImage(true);
     try {
       const remaining = await onDeleteCurrentImage(current, index);
-      setMobileMenuOpen(false);
 
       if (remaining <= 0) {
         requestClose();
       }
+    } catch {
+      showToast(language === "zh" ? "移入回收站失败，请重试。" : "Could not move image to trash. Try again.");
     } finally {
       setIsDeletingCurrentImage(false);
+    }
+  }
+
+  async function saveCurrentImage() {
+    if (imageActionBusy) return;
+    setImageActionBusy(true);
+    try {
+      const saved = await saveViewedImage(current.url, current.id);
+      if (saved) showToast(language === "zh" ? "图片已下载" : "Image downloaded");
+    } catch {
+      showToast(language === "zh" ? "图片下载失败，请检查访问权限和网络后重试。" : "Could not download the image. Check access and connectivity.");
+    } finally {
+      setImageActionBusy(false);
     }
   }
 
@@ -269,7 +306,6 @@ export default function ArchiveLightbox({
             mobileTouchStart.current = null;
             mobileTouchCurrent.current = null;
             mobileTouchMoved.current = true;
-            setMobileMenuOpen(false);
             return;
           }
 
@@ -302,7 +338,6 @@ export default function ArchiveLightbox({
             mobileTouchMoved.current = true;
             interactedRef.current = true;
             suppressClickRef.current = true;
-            setMobileMenuOpen(false);
             return;
           }
 
@@ -367,14 +402,12 @@ export default function ArchiveLightbox({
           if (scale > 1.02) {
             if (maxDistance < 8) {
               setMobileToolbarVisible((visible) => !visible);
-              setMobileMenuOpen(false);
             }
             return;
           }
 
           if (maxDistance < 8) {
             setMobileToolbarVisible((visible) => !visible);
-            setMobileMenuOpen(false);
             return;
           }
 
@@ -395,66 +428,71 @@ export default function ArchiveLightbox({
           userSelect: "none",
         }}
       >
-        <img
-          src={current.url}
-          alt={current.alt}
-          style={{
-            width: "100vw",
-            height: "100dvh",
-            objectFit: "contain",
-            display: "block",
-            transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`,
-            transition: interactedRef.current ? "none" : "transform 0.14s ease",
-            touchAction: "none",
-          }}
-        />
-
-        {mobileToolbarVisible ? (
-          <>
+        <div style={{ ...mobileMediaColumnStyle,
+          gridTemplateRows: mobileToolbarVisible ? "auto minmax(0, 1fr) auto" : "minmax(0, 1fr)" }}>
+          {mobileToolbarVisible ? (
             <div style={mobileTopToolbarStyle}>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  requestClose();
-                }}
-                style={mobileLightboxBackButtonStyle}
-              >
+              <button type="button" style={mobileLightboxBackButtonStyle}
+                onClick={(event) => { event.stopPropagation(); requestClose(); }}>
                 {copy.back}
               </button>
-              <div style={mobileMetaTextStyle}>{metaText}</div>
-              {onDeleteCurrentImage ? (
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setMobileMenuOpen((open) => !open);
-                  }}
-                  aria-label={copy.image_more_actions}
-                  style={mobileLightboxMoreButtonStyle}
-                >
-                  <UiIcon name="more" size={20} />
-                </button>
-              ) : null}
-              {mobileMenuOpen && onDeleteCurrentImage ? (
-                <div style={mobileLightboxMenuStyle}>
-                  <button
-                    type="button"
-                    onClick={() => void deleteCurrentMobileImage()}
-                    disabled={isDeletingCurrentImage}
-                    style={mobileLightboxDangerItemStyle}
-                  >
-                    {isDeletingCurrentImage ? t.archive.processing : resolvedDeleteActionLabel}
-                  </button>
-                </div>
-              ) : null}
+              <div style={mobileMetaTextStyle}>
+                <div>{metaText}</div>
+                {dayText ? <div style={mobileDayTextStyle}>{dayText}</div> : null}
+              </div>
+              <div style={mobileImageCountStyle}>{index + 1}/{images.length}</div>
             </div>
-
-            {note.trim() ? (
-              <div style={mobileBottomNoteStyle}>{note}</div>
-            ) : null}
-          </>
-        ) : null}
+          ) : null}
+          <div style={mobileImageFrameStyle}>
+            <img
+              src={current.url}
+              alt={current.alt}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                display: "block",
+                transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`,
+                transition: interactedRef.current ? "none" : "transform 0.14s ease",
+                touchAction: "none",
+              }}
+            />
+          </div>
+          {mobileToolbarVisible ? (
+            <div style={mobileMediaFooterStyle}
+              onClick={(event) => event.stopPropagation()}
+              onTouchStart={(event) => event.stopPropagation()}
+              onTouchEnd={(event) => event.stopPropagation()}>
+              <div style={mobileFooterNoteStyle}>{note}</div>
+              <div style={mobileImageActionsStyle}>
+                <button type="button" style={mobileImageActionButtonStyle}
+                  aria-label={language === "zh" ? "下载当前图片" : "Download current image"}
+                  title={language === "zh" ? "下载图片" : "Download image"}
+                  disabled={imageActionBusy} onClick={() => void saveCurrentImage()}>
+                  <UiIcon name="download" size={22} />
+                </button>
+                {onDeleteCurrentImage ? (
+                  <button type="button" style={mobileImageActionButtonStyle}
+                    aria-label={resolvedDeleteActionLabel} title={resolvedDeleteActionLabel}
+                    disabled={isDeletingCurrentImage} onClick={() => setTrashConfirmOpen(true)}>
+                    <UiIcon name="trash" size={21} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+        <div onClick={(event) => event.stopPropagation()}
+          onTouchStart={(event) => event.stopPropagation()}
+          onTouchEnd={(event) => event.stopPropagation()}>
+          <AppConfirmDialog open={trashConfirmOpen}
+            title={resolvedDeleteActionLabel}
+            message={resolvedDeleteConfirmMessage}
+            cancelLabel={language === "zh" ? "取消" : "Cancel"}
+            confirmLabel={resolvedDeleteActionLabel} destructive
+            onCancel={() => setTrashConfirmOpen(false)}
+            onConfirm={() => void deleteCurrentMobileImage()} />
+        </div>
       </div>
     );
   }
@@ -587,6 +625,22 @@ export default function ArchiveLightbox({
       >
         <UiIcon name="chevron-left" size={26} />
       </button>
+      <div style={{ position: "fixed", right: 16, bottom: "calc(16px + var(--app-safe-area-bottom))",
+        zIndex: 3002, display: "flex", gap: 6 }} onClick={(event) => event.stopPropagation()}>
+        <button type="button" aria-label={language === "zh" ? "下载当前图片" : "Download current image"}
+          title={language === "zh" ? "下载图片" : "Download image"}
+          disabled={imageActionBusy} onClick={() => void saveCurrentImage()}
+          style={mobileImageActionButtonStyle}>
+          <UiIcon name="download" size={22} />
+        </button>
+        {onDeleteCurrentImage ? (
+          <button type="button" aria-label={resolvedDeleteActionLabel} title={resolvedDeleteActionLabel}
+            disabled={isDeletingCurrentImage} onClick={() => setTrashConfirmOpen(true)}
+            style={mobileImageActionButtonStyle}>
+            <UiIcon name="trash" size={21} />
+          </button>
+        ) : null}
+      </div>
 
       <div
         onClick={(event) => {
@@ -703,108 +757,130 @@ export default function ArchiveLightbox({
       >
         {isMobileViewport ? copy.back : copy.close}
       </button>
+      <div onClick={(event) => event.stopPropagation()}
+        onTouchStart={(event) => event.stopPropagation()}
+        onTouchEnd={(event) => event.stopPropagation()}>
+        <AppConfirmDialog open={trashConfirmOpen}
+          title={resolvedDeleteActionLabel} message={resolvedDeleteConfirmMessage}
+          cancelLabel={language === "zh" ? "取消" : "Cancel"}
+          confirmLabel={resolvedDeleteActionLabel} destructive
+          onCancel={() => setTrashConfirmOpen(false)}
+          onConfirm={() => void deleteCurrentMobileImage()} />
+      </div>
     </div>
   );
 }
 
 const mobileTopToolbarStyle = {
-  position: "fixed",
-  top: 0,
-  left: 0,
-  right: 0,
   zIndex: 3002,
-  minHeight: "calc(54px + var(--app-safe-area-top))",
-  padding: "calc(10px + var(--app-safe-area-top)) 48px 10px",
+  minHeight: "calc(60px + var(--app-safe-area-top))",
+  padding: "calc(9px + var(--app-safe-area-top)) 12px 8px",
   boxSizing: "border-box",
-  background: "linear-gradient(to bottom, rgba(0,0,0,0.76), rgba(0,0,0,0))",
+  background: "#000",
   color: "#fff",
-  display: "flex",
-  alignItems: "flex-start",
-  justifyContent: "center",
+  display: "grid",
+  gridTemplateColumns: "68px minmax(0, 1fr) 68px",
+  gap: 6,
+  alignItems: "center",
 } as const;
 
 const mobileMetaTextStyle = {
-  maxWidth: "100%",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-  color: "rgba(255,255,255,0.9)",
-  fontSize: 13,
+  minWidth: 0,
+  overflowWrap: "anywhere",
+  color: "rgba(255,255,255,0.92)",
+  fontSize: 12.5,
   lineHeight: 1.4,
+  textAlign: "center",
 } as const;
 
-const mobileLightboxMoreButtonStyle = {
-  position: "absolute",
-  top: "calc(8px + var(--app-safe-area-top))",
-  right: 12,
-  width: 36,
-  height: 36,
-  borderRadius: 999,
-  border: "none",
-  background: "rgba(255,255,255,0.08)",
-  color: "#fff",
-  fontSize: 24,
-  lineHeight: 1,
-  cursor: "pointer",
+const mobileDayTextStyle = {
+  color: "rgba(255,255,255,0.68)",
+  fontSize: 11.5,
+  lineHeight: 1.5,
 } as const;
 
 const mobileLightboxBackButtonStyle = {
-  position: "absolute",
-  top: "calc(9px + var(--app-safe-area-top))",
-  left: 12,
-  height: 34,
-  minWidth: 52,
-  borderRadius: 999,
+  height: 40,
+  width: 62,
+  borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.18)",
   background: "rgba(255,255,255,0.08)",
-  color: "rgba(255,255,255,0.88)",
-  fontSize: 13,
-  fontWeight: 700,
-  cursor: "pointer",
-} as const;
-
-const mobileLightboxMenuStyle = {
-  position: "absolute",
-  top: "calc(48px + var(--app-safe-area-top))",
-  right: 12,
-  width: 148,
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(18,18,18,0.94)",
-  boxShadow: "0 18px 42px rgba(0,0,0,0.36)",
-  padding: 6,
-} as const;
-
-const mobileLightboxDangerItemStyle = {
-  width: "100%",
-  minHeight: 36,
-  border: "none",
-  borderRadius: 9,
-  background: "transparent",
-  color: "#ffd3ce",
-  fontSize: 13,
-  fontWeight: 700,
-  textAlign: "left",
-  padding: "0 10px",
-  cursor: "pointer",
-} as const;
-
-const mobileBottomNoteStyle = {
-  position: "fixed",
-  left: 0,
-  right: 0,
-  bottom: 0,
-  zIndex: 3002,
-  maxHeight: "34dvh",
-  overflowY: "auto",
-  padding: "18px 16px calc(18px + var(--app-safe-area-bottom))",
-  boxSizing: "border-box",
-  background: "linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0))",
   color: "rgba(255,255,255,0.92)",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
+} as const;
+
+const mobileMediaColumnStyle = {
+  width: "100vw",
+  height: "100dvh",
+  display: "grid",
+  gridTemplateRows: "minmax(0, 1fr)",
+  background: "#000",
+} as const;
+
+const mobileImageFrameStyle = {
+  minHeight: 0,
+  width: "100%",
+  overflow: "hidden",
+  display: "grid",
+  placeItems: "center",
+} as const;
+
+const mobileMediaFooterStyle = {
+  position: "relative",
+  zIndex: 3002,
+  width: "100%",
+  maxHeight: "28dvh",
+  overflowY: "hidden",
+  padding: "10px 16px calc(14px + var(--app-safe-area-bottom))",
+  boxSizing: "border-box",
+  background: "#000",
+  color: "rgba(255,255,255,0.92)",
+  textAlign: "left",
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 8,
+} as const;
+
+const mobileImageCountStyle = {
+  color: "rgba(255,255,255,0.78)",
+  fontSize: 13,
+  lineHeight: 1.4,
+  textAlign: "right",
+  fontVariantNumeric: "tabular-nums",
+} as const;
+
+const mobileFooterNoteStyle = {
+  flex: "1 1 auto",
+  minWidth: 0,
+  maxHeight: "calc(28dvh - 30px - var(--app-safe-area-bottom))",
+  overflowY: "auto",
   fontSize: 14,
-  lineHeight: 1.65,
+  lineHeight: 1.55,
   whiteSpace: "pre-wrap",
-  wordBreak: "break-word",
+  overflowWrap: "anywhere",
+} as const;
+
+const mobileImageActionsStyle = {
+  flex: "0 0 auto",
+  display: "flex",
+  gap: 4,
+  alignItems: "flex-start",
+} as const;
+
+const mobileImageActionButtonStyle = {
+  width: 44,
+  height: 44,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.2)",
+  background: "rgba(255,255,255,0.07)",
+  color: "#fff",
+  cursor: "pointer",
+  flexShrink: 0,
 } as const;
 
 function navButtonStyle(side: "left" | "right") {

@@ -1,4 +1,6 @@
 import { supabase } from "@/lib/supabase";
+import { Capacitor } from "@capacitor/core";
+import { requestAndroidRemoteApi } from "@/lib/android-remote-api";
 
 export type CloudTrashKind = "archives" | "records" | "media";
 export type CloudTrashItemType = "archive" | "cycle" | "record" | "media";
@@ -53,9 +55,24 @@ async function getAuthHeaders(includeJson = false) {
   return headers;
 }
 
+async function cloudTrashFetch(path: string, init: RequestInit) {
+  if (!Capacitor.isNativePlatform()) return fetch(path, init);
+  const headers = new Headers(init.headers);
+  const authorization = headers.get("authorization") || "";
+  const result = await requestAndroidRemoteApi<Record<string, unknown>>(path, {
+    method: (init.method || "GET") as "GET" | "POST" | "DELETE",
+    token: authorization.startsWith("Bearer ") ? authorization.slice(7) : null,
+    json: init.body ? JSON.parse(String(init.body)) : undefined,
+  });
+  if (result.status < 200 || result.status > 599) throw new Error(result.error || "network_error");
+  return new Response(JSON.stringify(result.data || { error: result.error }), {
+    status: result.status, headers: { "Content-Type": "application/json" },
+  });
+}
+
 export async function requestCloudTrash(kind: CloudTrashKind, id: string) {
   try {
-    const response = await fetch(`/api/${kind}/${encodeURIComponent(id)}`, {
+    const response = await cloudTrashFetch(`/api/${kind}/${encodeURIComponent(id)}`, {
       method: "DELETE",
       headers: await getAuthHeaders(),
       credentials: "same-origin",
@@ -75,7 +92,7 @@ export async function requestCloudTrash(kind: CloudTrashKind, id: string) {
 
 export async function fetchCloudTrash(signal?: AbortSignal) {
   try {
-    const response = await fetch("/api/trash", {
+    const response = await cloudTrashFetch("/api/trash", {
       method: "GET",
       headers: await getAuthHeaders(),
       credentials: "same-origin",
@@ -101,7 +118,7 @@ export async function restoreCloudTrashItem(
   id: string,
 ) {
   try {
-    const response = await fetch("/api/trash/restore", {
+    const response = await cloudTrashFetch("/api/trash/restore", {
       method: "POST",
       headers: await getAuthHeaders(true),
       credentials: "same-origin",
@@ -125,7 +142,7 @@ async function requestTrashEntryMutation(
   trashEntryId: string,
 ): Promise<CloudTrashMutationResult> {
   try {
-    const response = await fetch(path, {
+    const response = await cloudTrashFetch(path, {
       method: "POST",
       headers: await getAuthHeaders(true),
       credentials: "same-origin",
@@ -156,7 +173,7 @@ export function retryCloudTrashItem(trashEntryId: string) {
 
 export async function emptyCloudTrash(): Promise<EmptyCloudTrashResult> {
   try {
-    const response = await fetch("/api/trash/empty", {
+    const response = await cloudTrashFetch("/api/trash/empty", {
       method: "POST",
       headers: await getAuthHeaders(true),
       credentials: "same-origin",

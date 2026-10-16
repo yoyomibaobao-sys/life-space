@@ -5,12 +5,13 @@ import type { Language } from "@/lib/i18n";
 import { EMPTY_PLANTING_REGION, type PlantingRegion } from "@/lib/planting-region";
 import { getCountryName, getLocalizedCountryOptions, getRegionOptions } from "@/lib/region-shared";
 
-export default function PlantingRegionField({ value, onChange, language, required = false, disabled = false }: {
+export default function PlantingRegionField({ value, onChange, language, required = false, disabled = false, hideLegend = false }: {
   value: PlantingRegion | null;
   onChange: (value: PlantingRegion) => void;
   language: Language;
   required?: boolean;
   disabled?: boolean;
+  hideLegend?: boolean;
 }) {
   const en = language === "en";
   const id = useId();
@@ -18,7 +19,7 @@ export default function PlantingRegionField({ value, onChange, language, require
   const options = getLocalizedCountryOptions(language);
   return (
     <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-      <legend style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>{en ? "Planting region" : "种植地区"}{required ? " *" : ""}</legend>
+      {hideLegend ? <legend style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>{en ? "Planting region" : "种植地区"}{required ? " *" : ""}</legend> : <legend style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>{en ? "Planting region" : "种植地区"}{required ? " *" : ""}</legend>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
         <label style={labelStyle}>{en ? "Country / region" : "国家／地区"}
           <select required={required} value={draft.country_code} onChange={(event) => onChange({ ...draft, country_code: event.target.value, country_name: getCountryName(event.target.value, "", language), region_name: "", city_name: "" })} style={inputStyle}>

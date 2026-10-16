@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState, type CSSProperties } from "react";
+import Link from "@/components/navigation/InternalLink";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import {
@@ -14,6 +14,7 @@ import {
 import type { SupabaseUser } from "@/lib/domain-types";
 import UiIcon from "@/components/ui/UiIcon";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import {
   canCreateMembershipMarketPost,
   getCreateMarketPostBlockedText,
@@ -53,7 +54,13 @@ async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
 
 export default function MyMarketPostsPage() {
   const router = useRouter();
+  return <MyMarketPostsContent onRequireLogin={() => router.push(buildLoginHref("/market/mine"))} />;
+}
+
+export function MyMarketPostsContent({ onRequireLogin, onBack }: { onRequireLogin?: () => void; onBack?: () => void }) {
   const { language, t } = useLanguage();
+  const onRequireLoginRef = useRef(onRequireLogin);
+  useEffect(() => { onRequireLoginRef.current = onRequireLogin; }, [onRequireLogin]);
 
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [items, setItems] = useState<MarketPostDisplayRow[]>([]);
@@ -71,7 +78,7 @@ export default function MyMarketPostsPage() {
       } = await supabase.auth.getUser();
 
       if (error || !user) {
-        router.push(buildLoginHref("/market/mine"));
+        onRequireLoginRef.current?.();
         return;
       }
 
@@ -91,8 +98,9 @@ export default function MyMarketPostsPage() {
     }
 
     void init();
+    // Login routing is kept in a ref so the embedded Android callback cannot restart loading every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router, statusFilter]);
+  }, [statusFilter]);
 
   async function loadItems(userId: string) {
     let query = supabase
@@ -120,20 +128,39 @@ export default function MyMarketPostsPage() {
 
   return (
     <>
-    <MobilePageHeader
-      title={t.market.mine_title}
-      fallbackHref="/market"
-      ariaLabel={t.nav.back}
-      right={
-        <Link
-          href={marketBlocked ? "/membership" : "/market/new"}
-          style={{ ...(marketBlocked ? disabledPublishButtonStyle : publishButtonStyle), padding: "8px", fontSize: 13 }}
-          title={marketBlocked ? getCreateMarketPostBlockedText(membership, language) : undefined}
-        >
-          {marketBlocked ? t.market.post_restricted : t.market.post_information}
-        </Link>
-      }
-    />
+    {onBack ? (
+      <MobilePageHeaderView
+        title={t.market.mine_title}
+        titleText={t.market.mine_title}
+        showBack
+        onBack={onBack}
+        ariaLabel={t.nav.back}
+        right={
+          <Link
+            href={marketBlocked ? "/membership" : "/market/new"}
+            style={{ ...(marketBlocked ? disabledPublishButtonStyle : publishButtonStyle), padding: "8px", fontSize: 13 }}
+            title={marketBlocked ? getCreateMarketPostBlockedText(membership, language) : undefined}
+          >
+            {marketBlocked ? t.market.post_restricted : t.market.post_information}
+          </Link>
+        }
+      />
+    ) : (
+      <MobilePageHeader
+        title={t.market.mine_title}
+        fallbackHref="/market"
+        ariaLabel={t.nav.back}
+        right={
+          <Link
+            href={marketBlocked ? "/membership" : "/market/new"}
+            style={{ ...(marketBlocked ? disabledPublishButtonStyle : publishButtonStyle), padding: "8px", fontSize: 13 }}
+            title={marketBlocked ? getCreateMarketPostBlockedText(membership, language) : undefined}
+          >
+            {marketBlocked ? t.market.post_restricted : t.market.post_information}
+          </Link>
+        }
+      />
+    )}
     <main style={pageStyle}>
       <div style={shellStyle}>
         <header className="mobile-app-desktop-only" style={headerStyle}>

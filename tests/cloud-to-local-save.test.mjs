@@ -6,136 +6,99 @@ async function source(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
-test("cloud projects are staged through authenticated storage before their final location changes", async () => {
-  const [download, workflow] = await Promise.all([
-    source("lib/media-storage-download.ts"),
+test("a cloud save is an owner-only copy, never a cloud move", async () => {
+  const [workflow, page, membership] = await Promise.all([
     source("lib/cloud-to-local-save.ts"),
-  ]);
-
-  assert.match(
-    download,
-    /supabase\.storage[\s\S]*?\.from\("media"\)[\s\S]*?\.download\(storagePath\)/
-  );
-  assert.match(workflow, /\.from\("archives"\)[\s\S]*?\.eq\("user_id", userId\)/);
-  assert.match(workflow, /\.from\("archive_cycles"\)/);
-  assert.match(workflow, /\.from\("records"\)/);
-  assert.match(workflow, /\.from\("media"\)/);
-  assert.match(workflow, /CLOUD_READ_PAGE_SIZE = 500/);
-  assert.match(workflow, /CLOUD_MEDIA_RECORD_BATCH_SIZE = 100/);
-  assert.match(workflow, /\.range\(offset, offset \+ CLOUD_READ_PAGE_SIZE - 1\)/);
-  assert.match(workflow, /recordIds\.slice\(/);
-  assert.match(workflow, /downloadMediaStorageObject\(item\)/);
-  assert.match(
-    workflow,
-    /"id, cycle_id, note, record_time, created_at, visibility, status_tag, record_tags\(tag, tag_type, is_active\)"/
-  );
-  assert.doesNotMatch(
-    workflow,
-    /"id, cycle_id, note, record_time, created_at, updated_at, visibility/
-  );
-  assert.match(
-    workflow,
-    /verifyCloudArchiveLocalImport\([\s\S]*?if \(params\.mode === "move"\)[\s\S]*?requestCloudTrash\("archives", archive\.id\)[\s\S]*?completeCloudArchiveLocalImport/
-  );
-  assert.match(
-    workflow,
-    /if \(movedCloudOriginal\)[\s\S]*?restoreCloudTrashItem\("archive", archive\.id\)[\s\S]*?abortCloudArchiveLocalImport/
-  );
-  assert.doesNotMatch(workflow, /\.from\("archives"\)[\s\S]*?\.delete\(\)/);
-});
-
-test("an interrupted cloud download cannot replace an existing local copy", async () => {
-  const [workflow, localDb] = await Promise.all([
-    source("lib/cloud-to-local-save.ts"),
-    source("lib/local-offline-db.ts"),
-  ]);
-
-  assert.match(
-    workflow,
-    /beginCloudArchiveLocalImport[\s\S]*?stageCloudArchiveLocalRecord[\s\S]*?stageCloudArchiveLocalImage[\s\S]*?completeCloudArchiveLocalImport/
-  );
-  assert.match(
-    workflow,
-    /catch \(error\) \{[\s\S]*?abortCloudArchiveLocalImport\(session\)/
-  );
-  assert.match(
-    localDb,
-    /removeAbandonedCloudArchiveLocalImportRows[\s\S]*?!archiveIds\.has\(record\.archive_id\)[\s\S]*?!archiveIds\.has\(image\.archive_id\)/
-  );
-  assert.match(
-    localDb,
-    /verifyCloudArchiveLocalImport[\s\S]*?stagedRecords\.length !== input\.expected_record_count[\s\S]*?stagedImages\.length !== input\.expected_image_count/
-  );
-  assert.match(
-    localDb,
-    /if \(previous\) \{[\s\S]*?archiveStore\.delete\(previous\.id\)[\s\S]*?archiveStore\.add\(archive\)/
-  );
-  assert.match(localDb, /source_cloud_archive_id/);
-  assert.match(localDb, /previous_local_archive_id/);
-  assert.match(workflow, /retain_cloud_source: params\.mode !== "move"/);
-  assert.match(
-    localDb,
-    /if \(!retainCloudSource\)[\s\S]*?recordStore\.put[\s\S]*?imageStore\.put/
-  );
-});
-
-test("the owner gets move or copy behavior from membership state without two editable versions", async () => {
-  const [page, header, membership, zhCopy, enCopy, localMode, rules] = await Promise.all([
     source("app/archive/[id]/page.tsx"),
-    source("components/archive-detail/ArchiveDetailHeader.tsx"),
     source("lib/membership.ts"),
-    source("lib/i18n/zh.ts"),
-    source("lib/i18n/en.ts"),
-    source("app/local/page.tsx"),
-    source("AGENTS.md"),
   ]);
-
-  assert.match(page, /saveCloudArchiveToLocal/);
-  assert.match(page, /mode: cloudToLocalMode/);
-  assert.match(page, /movesCloudToLocal[\s\S]*?transfer_to_device/);
-  assert.match(page, /localCopyId[\s\S]*?update_device_copy/);
-  assert.match(page, /onSaveToLocal=\{openSaveToLocalPrompt\}/);
-  assert.match(header, /mode === "owner"[\s\S]*?onSaveToLocal/);
-  assert.match(
-    membership,
-    /if \(membership\?\.plan === "trial"\) return "move";[\s\S]*?canCreateMembershipContent\(membership\) \? "move" : "copy"/
-  );
-  assert.match(zhCopy, /transfer_to_device: "转到本地"/);
-  assert.match(zhCopy, /save_to_device: "保存到本机"/);
-  assert.match(zhCopy, /本地成为唯一可编辑版本/);
-  assert.match(enCopy, /save_to_device: "Save to this device"/);
-  assert.match(enCopy, /transfer_to_device: "Move to this device"/);
-  assert.match(zhCopy, /付费会员到期后仍是“保存到本机”/);
-  assert.match(localMode, /t\.local_mode\.backup_notice/);
-  assert.match(rules, /不增加“启用本地”的总开关/);
-  assert.match(rules, /同一项目始终只允许一个可编辑主版本/);
-  assert.match(rules, /付费会员到期未续费时，项目操作仍叫“保存到本机”/);
-  assert.match(rules, /任何状态都不增加“是否删除云端”的询问/);
+  assert.match(workflow, /auth\.getUser\(\)/);
+  assert.match(workflow, /assertCloudCopyEntitlement\(userId\)/);
+  assert.match(workflow, /\.eq\("user_id", userId\)/);
+  assert.doesNotMatch(workflow, /requestCloudTrash|restoreCloudTrashItem/);
+  assert.match(membership, /getCloudToLocalMode[\s\S]*?return "copy"/);
+  assert.match(page, /canSaveToLocal: canSaveCloudLocally/);
+  assert.match(page, /mode: "copy"/);
 });
 
-test("optional cloud classification cannot block a complete local rescue", async () => {
-  const [workflow, localDb] = await Promise.all([
+test("Android copy commits complete bytes to SAF before an IDB mirror", async () => {
+  const [workflow, db] = await Promise.all([
     source("lib/cloud-to-local-save.ts"),
     source("lib/local-offline-db.ts"),
   ]);
-
-  assert.match(
-    workflow,
-    /async function readOptionalTagName[\s\S]*?if \(error\) \{[\s\S]*?return null;/
-  );
-  assert.match(
-    localDb,
-    /stagedImages\.some\(\(image\) => !image\.blob \|\| image\.blob\.size <= 0\)/
-  );
+  assert.match(workflow, /isAndroidSafAvailable\(\)[\s\S]*?saveAndroidSafCloudCopy/);
+  assert.match(workflow, /downloadMediaStorageObject\(item\)/);
+  assert.match(workflow, /Cloud image byte size did not match/);
+  assert.match(workflow, /commitCloudArchiveSafCopy\(\{[\s\S]*?images: localImages/);
+  assert.match(workflow, /id: localId, local_role: "local-project"/);
+  assert.match(workflow, /source_cloud_archive_id: archive\.id/);
+  assert.match(db, /archive\.saf_local_space_id[\s\S]*?resolveLocalArchiveRole\(archive\) === "local-project"[\s\S]*?return true/);
+  assert.match(db, /input\.archive\.local_role !== "local-project"/);
+  const commit = db.slice(db.indexOf("export async function commitCloudArchiveSafCopy("));
+  assert.match(commit, /commitSafContent\([\s\S]*?readSafCommitted\([\s\S]*?mirrorCommittedLocalSaf\(/);
+  assert.match(commit, /entry\.records\.length === entry\.records\.length|row\.records\.length === entry\.records\.length/);
 });
 
-test("a cloud-derived local copy cannot accidentally create a duplicate cloud project", async () => {
-  const sync = await source("lib/local-to-cloud-sync.ts");
+test("Android copy action is available only in allowed readonly periods and verifies cloud metadata", async () => {
+  const [controller, workflow] = await Promise.all([
+    source("components/archive-ui/CloudArchiveDetailController.tsx"),
+    source("lib/cloud-to-local-save.ts"),
+  ]);
+  assert.match(controller, /mobileOwnerSettings=\{<>[\s\S]*?canCopy \? \(/);
+  assert.match(controller, /onClick=\{\(\) => setCopyConfirmOpen\(true\)\}/);
+  assert.match(controller, /offer\?\.lifecycle_status === "handling_period"/);
+  assert.match(workflow, /const contentFields: Array<keyof CloudArchiveRow>/);
+  assert.match(workflow, /currentArchive\[field\]/);
+  assert.doesNotMatch(workflow, /select\("id,user_id,updated_at"\)/);
+});
 
-  assert.match(sync, /sourceCloudArchiveId = cleanText\(archive\.source_cloud_archive_id\)/);
-  assert.match(
-    sync,
-    /\.from\("archives"\)[\s\S]*?\.eq\("id", sourceCloudArchiveId\)[\s\S]*?\.eq\("user_id", userId\)/
-  );
-  assert.match(sync, /为避免重复，本机副本不会再次新建云端项目/);
+test("same-source copy cannot silently overwrite local edits or duplicate a project", async () => {
+  const [workflow, db] = await Promise.all([
+    source("lib/cloud-to-local-save.ts"),
+    source("lib/local-offline-db.ts"),
+  ]);
+  assert.match(workflow, /if \(existing\)[\s\S]*?return \{ localArchiveId: existing\.id/);
+  assert.match(workflow, /if \(existingWebCopy\)[\s\S]*?return \{ localArchiveId: existingWebCopy\.id/);
+  const commit = db.slice(db.indexOf("export async function commitCloudArchiveSafCopy("));
+  assert.match(commit, /entry\.archive\.source_cloud_archive_id === sourceId/);
+  assert.match(commit, /if \(existing\) return \{ archive: existing\.archive, alreadySaved: true \}/);
+  assert.match(commit, /Local project ID conflict/);
+});
+
+test("pending content and incomplete media fail closed before durable copy", async () => {
+  const [workflow, db] = await Promise.all([
+    source("lib/cloud-to-local-save.ts"),
+    source("lib/local-offline-db.ts"),
+  ]);
+  assert.match(workflow, /listPendingCloudSyncSummaries\(input\.ownerContext\)/);
+  assert.match(workflow, /pending local records or photos/);
+  assert.match(workflow, /Unsupported cloud media/);
+  assert.match(workflow, /Detached cloud media/);
+  const commit = db.slice(db.indexOf("export async function commitCloudArchiveSafCopy("));
+  assert.match(commit, /recordIds\.size !== input\.records\.length/);
+  assert.match(commit, /!recordIds\.has\(image\.record_id\)/);
+  assert.match(commit, /!image\.blob \|\| image\.blob\.size <= 0/);
+});
+
+test("independent cloud copy provenance never becomes a pending cloud upload", async () => {
+  const db = await source("lib/local-offline-db.ts");
+  const start = db.indexOf("function archiveParticipatesInPendingCloudSync(");
+  const end = db.indexOf("\nfunction queueCloudSyncOperation(", start);
+  assert.ok(start >= 0 && end > start);
+  const eligibility = db.slice(start, end);
+  assert.match(eligibility, /archive\.local_role === "local-project"/);
+  assert.match(eligibility, /source_cloud_saved_at/);
+  assert.match(eligibility, /return false/);
+  assert.match(db, /preparePendingCloudSyncQueue[\s\S]*?archiveParticipatesInPendingCloudSync\(archive\)/);
+});
+
+test("web copy still stages to IDB and keeps the cloud source", async () => {
+  const [workflow, db] = await Promise.all([
+    source("lib/cloud-to-local-save.ts"),
+    source("lib/local-offline-db.ts"),
+  ]);
+  assert.match(workflow, /beginCloudArchiveLocalImport[\s\S]*?stageCloudArchiveLocalRecord[\s\S]*?stageCloudArchiveLocalImage/);
+  assert.match(workflow, /verifyCloudArchiveLocalImport[\s\S]*?retain_cloud_source: true/);
+  assert.match(workflow, /abortCloudArchiveLocalImport\(session\)/);
+  assert.match(db, /stagedRecords\.length !== input\.expected_record_count/);
 });

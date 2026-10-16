@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
+import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
@@ -25,16 +26,17 @@ export default function ArchiveRecordComposer({
 
   if (mobileMode) {
     return (
-      <div style={mobileOverlayStyle}>
-        <section id="add-record" style={mobilePanelStyle} aria-label={resolvedTitle}>
-          <div style={headerStyle}>
-            <div style={titleStyle}>{resolvedTitle}</div>
-            {onClose ? (
-              <button type="button" onClick={onClose} style={closeButtonStyle}>
-                {t.record.cancel}
-              </button>
-            ) : null}
-          </div>
+      <div style={mobilePageStyle}>
+        <header style={mobileHeaderStyle}>
+          {onClose ? (
+            <button type="button" onClick={onClose} style={mobileBackButtonStyle} aria-label={t.nav.back}>
+              <UiIcon name="arrow-left" size={23} />
+            </button>
+          ) : <span />}
+          <div style={mobileTitleStyle}>{resolvedTitle}</div>
+          <span />
+        </header>
+        <section id="add-record" style={mobileContentStyle} aria-label={resolvedTitle}>
           {children}
         </section>
       </div>
@@ -64,51 +66,51 @@ const desktopTitleStyle: CSSProperties = {
   marginBottom: 10,
 };
 
-const mobileOverlayStyle: CSSProperties = {
+const mobilePageStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
-  zIndex: 220,
-  background: "rgba(30, 45, 30, 0.24)",
-  display: "flex",
-  alignItems: "flex-end",
-  justifyContent: "center",
-  padding: "64px 10px calc(68px + var(--app-safe-area-bottom))",
-  boxSizing: "border-box",
+  zIndex: 1220,
+  background: "#f7f9f5",
+  overflowY: "auto",
+  paddingBottom: "calc(72px + var(--app-safe-area-bottom, env(safe-area-inset-bottom, 0px)))",
 };
 
-const mobilePanelStyle: CSSProperties = {
+const mobileHeaderStyle: CSSProperties = {
+  position: "sticky",
+  top: 0,
+  zIndex: 2,
+  minHeight: "calc(62px + var(--app-safe-area-top, env(safe-area-inset-top, 0px)))",
+  padding: "calc(8px + var(--app-safe-area-top, env(safe-area-inset-top, 0px))) 14px 8px",
+  display: "grid",
+  gridTemplateColumns: "48px minmax(0, 1fr) 48px",
+  alignItems: "center",
+  background: "rgba(255,255,255,.98)",
+  borderBottom: "1px solid #e4e9e0",
+};
+
+const mobileBackButtonStyle: CSSProperties = {
+  width: 44,
+  height: 42,
+  border: 0,
+  background: "transparent",
+  color: "#52664e",
+  display: "grid",
+  placeItems: "center",
+  cursor: "pointer",
+};
+
+const mobileTitleStyle: CSSProperties = {
+  textAlign: "center",
+  color: "#243523",
+  fontSize: 21,
+  fontWeight: 850,
+};
+
+const mobileContentStyle: CSSProperties = {
   width: "100%",
   maxWidth: 560,
-  maxHeight: "78vh",
-  overflowY: "auto",
-  border: "1px solid #dfe9d7",
-  borderRadius: "22px 22px 18px 18px",
+  margin: "0 auto",
+  padding: "14px 14px 24px",
+  boxSizing: "border-box",
   background: "#fff",
-  padding: 14,
-  boxShadow: "0 -12px 36px rgba(41, 65, 35, 0.18)",
-};
-
-const headerStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 10,
-  marginBottom: 10,
-};
-
-const titleStyle: CSSProperties = {
-  fontSize: 16,
-  fontWeight: 800,
-  color: "#233223",
-};
-
-const closeButtonStyle: CSSProperties = {
-  border: "1px solid #dfe7d9",
-  borderRadius: 999,
-  background: "#fff",
-  color: "#5f6f5b",
-  fontSize: 13,
-  fontWeight: 700,
-  padding: "7px 12px",
-  cursor: "pointer",
 };

@@ -1,4 +1,5 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { maintenanceRunSource, writeMaintenanceRunAudit } from "@/lib/server/maintenance-run-audit";
 
 import {
   runCloudTrialLifecycle,
@@ -46,6 +47,9 @@ export async function GET(request: Request) {
     return noStoreJson({ error: "unauthorized" }, 401);
   }
 
+  const auditId = randomUUID();
+  await writeMaintenanceRunAudit({ id: auditId, source: maintenanceRunSource(request), status: "running" });
+
   try {
     const lifecycleBeforeDeletion = await runCloudTrialLifecycle(25);
     const storageDeletion = await runStorageDeletionWorkerBatches({
@@ -53,6 +57,20 @@ export async function GET(request: Request) {
       maxDurationMs: 20_000,
     });
     const lifecycleAfterDeletion = await runCloudTrialLifecycle(25);
+    const lifecycleFailed = lifecycleBeforeDeletion.cleanupFailed + lifecycleAfterDeletion.cleanupFailed;
+    const partialFailure = lifecycleFailed > 0 || storageDeletion.failed > 0 || storageDeletion.retryScheduled > 0;
+    await writeMaintenanceRunAudit({
+      id: auditId, status: partialFailure ? "failed" : "succeeded",
+      ...(partialFailure ? { errorCode: "partial_failure" as const } : {}),
+      summary: {
+        lifecycleProcessed: lifecycleBeforeDeletion.processed + lifecycleAfterDeletion.processed,
+        lifecycleFailed,
+        deletionClaimed: storageDeletion.claimed,
+        deletionCompleted: storageDeletion.deleted + storageDeletion.notFound + storageDeletion.retainedShared,
+        deletionFailed: storageDeletion.failed,
+        deletionRetryScheduled: storageDeletion.retryScheduled,
+      },
+    });
     return noStoreJson(
       {
         cloudTrialLifecycle: {
@@ -64,6 +82,7 @@ export async function GET(request: Request) {
       200
     );
   } catch {
+    await writeMaintenanceRunAudit({ id: auditId, status: "failed", errorCode: "worker_failed" });
     console.error("storage deletion worker route failed", {
       errorCode: "worker_failed",
     });

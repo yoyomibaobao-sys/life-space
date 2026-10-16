@@ -143,6 +143,25 @@ SQL
 
 maintenance_test_ran=false
 while IFS= read -r migration_file; do
+  # PR #95's unapproved cleanup/maintenance migrations are source-only.
+  # Never execute them, even against this disposable isolation database.
+  case "$(basename "${migration_file}")" in
+    20261010120000_cloud_trial_early_end.sql|\
+    20261011150000_maintenance_run_audit.sql|\
+    20261011160000_maintenance_run_partial_counts.sql|\
+    20261012230036_manual_trial_cloud_cleanup.sql|\
+    20261013000650_trial_cleanup_preview.sql|\
+    20261013005152_trial_cleanup_job_provenance.sql|\
+    20261013120000_trial_cleanup_execution_fence.sql|\
+    20261013143000_trial_cleanup_capture_reference_fence.sql|\
+    20261013160000_trial_cleanup_path_hold.sql|\
+    20261013170000_trial_cleanup_restore_conflict.sql|\
+    20261013180000_trial_cleanup_restore_claim.sql)
+      echo "Skipping frozen PR #95 migration: ${migration_file}"
+      continue
+      ;;
+  esac
+
   run_sql_file "${migration_file}"
 
   if [[ "$(basename "${migration_file}")" == "${maintenance_migration}" ]]; then

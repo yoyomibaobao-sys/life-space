@@ -14,6 +14,9 @@ export default function ArchiveAddRecordSection({
   mobileMode = false,
   open = true,
   onClose,
+  initialFiles,
+  initialCapturedAt,
+  initialNote,
 }: {
   archiveId: string;
   archiveCategory?: string | null;
@@ -23,6 +26,9 @@ export default function ArchiveAddRecordSection({
   mobileMode?: boolean;
   open?: boolean;
   onClose?: () => void;
+  initialFiles?: File[];
+  initialCapturedAt?: (string | null)[];
+  initialNote?: string;
 }) {
   const { t } = useLanguage();
 
@@ -42,6 +48,9 @@ export default function ArchiveAddRecordSection({
         placeholder={t.record.placeholder}
         mobileMode={mobileMode}
         onRecordCreated={onRecordCreated}
+        initialFiles={initialFiles}
+        initialCapturedAt={initialCapturedAt}
+        initialNote={initialNote}
       />
     </ArchiveRecordComposer>
   );
