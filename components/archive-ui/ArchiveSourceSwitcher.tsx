@@ -19,6 +19,7 @@ type Props<T extends string> = {
   activeValue: T;
   onSelect: (value: T) => void;
   trailingSlot?: ReactNode;
+  packVisibleSources?: boolean;
 };
 
 export default function ArchiveSourceSwitcher<T extends string>({
@@ -26,6 +27,7 @@ export default function ArchiveSourceSwitcher<T extends string>({
   activeValue,
   onSelect,
   trailingSlot,
+  packVisibleSources = false,
 }: Props<T>) {
   const trailing = isValidElement(trailingSlot)
     ? cloneElement(
@@ -51,7 +53,7 @@ export default function ArchiveSourceSwitcher<T extends string>({
 
   return (
     <section style={sourceSwitchStyle(Boolean(trailingSlot))}>
-      {options.map((item) => (
+      {options.map((item, index) => (
         <button
           key={item.value}
           type="button"
@@ -59,7 +61,7 @@ export default function ArchiveSourceSwitcher<T extends string>({
           onClick={() => onSelect(item.value)}
           style={{
             ...sourceButtonStyle(activeValue === item.value, Boolean(trailingSlot)),
-            ...(trailingSlot ? { gridColumn: sourceSlotColumn(item.value) } : {}),
+            ...(trailingSlot ? { gridColumn: packVisibleSources ? index + 1 : sourceSlotColumn(item.value) } : {}),
           }}
         >
           {item.label} {item.count}

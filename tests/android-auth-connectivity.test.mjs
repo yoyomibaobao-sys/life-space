@@ -418,10 +418,9 @@ test("health endpoint is public, side-effect free and non-cacheable", async () =
 
 test("CloudLogin eligibility and screen stability follow auth and connectivity states", () => {
   const shell = read("mobile-offline-src/main.tsx");
-  assert.match(
-    shell,
-    /online && auth\.status === "signed-out" && sourceFilter === "cloud"/,
-  );
+  assert.match(shell, /sourceFilter === "cloud" && auth\.status !== "checking"/);
+  assert.match(shell, /openCloudLogin\(trialLoginTo/);
+  assert.match(shell, /openCloudLogin\("membership-payment"\)/);
   assert.match(shell, /auth\.status === "checking"[\s\S]*copy\.cloudLoading/);
   assert.doesNotMatch(shell, /online && !cloudUserId[\s\S]{0,120}<CloudLogin/);
   assert.match(shell, /const online = useAndroidConnectivity\(\)/);
@@ -507,7 +506,7 @@ test("authenticated owner hard-gates sync, pending creation and private cache ro
   );
   assert.match(
     shell,
-    /projectCreationDestinations\(online, Boolean\(authenticatedOwnerContext\)\)/,
+    /projectCreationDestinations\(online, auth\.status === "signed-in", localSpaceEnabled\)/,
   );
   assert.match(
     shell,

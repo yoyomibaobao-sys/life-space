@@ -568,7 +568,8 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
   assert.match(panel, /onEnded=\{\(event\) => restartGeneratedVideo\(event\.currentTarget\)\}/);
   assert.match(panel, /video\.currentTime = 0/);
   assert.match(panel, /video\.play\(\)\.catch/);
-  assert.match(panel, /navigator\.canShare/);
+  assert.match(panel, /shareMp4File/);
+  assert.match(await source("lib/android-native-share.ts"), /navigator\.canShare/);
   assert.match(panel, /saveCachedExperienceCardVideo/);
   assert.match(panel, /getCachedExperienceCardVideo/);
   assert.match(panel, /getExperienceCardVideoSelection/);

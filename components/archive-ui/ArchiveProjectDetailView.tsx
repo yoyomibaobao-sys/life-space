@@ -202,13 +202,13 @@ export default function ArchiveProjectDetailView({
     index: number;
     onChange: (index: number) => void;
     metaText: string;
+    dayText?: string;
     note: string;
     onClose: () => void;
     onDeleteCurrentImage?: (
       image: LightboxImage,
       currentIndex: number,
     ) => Promise<number>;
-    publishHref?: string;
     deleteActionLabel?: string;
     deleteConfirmMessage?: string;
   } | null;
@@ -398,9 +398,9 @@ export default function ArchiveProjectDetailView({
           onChange={lightbox.onChange}
           isMobileViewport={isMobileViewport}
           metaText={lightbox.metaText}
+          dayText={lightbox.dayText}
           note={lightbox.note}
           onDeleteCurrentImage={lightbox.onDeleteCurrentImage}
-          publishHref={lightbox.publishHref}
           deleteActionLabel={lightbox.deleteActionLabel}
           deleteConfirmMessage={lightbox.deleteConfirmMessage}
           onClose={lightbox.onClose}

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import test from "node:test";
 import React from "react";
@@ -96,9 +97,9 @@ test("a guest can render an ordinary guide's basic detail while Android auth loo
 
 test("upgrading a v1 full guide cache and reopening its offline detail renders only the basic tier", async () => {
   const { outputFiles } = await build({
-    entryPoints: [new URL("../lib/offline-guide-directory.ts", import.meta.url).pathname],
+    entryPoints: [fileURLToPath(new URL("../lib/offline-guide-directory.ts", import.meta.url))],
     bundle: true, write: false, platform: "node", format: "esm",
-    alias: { "@": new URL("../", import.meta.url).pathname },
+    alias: { "@": fileURLToPath(new URL("../", import.meta.url)) },
   });
   const guides = await import(`data:text/javascript;base64,${Buffer.from(outputFiles[0].contents).toString("base64")}`);
   const saved = new Map();

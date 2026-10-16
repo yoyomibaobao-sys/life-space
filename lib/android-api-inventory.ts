@@ -5,12 +5,13 @@ export const androidNextApiInventory = {
   "/api/archives/[id]": "android-native",
   "/api/records/[id]": "android-native",
   "/api/media/[id]": "android-native",
+  "/api/media/record-image": "android-public-native", // opt-in same-origin image GET, guest/public or owner after server authorization
   "/api/trash": "android-native",
   "/api/trash/empty": "android-native",
   "/api/trash/purge": "android-native",
   "/api/trash/restore": "android-native",
   "/api/trash/retry": "android-native",
-  "/api/export/my-records": "network-only-binary-pending",
+  "/api/export/my-records": "android-native-binary", // HTTPS environment probe, Bearer auth and native document save
   "/api/account/delete": "web-only",
   "/api/admin/memberships/delete": "web-only",
   "/api/paypal/status": "web-only",

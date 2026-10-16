@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import UiIcon from "@/components/ui/UiIcon";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import UiIcon from "@/components/ui/UiIcon";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import {
@@ -202,25 +202,65 @@ async function loadEditorRecords({
   }));
 }
 
-export default function ExperienceCardEditor({
+function EditorLink({
+  href,
+  style,
+  children,
+  onOpenHref,
+}: {
+  href: string;
+  style?: CSSProperties;
+  children: ReactNode;
+  onOpenHref?: (href: string) => void;
+}) {
+  if (onOpenHref) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenHref(href)}
+        style={{
+          appearance: "none",
+          border: "none",
+          background: "transparent",
+          padding: 0,
+          font: "inherit",
+          color: "inherit",
+          cursor: "pointer",
+          textAlign: "inherit",
+          ...style,
+        }}
+      >
+        {children}
+      </button>
+    );
+  }
+  return <Link href={href} style={style}>{children}</Link>;
+}
+
+function ExperienceCardEditorBody({
   cardId,
+  requestedArchiveId,
   embedded = false,
   showTitleField = true,
   compact = false,
   onDirtyChange,
   onSaved,
+  onMissingUser,
+  onOpenHref,
+  onNavigateToSavedCard,
 }: {
   cardId?: string;
+  requestedArchiveId?: string | null;
   embedded?: boolean;
   showTitleField?: boolean;
   compact?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
-  onSaved?: () => void | Promise<void>;
+  onSaved?: (savedCardId?: string) => void | Promise<void>;
+  onMissingUser?: () => void;
+  onOpenHref?: (href: string) => void;
+  onNavigateToSavedCard?: (savedCardId: string, preview: boolean) => void;
 }) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const { language, t } = useLanguage();
-  const requestedArchiveId = searchParams.get("archiveId");
 
   const [archive, setArchive] = useState<ExperienceCardArchive | null>(null);
   const [records, setRecords] = useState<ExperienceCardSourceRecord[]>([]);
@@ -249,7 +289,7 @@ export default function ExperienceCardEditor({
       } = await supabase.auth.getUser();
 
       if (!user) {
-        router.replace(buildLoginHref(getCurrentInternalPath()));
+        onMissingUser?.();
         return;
       }
 
@@ -398,7 +438,7 @@ export default function ExperienceCardEditor({
     }
 
     void init();
-  }, [cardId, requestedArchiveId, router, t.experience]);
+  }, [cardId, onMissingUser, requestedArchiveId, t.experience]);
 
   const imageOptions = useMemo(
     () =>
@@ -686,11 +726,9 @@ export default function ExperienceCardEditor({
       }
 
       if (onSaved) {
-        await onSaved();
+        await onSaved(savedCardId);
       } else {
-        router.push(
-          `/experience-cards/${savedCardId}${mode === "preview" ? "?preview=1" : ""}`
-        );
+        onNavigateToSavedCard?.(savedCardId, mode === "preview");
       }
     } catch (error) {
       setErrorText(getExperienceCardErrorText(error, language));
@@ -713,9 +751,9 @@ export default function ExperienceCardEditor({
       <section style={messageCardStyle}>
         <h1 style={titleStyle}>{t.experience.cannot_edit}</h1>
         <p style={mutedStyle}>{errorText}</p>
-        <Link href="/experience-cards" style={secondaryLinkStyle}>
+        <EditorLink href="/experience-cards" style={secondaryLinkStyle} onOpenHref={onOpenHref}>
           {t.experience.back_my_cards}
-        </Link>
+        </EditorLink>
       </section>
     );
     return embedded ? message : (
@@ -733,13 +771,13 @@ export default function ExperienceCardEditor({
           {t.experience.membership_required_hint}
         </p>
         <div style={actionRowStyle}>
-          <Link href="/membership" style={primaryLinkStyle}>
+          <EditorLink href="/membership" style={primaryLinkStyle} onOpenHref={onOpenHref}>
             {t.experience.learn_membership}
-          </Link>
+          </EditorLink>
           {!embedded ? (
-            <Link href="/experience-cards" style={secondaryLinkStyle}>
+            <EditorLink href="/experience-cards" style={secondaryLinkStyle} onOpenHref={onOpenHref}>
               {t.experience.back}
-            </Link>
+            </EditorLink>
           ) : null}
         </div>
       </section>
@@ -971,9 +1009,9 @@ export default function ExperienceCardEditor({
               <strong>{t.experience.no_available_records}</strong>
               <span>{t.experience.no_available_records_hint}</span>
               {archive ? (
-                <Link href={`/archive/${archive.id}`} style={secondaryLinkStyle}>
+                <EditorLink href={`/archive/${archive.id}`} style={secondaryLinkStyle} onOpenHref={onOpenHref}>
                   {t.experience.back_source_project}
-                </Link>
+                </EditorLink>
               ) : null}
             </div>
           ) : (
@@ -1067,17 +1105,18 @@ export default function ExperienceCardEditor({
     <main style={pageStyle}>
       <header style={headerStyle}>
         <div>
-          <Link
+          <EditorLink
             href={cardId ? `/experience-cards/${cardId}` : `/archive/${archive?.id}`}
             style={backLinkStyle}
+            onOpenHref={onOpenHref}
           >
             <UiIcon name="arrow-left" size={15} /> {t.experience.back}
-          </Link>
+          </EditorLink>
           <h1 style={titleStyle}>{cardId ? t.experience.modify_card : t.experience.generate_card}</h1>
         </div>
-        <Link href="/experience-cards" style={secondaryLinkStyle}>
+        <EditorLink href="/experience-cards" style={secondaryLinkStyle} onOpenHref={onOpenHref}>
           {t.experience.my_cards}
-        </Link>
+        </EditorLink>
       </header>
       {editorContent}
     </main>
@@ -1599,3 +1638,45 @@ const actionRowStyle: CSSProperties = {
   flexWrap: "wrap",
   marginTop: 16,
 };
+
+type ExperienceCardEditorProps = {
+  cardId?: string;
+  initialArchiveId?: string | null;
+  embedded?: boolean;
+  showTitleField?: boolean;
+  compact?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
+  onSaved?: (savedCardId?: string) => void | Promise<void>;
+  routerless?: boolean;
+  onMissingUser?: () => void;
+  onOpenHref?: (href: string) => void;
+};
+
+function ExperienceCardEditorWithRouter(props: ExperienceCardEditorProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  return (
+    <ExperienceCardEditorBody
+      {...props}
+      requestedArchiveId={props.initialArchiveId || searchParams.get("archiveId")}
+      onMissingUser={() => router.replace(buildLoginHref(getCurrentInternalPath()))}
+      onNavigateToSavedCard={(savedCardId, preview) => {
+        router.push(`/experience-cards/${savedCardId}${preview ? "?preview=1" : ""}`);
+      }}
+    />
+  );
+}
+
+export default function ExperienceCardEditor(props: ExperienceCardEditorProps) {
+  if (props.routerless) {
+    return (
+      <ExperienceCardEditorBody
+        {...props}
+        requestedArchiveId={props.initialArchiveId || null}
+        onMissingUser={props.onMissingUser}
+        onOpenHref={props.onOpenHref}
+      />
+    );
+  }
+  return <ExperienceCardEditorWithRouter {...props} />;
+}

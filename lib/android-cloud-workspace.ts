@@ -2,10 +2,12 @@ import type { LocalArchiveSummary, PendingCloudSyncSummary } from "@/lib/local-o
 
 type CloudRow = { id: string };
 
-export function canOfferLocalCloudTransfer(archive: Pick<LocalArchiveSummary, "local_role" | "sync" | "source_cloud_archive_id">) {
+export function canOfferLocalCloudTransfer(archive: Pick<LocalArchiveSummary, "local_role" | "sync" | "source_cloud_archive_id" | "source_cloud_saved_at">) {
   return archive.local_role !== "cloud-offline-cache" &&
     archive.sync?.operation_kind !== "create-archive" &&
-    (archive.local_role === "saved-local-copy" || !archive.source_cloud_archive_id);
+    (archive.local_role === "saved-local-copy" ||
+      (archive.local_role === "local-project" && Boolean(archive.source_cloud_saved_at)) ||
+      !archive.source_cloud_archive_id);
 }
 
 export type PendingCloudProject<L extends LocalArchiveSummary, C extends CloudRow> = {

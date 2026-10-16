@@ -374,3 +374,52 @@ test("account A and B cache remain isolated in the same LifeSpace directory", as
   assert.equal(names(storage, `cloud/${await format.safAccountKey(userA)}/cache/`).length > 0, true);
   assert.equal(names(storage, `cloud/${await format.safAccountKey(userB)}/cache/`).length > 0, true);
 });
+
+test("a scan that started before a commit cannot hide that commit or turn it into a revision conflict", async () => {
+  const storage = fresh();
+  const baseline = await make(storage);
+  let release = () => {};
+  const gate = new Promise((resolve) => { release = resolve; });
+  let waiting = false;
+  const originalRead = storage.read.bind(storage);
+  storage.read = async (path) => {
+    const data = await originalRead(path);
+    if (!waiting && String(path).includes("/media/")) {
+      waiting = true;
+      await gate;
+    }
+    return data;
+  };
+  const slow = core.readSafCommitted(storage);
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("the older SAF scan never reached its media read")), 3000);
+    const check = () => {
+      if (!waiting) { setTimeout(check, 0); return; }
+      clearTimeout(timer);
+      resolve();
+    };
+    check();
+  });
+  const created = item();
+  created.id = "project_2";
+  created.archive = { ...created.archive, id: "project_2" };
+  created.records = [{ ...created.records[0], id: "record_2", archive_id: "project_2" }];
+  created.images = [{ ...created.images[0], id: "image_2", archive_id: "project_2", record_id: "record_2" }];
+  const committed = await Promise.race([
+    core.commitSafContent(storage, content([baseline.source.entries[0], created]), baseline.commit.revision),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("stale SAF scan blocked the newer commit")), 3000)),
+  ]);
+  release();
+  const slowState = await slow;
+  const latest = await core.readSafCommitted(storage);
+  assert.equal(latest.commit.revision, committed.committedRevision);
+  assert.equal(slowState.commit.revision, committed.committedRevision);
+  assert.equal(latest.source.entries.some((entry) => entry.id === "project_2"), true);
+  await assert.rejects(
+    core.commitSafContent(storage, content(latest.source.entries), baseline.commit.revision),
+    /SAF revision conflict\./,
+  );
+  const retained = await core.readSafCommitted(storage);
+  assert.equal(retained.commit.revision, committed.committedRevision);
+  assert.equal(retained.source.entries.some((entry) => entry.id === "project_2"), true);
+});

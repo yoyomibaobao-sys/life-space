@@ -2,6 +2,17 @@ import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { supabase } from "@/lib/supabase";
 
 const PRODUCTION_ORIGIN = "https://life-space.uk";
+const ISOLATED_QA_SUPABASE = "mablwxlipcgbmbnfdbkc.supabase.co";
+
+function assertQaSessionStaysOffProduction() {
+  let host = "";
+  try {
+    host = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || "").hostname;
+  } catch {
+    host = "";
+  }
+  if (host === ISOLATED_QA_SUPABASE) throw new Error("qa_export_to_production_rejected");
+}
 export type RemoteApiMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
 type NativeResponse = { status: number; data: unknown; headers: Record<string, string>; url?: string };
@@ -14,6 +25,7 @@ type NativeRequest = (options: {
 export type RemoteApiResult<T> = { status: number; ok: boolean; data: T | null; error: string | null };
 
 export function remoteApiUrl(path: string) {
+  assertQaSessionStaysOffProduction();
   if (!path.startsWith("/api/") || path.startsWith("//") || path.includes("\\")) {
     throw new Error("invalid_remote_api_path");
   }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import MobileProfileView from "@/components/profile/MobileProfileView";
+import AndroidCloudTrialEntry from "@/components/profile/AndroidCloudTrialEntry";
 import {
   androidProfileIdentityAvatarFallbackStyle,
   androidProfileIdentityAvatarStyle,
@@ -27,24 +28,29 @@ import { formatMembershipDate, getMembershipEndDate, getUserTypeLabel } from "@/
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { supabase } from "@/lib/supabase";
 import { Browser } from "@capacitor/browser";
+import { cloudExportRequest, estimateAndroidCloudExport, saveAndroidCloudExport } from "@/lib/android-cloud-export";
 
 type Live = Awaited<ReturnType<typeof loadAndroidProfileLive>>;
 
-export default function AndroidProfileController({ snapshot, online, onBack, onLogout, onLogin, onProfileSaved, localSpaceVisible, onLocalSpaceVisibilityChange }: {
+export default function AndroidProfileController({ snapshot, online, signedIn, onBack, onLogout, onLogin, onProfileSaved, localSpaceVisible, onLocalSpaceVisibilityChange, initialModule }: {
   snapshot: OfflineProfileSnapshot;
   online: boolean;
+  signedIn: boolean;
   onBack: () => void;
   onLogout?: () => void;
   onLogin?: () => void;
   onProfileSaved?: () => void;
   localSpaceVisible?: boolean;
   onLocalSpaceVisibilityChange?: (visible: boolean) => void;
+  initialModule?: MobileProfileModule;
 }) {
   const { language, t } = useLanguage();
   const [loaded, setLive] = useState<Live | null>(null);
   const live = snapshot.userId ? loaded : null;
   const [error, setError] = useState("");
-  const [module, setModule] = useState<MobileProfileModule | null>(null);
+  const [module, setModule] = useState<MobileProfileModule | null>(initialModule || null);
+  const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState("");
   const [editingProfile, setEditingProfile] = useState<"username" | "location" | null>(null);
   const [name, setName] = useState("");
   const [countryCode, setCountryCode] = useState("");
@@ -69,7 +75,7 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
   const membership = snapshot.userId ? live?.membership || snapshot.membership : null;
   const profile = snapshot.userId ? live?.profile : null;
   const modules = mobileProfileNavigation({
-    language, native: true, admin: Boolean(live?.isAdmin),
+    language, native: true, signedIn, admin: Boolean(live?.isAdmin),
     refundLabel: t.profile.refund_request_nav,
     legalLabel: t.profile.legal_rules_nav,
     feedbackLabel: t.feedback_and_contact,
@@ -157,6 +163,39 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
     finally { setUploading(false); event.target.value = ""; }
   }
 
+  async function exportCloudZip() {
+    if (!online || !signedIn || !snapshot.userId || exporting) return;
+    setExporting(true);
+    setExportStatus("");
+    try {
+      const identity = await supabase.auth.getUser();
+      const session = await supabase.auth.getSession();
+      if (identity.error || identity.data.user?.id !== snapshot.userId ||
+          session.error || !session.data.session?.access_token) {
+        throw new Error(language === "zh" ? "请重新登录后再导出。" : "Sign in again to export.");
+      }
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      const request = cloudExportRequest(session.data.session.access_token, timeZone);
+      const estimate = await estimateAndroidCloudExport(request);
+      const size = formatStorage(estimate.sizeBytes);
+      const question = language === "zh"
+        ? `导出本人全部云项目：${estimate.projects} 个项目、${estimate.records} 条记录、${estimate.media} 个媒体文件（预计 ${size}）。继续保存 ZIP？`
+        : `Export all your cloud projects: ${estimate.projects} projects, ${estimate.records} records and ${estimate.media} media files (about ${size}). Save the ZIP?`;
+      if (!window.confirm(question)) return;
+      setExportStatus(language === "zh" ? "正在生成和下载云端 ZIP…" : "Preparing and downloading cloud ZIP…");
+      const saved = await saveAndroidCloudExport(request);
+      setExportStatus(saved.cancelled ? "" : (language === "zh" ? "ZIP 已保存到所选位置。" : "ZIP saved to the selected location."));
+    } catch (cause) {
+      const unavailable = cause instanceof Error &&
+        ["matching_export_service_required", "qa_export_to_production_rejected"].includes(cause.message);
+      setExportStatus(unavailable
+        ? (language === "zh" ? "此测试环境尚未配置匹配的云端导出服务。" : "This build has no matching cloud export service.")
+        : (language === "zh" ? "导出失败，请检查网络、登录状态及保存空间后重试。" : "Export failed. Check your connection, session and available storage."));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const countryDisplay = getCountryName(locationParts.countryCode, locationParts.countryName, language);
   const locationDisplayParts = [countryDisplay, locationParts.regionName, locationParts.cityName]
     .map((value) => String(value || "").trim())
@@ -174,6 +213,16 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
     membershipLine={membershipLine}
     androidIdentityLayout
     storageText={storageLimit ? `${formatStorage(storageUsed)} / ${formatStorage(storageLimit)}` : (language === "zh" ? "本机可用" : "Available on device")}
+    identityPrelude={signedIn && snapshot.userId ? <AndroidCloudTrialEntry
+      key={snapshot.userId}
+      userId={snapshot.userId}
+      online={online}
+      membership={membership}
+      onChanged={() => {
+        void loadAndroidProfileLive(snapshot.userId!).then(setLive).catch(() => setError(language === "zh" ? "权益刷新失败，请重试。" : "Could not refresh membership."));
+        onProfileSaved?.();
+      }}
+    /> : undefined}
     identityTop={<>
       <label
         style={{ ...profileIdentityAvatarColumnStyle, cursor: online && live ? "pointer" : "default" }}
@@ -290,12 +339,12 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
     error={error ? <p role="alert">{error}</p> : null}
     preferencesExtra={onLocalSpaceVisibilityChange ? (
       <div style={localSpacePreferenceRowStyle}>
-        <span>{language === "zh" ? "显示本地空间" : "Show local space"}</span>
+        <span>{language === "zh" ? "启用本地空间" : "Enable local space"}</span>
         <button
           type="button"
           role="switch"
           aria-checked={Boolean(localSpaceVisible)}
-          aria-label={language === "zh" ? "显示本地空间" : "Show local space"}
+          aria-label={language === "zh" ? "启用本地空间" : "Enable local space"}
           onClick={() => onLocalSpaceVisibilityChange(!localSpaceVisible)}
           style={localSpaceToggleStyle(Boolean(localSpaceVisible))}
         >
@@ -315,8 +364,9 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
         </p>) : <p>{t.profile.no_payment_orders}</p>}
       </div> : <p>{needNetwork}</p>
     ) : null}
-    {module === "backup" ? <div><p>{language === "zh" ? "本机项目可离线使用；云端导出需联网。" : "Local projects work offline. Cloud export requires a connection."}</p>
-      {online ? <button type="button" onClick={() => void Browser.open({ url: "https://life-space.uk/profile" })}>{language === "zh" ? "打开云端备份与导出" : "Open backup and export"}</button> : <p>{needNetwork}</p>}</div> : null}
+    {module === "backup" ? <div><p>{language === "zh" ? "云端 ZIP 包含本人全部可访问的云项目、记录与媒体；本地 SAF 资料需另行备份。" : "The cloud ZIP includes all accessible cloud projects, records and media. Back up the local SAF folder separately."}</p>
+      {online && signedIn ? <button type="button" disabled={exporting} onClick={() => void exportCloudZip()}>{exporting ? (language === "zh" ? "正在导出…" : "Exporting…") : (language === "zh" ? "导出全部云项目 ZIP" : "Export all cloud projects as ZIP")}</button> : <p>{online ? (language === "zh" ? "登录后导出云端资料。" : "Sign in to export cloud data.") : needNetwork}</p>}
+      {exportStatus ? <p role="status">{exportStatus}</p> : null}</div> : null}
     {module === "account" ? <div><p>{language === "zh" ? "退出登录不会删除本机未同步内容。" : "Sign out keeps unsynced local content."}</p>
       {online ? <div style={{ display: "grid", gap: 10 }}>
         <button type="button" style={accountDeleteButtonStyle} onClick={() => void Browser.open({ url: "https://life-space.uk/profile#profile-module-account" })}>{t.profile.delete_account}</button>

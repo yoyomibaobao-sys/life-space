@@ -18,6 +18,7 @@ export type MobileProfileNavItem = {
 export function mobileProfileNavigation(input: {
   language: "zh" | "en";
   native: boolean;
+  signedIn?: boolean;
   admin: boolean;
   refundLabel: string;
   legalLabel: string;
@@ -31,13 +32,14 @@ export function mobileProfileNavigation(input: {
       { href: "/", label: en ? "Website introduction" : "网站介绍主页", section: "support" as const },
       { href: "/download/android", label: en ? "Download Android app" : "下载安卓版", section: "support" as const },
     ] : []),
+    ...(input.native ? [{ href: "/about", label: en ? "About LifeSpace·自然" : "关于 LifeSpace·自然", section: "support" as const }] : []),
     { href: "/membership/payment", label: en ? "Cloud Membership" : "开通云会员", section: "membership" },
     { value: "payment", label: en ? "Order progress" : "订单进度查询", section: "membership" },
     { href: "/membership/refund", label: input.refundLabel, section: "membership" },
     { href: "/membership/benefits", label: en ? "Membership types" : "会员类别说明", section: "membership" },
     { href: "/profile/recent", label: en ? "Browsing history" : "浏览历史", section: "data" },
     { value: "backup", label: en ? "Backup & export" : "备份与导出", section: "data" },
-    { href: "/profile/data-security", label: en ? "Data rules" : "数据规则", section: "support" },
+    { href: "/profile/data-security", label: input.native ? (en ? "Data & security" : "数据与安全") : (en ? "Data rules" : "数据规则"), section: input.native ? "data" : "support" },
     { href: "/profile/trash", label: input.trashLabel, section: "data" },
     { value: "account", label: en ? "Account management" : "账号管理", section: "account" },
     { href: "/legal", label: input.legalLabel, section: "support" },
@@ -247,7 +249,7 @@ export const profileIdentityDetailsStyle: CSSProperties = {
   minWidth: 0,
   flex: 1,
   display: "grid",
-  gridTemplateRows: "30px auto auto",
+  gridTemplateRows: "minmax(30px, auto) auto auto",
   gap: 2,
   alignContent: "start",
   alignItems: "center",
@@ -270,25 +272,29 @@ export const profileIdentityUsernameButtonStyle: CSSProperties = {
 };
 
 export const androidProfileIdentityUsernameStyle: CSSProperties = {
-  minHeight: 30,
-  height: 30,
-  display: "flex",
-  alignItems: "center",
+  minWidth: 0,
+  width: "fit-content",
   maxWidth: "calc(100% - 74px)",
+  minHeight: 30,
+  height: "auto",
+  display: "block",
   color: "#253523",
   fontSize: 19,
   fontWeight: 850,
   lineHeight: 1.3,
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
 };
 
 export const androidProfileIdentityEmailStyle: CSSProperties = {
   minWidth: 0,
+  maxWidth: "100%",
   width: "100%",
   color: "#667364",
   fontSize: 13,
   lineHeight: 1.4,
   whiteSpace: "normal",
-  overflowWrap: "break-word",
+  overflowWrap: "anywhere",
   wordBreak: "normal",
 };
 

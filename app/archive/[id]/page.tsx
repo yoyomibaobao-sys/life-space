@@ -5,6 +5,7 @@ import PlantingRegionEditor from "@/components/archive/PlantingRegionEditor";
 import type { PlantingRegion } from "@/lib/planting-region";
 import ArchiveOwnerSettingsFields from "@/components/archive-detail/ArchiveOwnerSettingsFields";
 import { saveRecentArchiveBrowse } from "@/lib/recent-browse";
+import { displayedArchiveRecordCount } from "@/lib/archive-record-count";
 import { use, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -77,7 +78,6 @@ import {
 } from "@/lib/archive-detail-utils";
 import {
   canCreateMembershipContent,
-  getCloudToLocalMode,
   getCreateContentBlockedText,
   getStorageLimitExceededText,
   normalizeMembershipRpcResult,
@@ -638,8 +638,8 @@ saveRecentArchiveBrowse({
   const cycleTerminology = getArchiveCycleTerminology(activeArchive.category, language);
   const isOwner = me === activeArchive.user_id;
   const canWriteCloud = isOwner && canCreateMembershipContent(ownerMembership);
-  const cloudToLocalMode = getCloudToLocalMode(ownerMembership);
-  const movesCloudToLocal = cloudToLocalMode === "move";
+  const canSaveCloudLocally = isOwner && ownerMembership?.can_create_content === false &&
+    ownerMembership.plan !== "admin";
   const mode: ArchiveMode = isOwner ? ((modeParam as ArchiveMode | null) || "owner") : "viewer";
   const cycleEnabled = typeof activeArchive.cycle_enabled === "boolean"
     ? activeArchive.cycle_enabled
@@ -683,18 +683,12 @@ saveRecentArchiveBrowse({
   const saveToLocalActionLabel = saveToLocalRunning
     ? saveToLocalProgress?.phase === "downloading"
       ? `${archiveCopy.save_to_device_downloading} ${saveToLocalProgress.completed}/${saveToLocalProgress.total}`
-      : saveToLocalProgress?.phase === "moving"
-        ? archiveCopy.transfer_to_device_moving
       : saveToLocalProgress?.phase === "saving"
         ? archiveCopy.save_to_device_finalizing
         : archiveCopy.save_to_device_reading
-    : movesCloudToLocal
-      ? localCopyId
-        ? archiveCopy.update_and_transfer_to_device
-        : archiveCopy.transfer_to_device
-      : localCopyId
-        ? archiveCopy.update_device_copy
-        : archiveCopy.save_to_device;
+    : localCopyId
+      ? (language === "zh" ? "已保存到本机 · 打开" : "Saved locally · Open")
+      : archiveCopy.save_to_device;
 
   if (!isOwner && !activeArchive.is_public) {
     return <ArchivePrivateState />;
@@ -975,13 +969,14 @@ saveRecentArchiveBrowse({
       );
       return;
     }
+    if (!canSaveCloudLocally) return;
+    if (localCopyId) { router.push(`/local/archive/${localCopyId}`); return; }
     setSaveToLocalConfirmOpen(true);
   }
 
   async function confirmSaveToLocal() {
     if (!isOwner || !me || saveToLocalRunning) return;
 
-    const wasUpdating = Boolean(localCopyId);
     setSaveToLocalConfirmOpen(false);
     setSaveToLocalRunning(true);
     setSaveToLocalProgress({ phase: "reading", completed: 0, total: 0 });
@@ -990,17 +985,11 @@ saveRecentArchiveBrowse({
       const result = await saveCloudArchiveToLocal({
         cloudArchiveId: activeArchive.id,
         ownerContext: { userId: me, email: meEmail },
-        mode: cloudToLocalMode,
+        mode: "copy",
         onProgress: setSaveToLocalProgress,
       });
       setLocalCopyId(result.localArchiveId);
-      showToast(
-        result.movedCloudOriginal
-          ? archiveCopy.transfer_to_device_success
-          : wasUpdating
-            ? archiveCopy.update_device_copy_success
-            : archiveCopy.save_to_device_success
-      );
+      showToast(archiveCopy.save_to_device_success);
       router.push(`/local/archive/${result.localArchiveId}`);
     } catch (error) {
       showToast(getSaveToLocalErrorText(error));
@@ -2056,7 +2045,7 @@ saveRecentArchiveBrowse({
         canWriteArchive: canWriteCloud,
         canAddRecord: mode === "owner" && canWriteCloud,
         canManageCycle: mode === "owner" && canWriteCloud && cycleEnabled,
-        canSaveToLocal: isOwner,
+        canSaveToLocal: canSaveCloudLocally,
         canDeleteArchive: isOwner,
         canToggleVisibility: isOwner && canWriteCloud,
       }}
@@ -2073,7 +2062,11 @@ saveRecentArchiveBrowse({
       systemNameCandidatesLoading={archiveCandidatesLoading}
       systemNameMode="candidate"
       latestUpdate={latestUpdate}
-      recordCount={activeArchive.record_count || records.length || 0}
+      recordCount={displayedArchiveRecordCount({
+        viewer: isOwner ? "owner" : "visitor",
+        storedCount: Number(activeArchive.record_count || 0),
+        visibleCount: records.length,
+      })}
       viewCount={Number(activeArchive.view_count || 0)}
       followerCount={projectFollowerCount}
       durationDays={getDurationDays(
@@ -2225,7 +2218,7 @@ saveRecentArchiveBrowse({
               onSave={saveArchiveCycleSettings}
             />
           ) : null}
-          <button
+          {canSaveCloudLocally ? <button
             type="button"
             onClick={openSaveToLocalPrompt}
             disabled={saveToLocalRunning}
@@ -2236,7 +2229,7 @@ saveRecentArchiveBrowse({
             }}
           >
             {saveToLocalActionLabel}
-          </button>
+          </button> : null}
           <button
             type="button"
             onClick={() => setDeleteArchiveDialogOpen(true)}
@@ -2341,33 +2334,11 @@ saveRecentArchiveBrowse({
           />
           <ConfirmDialog
             open={saveToLocalConfirmOpen}
-            title={
-              movesCloudToLocal
-                ? localCopyId
-                  ? archiveCopy.update_and_transfer_to_device_title
-                  : archiveCopy.transfer_to_device_title
-                : localCopyId
-                  ? archiveCopy.update_device_copy_title
-                  : archiveCopy.save_to_device_title
-            }
-            message={
-              movesCloudToLocal
-                ? localCopyId
-                  ? archiveCopy.update_and_transfer_to_device_message
-                  : archiveCopy.transfer_to_device_message
-                : localCopyId
-                  ? archiveCopy.update_device_copy_message
-                  : archiveCopy.save_to_device_message
-            }
-            confirmText={
-              movesCloudToLocal
-                ? localCopyId
-                  ? archiveCopy.update_and_transfer_to_device
-                  : archiveCopy.transfer_to_device
-                : localCopyId
-                  ? archiveCopy.update_device_copy
-                  : archiveCopy.save_to_device
-            }
+            title={archiveCopy.save_to_device_title}
+            message={language === "zh"
+              ? "云端原项目保持不变；本机将新增独立副本。若有未上传的记录或图片，请先处理。"
+              : "The cloud original stays unchanged. A separate local copy will be created. Resolve pending records or photos first."}
+            confirmText={archiveCopy.save_to_device}
             cancelText={t.cancel}
             onClose={() => {
               if (!saveToLocalRunning) setSaveToLocalConfirmOpen(false);

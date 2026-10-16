@@ -60,6 +60,7 @@ export default function MobileProfileView({
   locationText,
   androidIdentityLayout = false,
   identityTop,
+  identityPrelude,
   identityAfterStats,
   preferencesExtra,
   adminAlert,
@@ -89,6 +90,7 @@ export default function MobileProfileView({
   androidIdentityLayout?: boolean;
   canEditIdentity?: boolean;
   identityTop?: ReactNode;
+  identityPrelude?: ReactNode;
   identityAfterStats?: ReactNode;
   preferencesExtra?: ReactNode;
   adminAlert?: ReactNode;
@@ -141,6 +143,7 @@ export default function MobileProfileView({
         <section style={mobileProfileShellStyle}>
           {error}
           {adminAlert}
+          {identityPrelude}
           <section style={profileIdentityCardStyle}>
             {androidIdentityLayout ? (
               <>

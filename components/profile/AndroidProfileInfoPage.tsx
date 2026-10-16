@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -13,6 +13,8 @@ import {
 } from "@/lib/support-submissions";
 import { safeSupportUrl } from "@/lib/support-links";
 import { supabase } from "@/lib/supabase";
+import { getLocalSafDirectory } from "@/lib/local-saf-native";
+import { formatVerifiedLocalDirectory } from "@/lib/local-saf-location";
 
 export type AndroidProfileInfoKind =
   | "membership-benefits"
@@ -41,6 +43,17 @@ export default function AndroidProfileInfoPage({
   onNavigate: (path: string) => void;
 }) {
   const { language, t } = useLanguage();
+  const [localDirectory, setLocalDirectory] = useState<{ uri: string | null; available: boolean } | null>(null);
+  useEffect(() => {
+    if (kind !== "data-security") return;
+    let active = true;
+    void getLocalSafDirectory().then((directory) => {
+      if (active) setLocalDirectory(directory);
+    }).catch(() => {
+      if (active) setLocalDirectory({ uri: null, available: false });
+    });
+    return () => { active = false; };
+  }, [kind]);
 
   if (kind === "membership-benefits") {
     const cloudPlan = t.membership_page.plans[2];
@@ -85,10 +98,14 @@ export default function AndroidProfileInfoPage({
   if (kind === "data-security") {
     const sections = language === "zh" ? [
       {
-        title: "本机数据",
+        title: "本地文件位置",
         paragraphs: [
-          "本地项目、记录和照片保存在当前设备，可在断网时继续查看和记录。它们不会因为切换到云会员而自动变成云端内容。",
-          "无本地内容时，本地空间入口可自动隐藏；关闭“显示本地空间”只隐藏入口，不删除本机数据。",
+          localDirectory === null ? "正在核对本地资料目录…" : localDirectory.available && localDirectory.uri
+            ? `已连接：${formatVerifiedLocalDirectory(localDirectory.uri, language)}`
+            : "尚未授权或无法访问本地资料目录。默认目标为手机内部存储/Documents/LifeSpace。",
+          "本地项目、记录和照片跟随当前连接的本地目录，与云账号无关；断网、登录或退出不会自动上传或改变本地资料。",
+          "正常覆盖升级及卸载 App 不会主动删除公共文档目录中的资料。如需彻底清除，请先备份需要保留的内容，再通过手机文件管理器手动删除所连接的 LifeSpace 资料文件夹。",
+          "关闭“启用本地空间”只隐藏本地项目及相关操作入口，不删除本地资料。",
         ],
       },
       {
@@ -101,7 +118,7 @@ export default function AndroidProfileInfoPage({
         title: "离线缓存",
         paragraphs: [
           "APP 会为正在使用的云项目保留轻量离线副本，主要用于断网查看。缓存中的云项目只读，不作为可独立修改的第二份云项目。",
-          "已结束项目不进入离线缓存；显式退出登录后会清除该账号的云端缓存。",
+          "已结束项目不进入离线缓存；退出登录后该账号的缓存不再显示，重新登录原账号后可恢复已持久保存的内容。"
         ],
       },
       {
@@ -124,8 +141,15 @@ export default function AndroidProfileInfoPage({
       },
     ] : [
       {
-        title: "Local data",
-        paragraphs: ["Local projects, records and photos stay on this device and remain available offline. They do not automatically become cloud data when membership changes.", "When there is no local content, the local-space entry can hide automatically. Turning off ‘Show local space’ hides only the entry and does not delete device data."],
+        title: "Local file location",
+        paragraphs: [
+          localDirectory === null ? "Checking the local data folder…" : localDirectory.available && localDirectory.uri
+            ? `Connected: ${formatVerifiedLocalDirectory(localDirectory.uri, language)}`
+            : "No accessible local data folder is authorized. The default target is Internal storage/Documents/LifeSpace.",
+          "Local projects, records and photos belong to the connected folder, independently of your cloud account. Going offline or changing your login does not upload or change them.",
+          "Normal app upgrades and uninstall do not actively delete files in the public Documents folder. To remove them completely, back up anything you need, then delete the connected LifeSpace folder in your phone's file manager.",
+          "Turning off ‘Enable local space’ only hides local projects and related actions. It does not delete local data.",
+        ],
       },
       {
         title: "Cloud data",
@@ -133,7 +157,7 @@ export default function AndroidProfileInfoPage({
       },
       {
         title: "Offline cache",
-        paragraphs: ["The app keeps a lightweight offline copy of active cloud projects for reading when disconnected. Cached cloud projects are read-only and are not a second editable cloud copy.", "Ended projects are not cached. Explicit sign-out clears the cloud cache for that account."],
+        paragraphs: ["The app keeps a lightweight offline copy of active cloud projects for reading when disconnected. Cached cloud projects are read-only and are not a second editable cloud copy.", "Ended projects are not cached. Signing out hides that account's cache; logging back into the original account restores persisted content."],
       },
       {
         title: "Offline records and sync",
@@ -149,7 +173,7 @@ export default function AndroidProfileInfoPage({
       },
     ];
     return (
-      <InfoShell title={language === "zh" ? "数据规则" : "Data rules"} onBack={onBack}>
+      <InfoShell title={language === "zh" ? "数据与安全" : "Data & security"} onBack={onBack}>
         <p style={introStyle}>
           {language === "zh"
             ? "这里说明 LifeSpace 中数据实际存放、缓存和同步的方式；隐私政策等法律文本统一放在“法律规则”中。"

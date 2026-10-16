@@ -1,6 +1,7 @@
 package com.youshi.cultivation;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.UriPermission;
@@ -47,11 +48,25 @@ public final class LocalSafPlugin extends Plugin {
 
     @PluginMethod
     public void chooseDirectory(PluginCall call) {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION |
-            Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
-            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-        startActivityForResult(call, intent, "directorySelected");
+        boolean english = !Locale.getDefault().getLanguage().equals("zh");
+        new AlertDialog.Builder(getActivity())
+            .setMessage(english
+                ? "LifeSpace needs access to your local data folder to save and restore projects, records and photos."
+                : "LifeSpace 需要访问手机上的本地资料文件夹，用于保存和恢复项目、记录及照片。")
+            .setPositiveButton(english ? "Grant access" : "授权访问", (dialog, which) -> {
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+                // The system picker may ignore this hint; permission always remains user-granted.
+                intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI,
+                    DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Documents"));
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+                startActivityForResult(call, intent, "directorySelected");
+            })
+            .setNegativeButton(english ? "Cancel" : "取消", (dialog, which) ->
+                call.reject("No LifeSpace data directory was selected."))
+            .setOnCancelListener(dialog -> call.reject("No LifeSpace data directory was selected."))
+            .show();
     }
 
     @ActivityCallback

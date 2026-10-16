@@ -761,6 +761,7 @@ export default function FollowPage() {
       {isMobileViewport ? (
         <MobileContentTopBar
           ariaLabel={followT.title}
+          showGuestLanguageSwitcher={!shellNavigate}
           items={[
             {
               key: "projects",

@@ -10,7 +10,7 @@ android {
     namespace = "com.youshi.cultivation"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.youshi.cultivation"
+        applicationId System.getenv("ANDROID_APPLICATION_ID") ?: "com.youshi.cultivation"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode Integer.parseInt(System.getenv('ANDROID_VERSION_CODE') ?: '28')

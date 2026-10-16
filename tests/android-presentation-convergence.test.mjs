@@ -71,13 +71,15 @@ test("My Space cards share MobileArchiveActions with source-specific write capab
   assert.match(actions, /disabled=\{disabled\}/);
 });
 
-test("Group settings use one editor and cached cloud taxonomy is readonly", () => {
+test("Workspace owns group editing; settings only change depth and cached cloud taxonomy is readonly", () => {
   const shell = read("mobile-offline-src/main.tsx");
   const settings = read("components/profile/ProjectCategorySettingsView.tsx");
+  const panel = read("components/archive-ui/ArchiveTaxonomyPanel.tsx");
   assert.match(shell, /cloudRequiresNetwork/);
   assert.match(shell, /cachedTaxonomy/);
-  assert.match(settings, /<ConfirmDialog/);
-  assert.match(settings, /onCreate|onRename|onDelete/);
+  assert.match(settings, /onToggleDepth/);
+  assert.doesNotMatch(settings, /<ConfirmDialog|onCreate|onRename|onDelete/);
+  assert.match(panel, /onCreateGroup|onRenameGroup|onDeleteGroup/);
   assert.doesNotMatch(settings, /window\.prompt|window\.confirm/);
 });
 

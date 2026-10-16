@@ -17,6 +17,7 @@ import type {
 } from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
 import { buildLoginHref } from "@/lib/auth-return";
+import { publicExperienceCardUrl, sharePublicCard } from "@/lib/android-native-share";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type CardListItem = ExperienceCardListItem & {
@@ -146,16 +147,17 @@ export function MyExperienceCardsContent({ onRequireLogin }: { onRequireLogin: (
   }
 
   async function shareExperienceCard(item: CardListItem) {
-    const url = getExperienceCardShareUrl(item.id);
-
     try {
-      if (navigator.share) {
-        await navigator.share({ title: item.title, url });
-        return;
-      }
+      const url = getExperienceCardShareUrl(item.id);
+      const outcome = await sharePublicCard(item.title, url);
+      if (outcome === "shared" || outcome === "canceled") return;
       await copyExperienceCardLink(item);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
+      if (error instanceof Error && error.message === "qa_share_origin_required") {
+        showToast(t.experience.share_failed_browser);
+        return;
+      }
       showToast(t.experience.share_failed_use_copy);
     }
   }
@@ -296,7 +298,7 @@ export function MyExperienceCardsContent({ onRequireLogin }: { onRequireLogin: (
 }
 
 function getExperienceCardShareUrl(cardId: string) {
-  return new URL(`/experience-cards/${cardId}`, window.location.origin).toString();
+  return publicExperienceCardUrl(window.location.origin, cardId);
 }
 
 const pageStyle: CSSProperties = {

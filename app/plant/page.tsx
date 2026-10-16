@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "@/components/navigation/InternalLink";
+import Link, { useInternalNavigate } from "@/components/navigation/InternalLink";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -254,6 +254,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
   offlineDirectory?: OfflineGuideDirectoryEntry[];
   offlineSignedIn?: boolean;
 } = {}) {
+  const shellNavigate = useInternalNavigate();
   const { language, t } = useLanguage();
   const categoryLabels = t.plant.categories as Record<string, string>;
   const lightOptions = t.plant.light_options;
@@ -1217,6 +1218,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
       <HomeSectionTabs
         active="guide"
         searchEnabled={false}
+        showGuestLanguageSwitcher={!shellNavigate}
       />
       <main style={{ padding: isMobileViewport ? "6px 10px 10px" : "16px", maxWidth: 1080, margin: "0 auto" }}>
       <GuideCategoryTabs value={guideSection} onChange={changeGuideSection} />

@@ -10,6 +10,7 @@ import {
   type CSSProperties,
 } from "react";
 import { showToast } from "@/components/Toast";
+import { isAndroidNativeShare, shareMp4File } from "@/lib/android-native-share";
 import type {
   ExperienceCardDetail,
   ExperienceCardMedia,
@@ -701,20 +702,16 @@ const ExperienceCardVideoPanel = forwardRef<
     const file = new File([videoBlob], filename, { type: "video/mp4" });
 
     try {
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({
-          title: detail.card.title,
-          text: t.experience.share_text,
-          files: [file],
-        });
-        return;
-      }
-
-      downloadVideo(false);
+      const outcome = await shareMp4File(file, {
+        title: detail.card.title,
+        text: t.experience.share_text,
+      });
+      if (outcome === "shared" || outcome === "canceled") return;
+      if (!isAndroidNativeShare()) downloadVideo(false);
       showToast(t.experience.browser_share_unavailable);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      downloadVideo(false);
+      if (!isAndroidNativeShare()) downloadVideo(false);
       showToast(t.experience.direct_share_failed);
     }
   }

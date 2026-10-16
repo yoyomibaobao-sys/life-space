@@ -69,10 +69,12 @@ test("one native connectivity subscription handles hot toggle, missed event on r
   assert.doesNotMatch(read("mobile-offline-src/main.tsx"), /navigator\.onLine/);
 });
 
-test("signed-out cloud links to one bundled login screen; remembered local content remains", () => {
+test("signed-out cloud offers trial or Plus via bundled login; remembered local content remains", () => {
   const shell = read("mobile-offline-src/main.tsx");
   const auth = read("lib/android-auth-state.ts");
-  assert.match(shell, /sourceFilter === "cloud" \? \([\s\S]*?openCloudLogin\("list-cloud"\)/);
+  assert.match(shell, /sourceFilter === "cloud" && auth\.status !== "checking"/);
+  assert.match(shell, /openCloudLogin\(trialLoginTo/);
+  assert.match(shell, /openCloudLogin\("membership-payment"\)/);
   assert.match(shell, /sourceFilter !== "cloud" \? \(\s*filteredLocalArchives/);
   assert.match(auth, /preserveLocalOwner: true/);
   assert.match(shell, /auth\.status === "signed-out"/);
@@ -254,8 +256,10 @@ test("local taxonomy and detail offer both levels; native header owns no duplica
   const settings = read("components/profile/ProjectCategorySettingsView.tsx");
   const shell = read("mobile-offline-src/main.tsx");
   const detail = read("components/archive-ui/DeviceOwnedProjectDetail.tsx");
-  assert.match(settings, /data-taxonomy-level="1"/);
-  assert.match(settings, /data-taxonomy-level="2"/);
+  assert.match(settings, /开启一级分组/);
+  assert.match(settings, /开启二级分组/);
+  assert.match(settings, /onToggleDepth/);
+  assert.doesNotMatch(settings, /data-taxonomy-level=/);
   assert.match(shell, /createLocalTaxonomyItem/);
   assert.match(shell, /renameLocalTaxonomyItem/);
   assert.match(shell, /deleteLocalTaxonomyItem/);

@@ -14,6 +14,8 @@ import type { MediaItem } from "@/lib/domain-types";
 import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { saveRecentArchiveBrowse } from "@/lib/recent-browse";
+import { displayedArchiveRecordCount } from "@/lib/archive-record-count";
+import { formatDateTime, getDayNumber } from "@/lib/archive-detail-utils";
 
 // Public, local, cached and live owner details share the same presentation tree.
 export default function ReadonlyPublicProjectDetail({ item, language, onBack }: {
@@ -90,8 +92,12 @@ export default function ReadonlyPublicProjectDetail({ item, language, onBack }: 
     archiveDisplayName={archive.system_name || archive.species_name_snapshot || item.system_name || ""}
     archiveCategoryLabel={getArchiveCategoryLabel(archive.category as ArchiveCategory, language)}
     archiveSubcategoryLabel={subcategoryLabel} archiveGroupLabel={groupLabel}
-    latestUpdate={archive.last_record_time || records[0]?.record_time || null}
-    recordCount={Number(archive.record_count || records.length)} durationDays={null}
+    latestUpdate={records[0]?.record_time || archive.created_at || null}
+    recordCount={displayedArchiveRecordCount({
+      viewer: "visitor",
+      storedCount: Number(archive.record_count || 0),
+      visibleCount: records.length,
+    })} durationDays={null}
     viewCount={Number(archive.view_count || 0)}
     statusBadge={language === "zh" ? "公开" : "Public"}
     activeTab={tab} onTabChange={setTab} experienceTabLabel={t.archive.experience_cards}
@@ -110,7 +116,8 @@ export default function ReadonlyPublicProjectDetail({ item, language, onBack }: 
       onDeleteMedia={async () => undefined} onVisibilityChange={async () => undefined}
       onSetHelpStatus={async () => undefined} onRemoveTag={() => undefined}
       onAddTag={async () => undefined} />}
-    lightbox={lightbox ? { ...lightbox, metaText: new Date(lightbox.record.record_time).toLocaleDateString(language === "zh" ? "zh-CN" : "en"),
+    lightbox={lightbox ? { ...lightbox, metaText: formatDateTime(lightbox.record.record_time),
+      dayText: `${t.record.day_prefix} ${getDayNumber(records.at(-1)?.record_time || archive.created_at || lightbox.record.record_time, lightbox.record.record_time)}${t.record.day_suffix ? ` ${t.record.day_suffix}` : ""}`,
       note: lightbox.record.note || "", onChange: (index) => setLightbox((current) => current ? { ...current, index } : null),
       onClose: () => setLightbox(null) } : null}
   />;

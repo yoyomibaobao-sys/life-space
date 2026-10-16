@@ -75,9 +75,29 @@ test("independent saved local copy stays local; linked pending row does not", ()
   assert.equal(view.normalLive.length, 0);
 });
 
+test("SAF saved cloud copies remain independent local cards beside their original", () => {
+  const copied = local("saf-local-copy", {
+    local_role: "local-project",
+    source_cloud_archive_id: "cloud-1",
+    source_cloud_saved_at: "2026-10-10T08:00:00Z",
+  });
+  const view = buildAndroidCloudWorkspace({
+    local: [copied],
+    caches: [local("cache", { local_role: "cloud-offline-cache", source_cloud_archive_id: "cloud-1" })],
+    live: [{ id: "cloud-1" }],
+    pending: [],
+    preferLive: true,
+  });
+  assert.deepEqual(view.localOnly.map((entry) => entry.id), ["saf-local-copy"]);
+  assert.deepEqual(view.normalLive.map((entry) => entry.id), ["cloud-1"]);
+  assert.deepEqual(view.counts, { cloud: 1, local: 1, all: 2 });
+});
+
 test("local transfer is offered only for local intent, never cloud cache or pending create", () => {
   assert.equal(canOfferLocalCloudTransfer(local("pure-local")), true);
   assert.equal(canOfferLocalCloudTransfer(local("saved-copy", { local_role: "saved-local-copy", source_cloud_archive_id: "cloud" })), true);
+  assert.equal(canOfferLocalCloudTransfer(local("saf-copy", { local_role: "local-project", source_cloud_archive_id: "cloud", source_cloud_saved_at: "2026-10-10T08:00:00Z" })), true);
+  assert.equal(canOfferLocalCloudTransfer(local("uncommitted-link", { local_role: "local-project", source_cloud_archive_id: "cloud" })), false);
   assert.equal(canOfferLocalCloudTransfer(local("cache", { local_role: "cloud-offline-cache", source_cloud_archive_id: "cloud" })), false);
   assert.equal(canOfferLocalCloudTransfer(local("pending", { sync: { status: "pending-cloud-sync", operation_kind: "create-archive" } })), false);
   assert.equal(canOfferLocalCloudTransfer(local("linked", { source_cloud_archive_id: "cloud" })), false);

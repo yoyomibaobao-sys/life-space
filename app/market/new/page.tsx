@@ -264,11 +264,11 @@ export function NewMarketPostContent({
               supabase,
               (mediaData || []) as SourceMediaOption[]
             );
-            setSourceMediaOptions(
-              displayMedia.filter(
-                (media) => media.display_thumb_url || media.display_url
-              )
+            const availableMedia = displayMedia.filter(
+              (media) => media.display_thumb_url || media.display_url
             );
+            setSourceMediaOptions(availableMedia);
+            setSelectedSourceMediaIds(availableMedia.map((media) => media.id));
           }
         }
       }

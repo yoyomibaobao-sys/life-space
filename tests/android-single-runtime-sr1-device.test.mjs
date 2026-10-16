@@ -91,7 +91,7 @@ test("online cloud workspace never falls back to cache cards when live loading f
   assert.doesNotMatch(shell, /\(!online \|\| Boolean\(cloudError\)\)[\s\S]*filteredCloudCaches\.length/);
 });
 
-test("online cloud cards and live detail have no cache save-to-device entry", () => {
+test("cloud cache cards have no copy action; live owner detail gates single-project copy", () => {
   const shell = read("mobile-offline-src/main.tsx");
   const card = shell.slice(
     shell.indexOf("function renderCloudProjectCard"),
@@ -99,8 +99,10 @@ test("online cloud cards and live detail have no cache save-to-device entry", ()
   );
   assert.doesNotMatch(card, /saveLocalCopy|refreshLocalCopy|openLocalCopy/);
   const cloud = read("components/archive-ui/CloudArchiveDetailController.tsx");
-  assert.match(cloud, /canSaveToLocal: false/);
-  assert.doesNotMatch(cloud, /onSaveToLocal|saveToLocalLabel|saveCloudArchiveToLocal/);
+  assert.match(cloud, /canSaveToLocal: canCopy/);
+  assert.match(cloud, /entitlement\.can_create_content === false/);
+  assert.match(cloud, /onSaveToLocal[\s\S]*?saveToLocalLabel/);
+  assert.match(cloud, /saveCloudArchiveToLocal/);
   assert.match(cloud, /<ArchiveProjectDetailView/);
   assert.match(cloud, /<ArchiveExperienceCards/);
 });

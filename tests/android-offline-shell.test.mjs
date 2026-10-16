@@ -14,7 +14,9 @@ test("Android packages a same-origin standalone local project surface", () => {
   const source = read("mobile-offline-src/main.tsx");
   const parityStyles = read("mobile-offline-src/local-parity.css");
   const shellStyles = read("mobile-offline-src/offline.css");
-  const generated = read("mobile-shell/offline.html");
+  const index = read("mobile-shell/index.html");
+  const singleRuntime = index.includes('data-android-runtime="bundled"');
+  const generated = singleRuntime ? index : read("mobile-shell/offline.html");
   const sharedSourceSwitcher = read("components/archive-ui/ArchiveSourceSwitcher.tsx");
   const sharedPageHeader = read("components/mobile/MobilePageHeaderView.tsx");
   const sharedWorkspace = read("components/archive-ui/ArchiveWorkspaceTemplate.tsx");
@@ -25,7 +27,13 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(config, /errorPath: "offline\.html"/);
   assert.match(read("scripts/build-mobile-offline.mjs"), /"index\.html"/);
   assert.match(read("scripts/build-mobile-offline.mjs"), /index\.template\.html/);
-  assert.doesNotMatch(read("mobile-shell/index.html"), /id="root"/);
+  if (singleRuntime) {
+    assert.match(index, /id="root"/);
+    assert.equal(fs.existsSync(path.join(root, "mobile-shell/offline.html")), false);
+  } else {
+    assert.doesNotMatch(index, /id="root"/);
+    assert.equal(fs.existsSync(path.join(root, "mobile-shell/offline.html")), true);
+  }
   assert.match(packageJson, /"android:sync": "npm run android:offline && cap sync android"/);
   assert.match(buildScript, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(buildScript, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
@@ -67,7 +75,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /label: copy\.all/);
   assert.match(source, /label: copy\.cloud/);
   assert.match(source, /<ArchiveWorkspaceTemplate/);
-  assert.match(source, /sourceOptions=\{auth\.status !== "signed-in"/);
+  assert.match(source, /workspaceSourceOptions\(auth\.status, localSpaceEnabled, cloudReadable\)/);
   assert.match(source, /activeSource=\{sourceFilter\}/);
   assert.match(source, /<ArchiveTaxonomyPanel/);
   assert.match(sharedTaxonomy, /archiveCategoryOptions\.map/);
@@ -77,17 +85,21 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.doesNotMatch(generated, /<link[^>]+stylesheet/i);
 });
 
-test("signed-in local-space visibility is optional, persisted, and hides All together with Local", () => {
+test("local space starts enabled, stays on this device, and hides local entries without deleting data", () => {
   const source = read("mobile-offline-src/main.tsx");
   const profile = read("components/profile/AndroidProfileController.tsx");
-  assert.match(source, /LOCAL_SPACE_VISIBILITY_KEY/);
-  assert.match(source, /localSpacePreference \?\? hasLocalSpaceContent/);
-  assert.match(source, /localSpaceVisible[\s\S]*\{ value: "all"[\s\S]*\{ value: "cloud"[\s\S]*\{ value: "local"/);
-  assert.match(source, /:\s*\[\{ value: "cloud", label: copy\.cloud, count: cloudSourceCount \}\]/);
+  const security = read("components/profile/AndroidProfileInfoPage.tsx");
+  assert.match(source, /LOCAL_SPACE_VISIBILITY_KEY = "lifespace_android_show_local_space_v1"/);
+  assert.match(source, /localSpaceEnabled = localSpacePreference \?\? true/);
+  assert.doesNotMatch(source, /hasLocalSpaceContent/);
   assert.match(source, /writeLocalSpaceVisibilityPreference\(visible\)/);
-  assert.match(source, /localSpaceVisible=\{localSpaceVisible\}/);
-  assert.match(source, /onLocalSpaceVisibilityChange=\{auth\.status === "signed-in" \? updateLocalSpaceVisibility/);
-  assert.match(profile, /显示本地空间|Show local space/);
+  assert.match(source, /localSpaceVisible=\{localSpaceEnabled\}/);
+  assert.match(source, /onLocalSpaceVisibilityChange=\{updateLocalSpaceVisibility\}/);
+  assert.match(source, /packVisibleSources/);
+  assert.match(profile, /启用本地空间/);
+  assert.match(profile, /Enable local space/);
+  assert.match(security, /关闭“启用本地空间”只隐藏本地项目及相关操作入口，不删除本地资料。/);
+  assert.doesNotMatch(profile, /显示本地空间|Show local space/);
 });
 
 test("offline shell safely recovers one local owner when browser session state is unavailable", () => {

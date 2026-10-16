@@ -31,6 +31,7 @@ import {
   getMembershipStatusLabel,
   getMembershipSummary,
   normalizeMembershipRpcResult,
+  normalizeCloudTrialOfferRpcResult,
   type MyMembership,
 } from "@/lib/membership";
 import {
@@ -156,6 +157,7 @@ export default function ProfilePage() {
   const [profileStats, setProfileStats] = useState<UserProfileStats | null>(null);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [membershipError, setMembershipError] = useState("");
+  const [trialLifecycle, setTrialLifecycle] = useState<string | null>(null);
   const [paymentRows, setPaymentRows] = useState<MembershipPaymentRow[]>([]);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -271,10 +273,12 @@ export default function ProfilePage() {
 
       const [
         membershipResult,
+        trialOfferResult,
         adminResult,
         paymentsResult,
       ] = await Promise.all([
         supabase.rpc("get_my_membership"),
+        supabase.rpc("get_my_cloud_trial_offer"),
         supabase.rpc("is_app_admin", { p_user_id: user.id }),
         supabase
           .from("membership_payments")
@@ -293,7 +297,11 @@ export default function ProfilePage() {
         setMembershipError("");
       }
 
-      if (adminResult.error) {
+      if (adminResult.error) {      setTrialLifecycle(trialOfferResult.error
+        ? null
+        : normalizeCloudTrialOfferRpcResult(trialOfferResult.data)?.lifecycle_status || null);
+
+
         console.error("load admin status error:", adminResult.error);
         setIsAdmin(false);
       } else {
@@ -375,7 +383,7 @@ export default function ProfilePage() {
       : "";
   const membershipStatusText = membershipError
     ? t.profile.membership_load_failed
-    : getMembershipSummary(membership, language);
+    : getMembershipSummary(membership, language, trialLifecycle);
   const visibleMobileProfileModules = mobileProfileNavigation({
     language, native: isNativeApp === true, admin: isAdmin,
     refundLabel: t.profile.refund_request_nav,

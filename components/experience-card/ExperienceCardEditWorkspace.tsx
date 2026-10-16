@@ -7,10 +7,16 @@ export default function ExperienceCardEditWorkspace({
   cardId,
   onCardSaved,
   onDirtyChange,
+  routerless,
+  onMissingUser,
+  onOpenHref,
 }: {
   cardId: string;
   onCardSaved?: () => void | Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
+  routerless?: boolean;
+  onMissingUser?: () => void;
+  onOpenHref?: (href: string) => void;
 }) {
   const [dirty, setDirty] = useState(false);
   const [editorRevision, setEditorRevision] = useState(0);
@@ -39,6 +45,9 @@ export default function ExperienceCardEditWorkspace({
         embedded
         compact
         showTitleField={false}
+        routerless={routerless}
+        onMissingUser={onMissingUser}
+        onOpenHref={onOpenHref}
         onDirtyChange={(nextDirty) => {
           setDirty(nextDirty);
           onDirtyChange?.(nextDirty);

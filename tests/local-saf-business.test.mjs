@@ -38,6 +38,7 @@ const output = await build({ entryPoints: ["lib/local-offline-db.ts", "lib/local
         export async function getLocalSafDirectory() { return { available: globalThis.__safBusiness.backing.connected }; }
         export async function chooseLocalSafDirectory() {
           if (globalThis.__safBusiness.backing.cancel) throw Error("Folder selection cancelled");
+          return { uri: "content://com.android.externalstorage.documents/tree/primary%3ADocuments%2FLifeSpace" };
         }
         export async function confirmLocalSafDirectory() { globalThis.__safBusiness.backing.connected = true; }
         export async function discardLocalSafDirectory() {}
@@ -157,6 +158,30 @@ test("create, text/photo, edits, cycle, taxonomy, recycle and force hydrate use 
   }
 });
 
+test("new cloud copy follows the local SAF space after editing under another account", async () => {
+  const original = await project(ownerA);
+  const sourceId = "29a067c0-1228-45cb-8011-1c785de80062";
+  const copy = { ...original, id: `local_archive_${crypto.randomUUID()}`,
+    local_role: "local-project", source_cloud_archive_id: sourceId,
+    source_cloud_saved_at: stamp, local_owner_user_id: ownerA,
+    sync: { ...original.sync, cloud_archive_id: sourceId } };
+  const saved = await local.commitCloudArchiveSafCopy({ archive: copy, records: [], images: [] });
+  assert.equal(saved.archive.source_cloud_archive_id, sourceId);
+  await local.updateLocalArchiveFields(copy.id, { title: "本机独立副本" }, { userId: ownerB });
+  const record = await local.createLocalRecord({ archive_id: copy.id, note: "本机补记" });
+  const head = await committed();
+  const entry = head.source.entries.find((row) => row.id === copy.id);
+  assert.equal(entry.partition, "local");
+  assert.equal(entry.kind, "local-project");
+  assert.equal(entry.archive.title, "本机独立副本");
+  assert.equal(entry.records[0].id, record.id);
+  assert.equal(head.source.entries.filter((row) => row.partition.startsWith("cloud/")).length, 0);
+  freshMirror();
+  const guest = await local.getLocalArchiveDetail(copy.id, { userId: null });
+  assert.equal(guest.archive.title, "本机独立副本");
+  assert.equal(guest.records[0].note, "本机补记");
+});
+
 test("failure before commit marker cannot report success or alter business mirror", async () => {
   const archive = await project();
   const before = (await committed()).commit.revision;
@@ -177,6 +202,17 @@ test("failed IDB mirror after marker is rebuilt from SAF on the next read", asyn
   finally { console.error = previousError; indexedDB.open = backing.restoreOpen; }
   assert.equal((await committed()).source.entries[0].records[0].id, record.id);
   assert.equal((await local.getLocalArchiveDetail(archive.id)).records[0].note, "已写目录");
+});
+
+test("duplicate SAF local group reports failure without a false commit", async () => {
+  await project();
+  const input = { kind: "subcategory", label: "果菜", category: "system" };
+  await local.createLocalTaxonomyItem(input);
+  const before = (await committed()).commit.revision;
+  await assert.rejects(local.createLocalTaxonomyItem(input), /此分组已存在/);
+  const after = await committed();
+  assert.equal(after.commit.revision, before);
+  assert.equal(after.source.taxonomy.length, 1);
 });
 
 test("taxonomy rename/delete and grouping depth survive a new business mirror", async () => {

@@ -26,14 +26,15 @@ import { requestCloudTrash } from "@/lib/cloud-trash";
 import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getDurationDays } from "@/lib/follow-utils";
-import { canCreateMembershipContent, normalizeMembershipRpcResult } from "@/lib/membership";
+import { canCreateMembershipContent, normalizeCloudTrialOfferRpcResult, normalizeMembershipRpcResult } from "@/lib/membership";
 import type { PlantingRegion } from "@/lib/planting-region";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import { getSystemNameCandidates } from "@/lib/system-name-candidates";
 import { resolveSystemNameSelection } from "@/lib/system-name-candidates";
 import { uploadCloudRecordImages } from "@/lib/cloud-record-media";
 import { isAndroidOnline } from "@/lib/android-connectivity";
-import { formatDateTime } from "@/lib/archive-detail-utils";
+import { formatDateTime, getDayNumber } from "@/lib/archive-detail-utils";
+import { saveCloudArchiveToLocal } from "@/lib/cloud-to-local-save";
 
 type Detail = NonNullable<Awaited<ReturnType<typeof loadCloudArchiveDetail>>>;
 
@@ -62,6 +63,9 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
   const [addOpen, setAddOpen] = useState(initialFiles !== undefined);
   const [busy, setBusy] = useState(false);
   const [canWrite, setCanWrite] = useState(false);
+  const [canCopy, setCanCopy] = useState(false);
+  const [copyConfirmOpen, setCopyConfirmOpen] = useState(false);
+  const [savedCopyId, setSavedCopyId] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Awaited<ReturnType<typeof getSystemNameCandidates>>>([]);
   const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number; record: RecordItem } | null>(null);
   const [experienceCardCount, setExperienceCardCount] = useState(0);
@@ -69,12 +73,20 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
   const lastAddRecordRequest = useRef(addRecordRequest);
 
   const reload = useCallback(async () => {
-    const [next, membership] = await Promise.all([
+    const [next, membership, offerResult] = await Promise.all([
       loadCloudArchiveDetail(archiveId, userId),
       supabase.rpc("get_my_membership"),
+      supabase.rpc("get_my_cloud_trial_offer"),
     ]);
     setDetail(next);
-    setCanWrite(!membership.error && canCreateMembershipContent(normalizeMembershipRpcResult(membership.data)));
+    const entitlement = membership.error ? null : normalizeMembershipRpcResult(membership.data);
+    const offer = offerResult.error ? null : normalizeCloudTrialOfferRpcResult(offerResult.data);
+    setCanWrite(canCreateMembershipContent(entitlement));
+    setCanCopy(Boolean(entitlement && entitlement.can_create_content === false &&
+      (entitlement.plan === "trial"
+        ? offer?.lifecycle_status === "handling_period"
+        : (entitlement.plan === "basic" || entitlement.plan === "large" || entitlement.plan === "seller") &&
+          entitlement.status !== "active")));
     setStatus(next ? "ready" : "not-found");
     if (next) {
       const list = await getSystemNameCandidates({
@@ -137,6 +149,22 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
     });
   }
 
+  async function saveToDevice() {
+    if (busy || !canCopy || !isAndroidOnline()) return;
+    setCopyConfirmOpen(false);
+    setBusy(true);
+    setError("");
+    try {
+      const result = await saveCloudArchiveToLocal({
+        cloudArchiveId: archiveId, ownerContext: { userId }, mode: "copy",
+      });
+      setSavedCopyId(result.localArchiveId);
+      await onCacheChanged();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally { setBusy(false); }
+  }
+
   if (status === "loading") return <ArchiveProjectDetailLoading>{copy.loading}</ArchiveProjectDetailLoading>;
   if (status !== "ready" || !detail) return <ArchiveProjectDetailStatus
     status={status === "not-found" ? "not-found" : "error"}
@@ -158,9 +186,15 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
 
   return <>
     {error ? <p role="alert" style={{ color: "#a33622", padding: "8px 16px" }}>{error}</p> : null}
+    {savedCopyId ? <p role="status" style={{ padding: "8px 16px" }}>
+      {language === "zh" ? "已保存独立本机副本。" : "Independent local copy saved."}{" "}
+      <InternalLink href={`/local/archive/${savedCopyId}`}>
+        {language === "zh" ? "打开本机项目" : "Open local project"}
+      </InternalLink>
+    </p> : null}
     <ArchiveProjectDetailView
       archive={archive} records={records} cycles={cycles} cycleEnabled={Boolean(archive.cycle_enabled)}
-      mode="owner" capabilities={{ canWriteArchive: canWrite, canAddRecord: canWrite, canManageCycle: canWrite && Boolean(archive.cycle_enabled), canSaveToLocal: false, canDeleteArchive: true, canToggleVisibility: canWrite }}
+      mode="owner" capabilities={{ canWriteArchive: canWrite, canAddRecord: canWrite, canManageCycle: canWrite && Boolean(archive.cycle_enabled), canSaveToLocal: canCopy, canDeleteArchive: true, canToggleVisibility: canWrite }}
       isMobileViewport language={language} copy={copy} username={detail.username || ""}
       archiveDisplayName={archive.system_name || archive.species_name_snapshot || ""}
       archiveCategoryLabel={getArchiveCategoryLabel(category, language)}
@@ -194,6 +228,11 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
         const result = await supabase.rpc(archive.status === "ended" ? "restore_archive_active" : "mark_archive_ended", { p_archive_id: archiveId });
         if (result.error) throw result.error;
       })}
+      onSaveToLocal={() => { if (canCopy && !busy && isAndroidOnline()) setCopyConfirmOpen(true); }}
+      saveToLocalLabel={savedCopyId
+        ? (language === "zh" ? "已保存到本机 · 打开" : "Saved locally · Open")
+        : copy.save_to_device}
+      saveToLocalDisabled={busy}
       onDeleteArchive={() => setTrashConfirmOpen(true)}
       onSaveTitle={(value) => patchArchive({ title: value })}
       onSaveCategory={(value) => patchArchive({ category: value, sub_tag_id: null, group_tag_id: null })}
@@ -211,6 +250,15 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
       storageLabel={copy.cloud_project} storageTone="cloud"
       headerFallbackHref="/archive" headerBackLabel={t.nav.my_space} onHeaderBack={onBack}
       mobileOwnerSettings={<>
+        {canCopy ? (
+          <button type="button" className="secondary-button"
+            disabled={busy || !isAndroidOnline()}
+            onClick={() => setCopyConfirmOpen(true)}>
+            {savedCopyId
+              ? (language === "zh" ? "已保存到本机 · 打开" : "Saved locally · Open")
+              : copy.save_to_device}
+          </button>
+        ) : null}
         <ArchiveOwnerSettingsFields category={category} subTagId={typeof archive.sub_tag_id === "string" ? archive.sub_tag_id : null}
           groupTagId={typeof archive.group_tag_id === "string" ? archive.group_tag_id : null}
           subTags={subTags} groupTags={groupTags} maxDepth={depths[category]}
@@ -232,7 +280,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
       recordComposer={<ArchiveAddRecordSection archiveId={archiveId} archiveCategory={archive.category}
         archiveIsPublic={archive.is_public} activeCycles={activeCycles} mobileMode open={addOpen}
         initialFiles={initialFiles} initialCapturedAt={initialCapturedAt} initialNote={initialNote}
-        onClose={() => { setAddOpen(false); onRecordCancelled?.(); }} onRecordCreated={async () => { await reload(); setAddOpen(false); onRecordCreated?.(); }} />}
+        onClose={() => { setAddOpen(false); onRecordCancelled?.(); }} onRecordCreated={async () => { await reload(); setAddOpen(false); onRecordCreated?.(); await onCacheChanged(); }} />}
       onFloatingAdd={showFloatingAdd ? () => setAddOpen(true) : undefined} floatingAddLabel={language === "zh" ? "添加记录" : "Add record"}
       emptyRecordsText={copy.no_records_owner}
       onStartCycle={(startedAt) => change(async () => {
@@ -260,7 +308,10 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
           const images = media.map((m) => ({ id: m.id, recordId: record.id, url: m.display_url || m.url || "", alt: m.original_filename || "" })).filter((m) => m.url);
           if (images.length) setLightbox({ images, index: imageIndex, record });
         }}
-        onDeleteMedia={async (_recordId, mediaId) => { if (!await requestCloudTrash("media", mediaId)) throw new Error(recordCopy.delete_failed); await reload(); }}
+        onDeleteMedia={async (_recordId, mediaId) => {
+          if (!isAndroidOnline() || !await requestCloudTrash("media", mediaId)) throw new Error(recordCopy.delete_failed);
+          await reload();
+        }}
         onAddMedia={(recordId, files) => change(async () => { await uploadCloudRecordImages({ recordId, files, userId }); })}
         onReplaceMedia={(recordId, mediaId, files) => change(async () => {
           const uploaded = await uploadCloudRecordImages({ recordId, files: files.slice(0, 1), userId });
@@ -311,10 +362,11 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
           if (result.error) throw result.error;
         })}
       />}
-      lightbox={lightbox ? { ...lightbox, metaText: formatDateTime(lightbox.record.record_time), note: lightbox.record.note || "",
-        publishHref: `/market/new?archiveId=${encodeURIComponent(archiveId)}&recordId=${encodeURIComponent(lightbox.record.id)}`,
+      lightbox={lightbox ? { ...lightbox, metaText: formatDateTime(lightbox.record.record_time),
+        dayText: `${recordCopy.day_prefix} ${getDayNumber(records.at(-1)?.record_time || archive.created_at || lightbox.record.record_time, lightbox.record.record_time)}${recordCopy.day_suffix ? ` ${recordCopy.day_suffix}` : ""}`,
+        note: lightbox.record.note || "",
         onDeleteCurrentImage: async (image) => {
-          if (!image.id || !await requestCloudTrash("media", image.id)) throw new Error(recordCopy.delete_failed);
+          if (!isAndroidOnline() || !image.id || !await requestCloudTrash("media", image.id)) throw new Error(recordCopy.delete_failed);
           const remaining = lightbox.images.filter((item) => item.id !== image.id);
           setLightbox((current) => current ? {
             ...current,
@@ -326,6 +378,17 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
         },
         onChange: (index) => setLightbox((current) => current ? { ...current, index } : null),
         onClose: () => setLightbox(null) } : null}
+    />
+    <AppConfirmDialog
+      open={copyConfirmOpen}
+      title={language === "zh" ? "保存到本机" : "Save to device"}
+      message={language === "zh"
+        ? "云端原项目保持不变；本机将新增独立副本。若有待上传的记录或图片，请先处理。"
+        : "The cloud original stays unchanged. Resolve pending records or photos before creating a separate local copy."}
+      cancelLabel={language === "zh" ? "取消" : "Cancel"}
+      confirmLabel={language === "zh" ? "确认保存" : "Save"}
+      onCancel={() => setCopyConfirmOpen(false)}
+      onConfirm={() => void saveToDevice()}
     />
     <AppConfirmDialog
       open={trashConfirmOpen}

@@ -162,14 +162,9 @@ export default function DeviceOwnedProjectDetail({
     id: cycle.id,
     label: `${cycle.display_name || cycleTerminology.cycleLabel(cycle.cycle_no)} (${cycle.status === "active" ? archiveCopy.ongoing : archiveCopy.ended} · ${formatLocalCycleDate(cycle.started_at)})`,
   }));
-  const lightboxRecordIndex = lightboxRecord
-    ? recordItems.findIndex((record) => record.id === lightboxRecord.id)
-    : -1;
-  const lightboxMetaText = lightboxRecord
-    ? `${lightboxRecordIndex === 0 ? `${archiveCopy.latest_update} · ` : ""}${recordCopy.day_prefix} ${getDayNumber(
-        startTime,
-        lightboxRecord.record_time,
-      )}${recordCopy.day_suffix ? ` ${recordCopy.day_suffix}` : ""} · ${formatDate(lightboxRecord.record_time)}`
+  const lightboxMetaText = lightboxRecord ? formatDate(lightboxRecord.record_time) : "";
+  const lightboxDayText = lightboxRecord
+    ? `${recordCopy.day_prefix} ${getDayNumber(startTime, lightboxRecord.record_time)}${recordCopy.day_suffix ? ` ${recordCopy.day_suffix}` : ""}`
     : "";
 
   async function change(work: () => Promise<unknown>) {
@@ -428,6 +423,7 @@ export default function DeviceOwnedProjectDetail({
         index: lightboxIndex,
         onChange: setLightboxIndex,
         metaText: lightboxMetaText,
+        dayText: lightboxDayText,
         note: lightboxRecord?.note || "",
         onClose: () => {
           setLightboxImages([]);

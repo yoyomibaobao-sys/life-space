@@ -28,7 +28,7 @@ const singleRuntimeAcceptance = process.env.ANDROID_SINGLE_RUNTIME === "1";
 
 const config: CapacitorConfig = {
   appId: "com.youshi.cultivation",
-  appName: "有时·耕作",
+  appName: "LifeSpace",
   webDir: "mobile-shell",
   backgroundColor: "#f6f8f3ff",
   appendUserAgent: " LifeSpaceAndroid/1.0",

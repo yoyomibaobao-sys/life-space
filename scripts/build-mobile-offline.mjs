@@ -20,10 +20,32 @@ function resolveCloudOrigin() {
 }
 
 const cloudOrigin = resolveCloudOrigin();
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-const supabasePublishableKey =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+const qaBuild = process.env.ANDROID_REQUIRE_QA_SUPABASE === "1";
+const isolatedQaSupabase = "https://mablwxlipcgbmbnfdbkc.supabase.co";
+const productionSupabase = "https://eidltoikfpnrzxruvawf.supabase.co";
+// A QA build reads only the explicit QA variables. A production value already
+// present in the process or .env.local must not replace them.
+const supabaseUrl = (qaBuild
+  ? process.env.ANDROID_QA_SUPABASE_URL
+  : process.env.NEXT_PUBLIC_SUPABASE_URL)?.trim();
+// QA must configure a matching export API; never send its token to production.
+const exportOrigin = process.env.ANDROID_CLOUD_EXPORT_ORIGIN?.trim() ||
+  (supabaseUrl?.replace(/\/$/, "") === productionSupabase ? defaultServerUrl : "");
+if (qaBuild) {
+  if (supabaseUrl?.replace(/\/$/, "") !== isolatedQaSupabase) {
+    throw new Error("QA Android build requires the isolated Supabase project.");
+  }
+  if (exportOrigin === defaultServerUrl) {
+    throw new Error("qa_export_to_production_rejected");
+  }
+}
+if (exportOrigin && (new URL(exportOrigin).origin !== exportOrigin || !exportOrigin.startsWith("https://"))) {
+  throw new Error("ANDROID_CLOUD_EXPORT_ORIGIN must be an HTTPS origin without a path.");
+}
+const supabasePublishableKey = (qaBuild
+  ? process.env.ANDROID_QA_SUPABASE_PUBLISHABLE_KEY
+  : process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)?.trim();
 const turnstileSiteKey =
   process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || "";
 const alipayPaymentQrUrl = process.env.NEXT_PUBLIC_ALIPAY_PAYMENT_QR_URL?.trim() || "";
@@ -52,6 +74,7 @@ const buildResult = await build({
   jsx: "automatic",
   define: {
     __LIFESPACE_CLOUD_ORIGIN__: JSON.stringify(cloudOrigin),
+    "process.env.NEXT_PUBLIC_CLOUD_EXPORT_ORIGIN": JSON.stringify(exportOrigin),
     "process.env.NODE_ENV": JSON.stringify("production"),
     "process.env.NEXT_PUBLIC_SUPABASE_URL": JSON.stringify(supabaseUrl),
     "process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY":
@@ -61,6 +84,9 @@ const buildResult = await build({
       JSON.stringify(turnstileSiteKey),
     "process.env.NEXT_PUBLIC_ALIPAY_PAYMENT_QR_URL": JSON.stringify(alipayPaymentQrUrl),
     "process.env.NEXT_PUBLIC_ALIPAY_PAYEE_NAME": JSON.stringify(alipayPayeeName),
+    // Do not switch bundled Android images to relative /api URLs: the APK's
+    // local origin has no API server. Native cloud transport needs separate QA.
+    "process.env.NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED": JSON.stringify("false"),
     // A few shared UI components pull in Next client helpers. In the normal
     // Next build these flags are replaced by the compiler. The standalone
     // Android shell is bundled by esbuild, so leaving them behind causes
@@ -129,6 +155,8 @@ const bridgeHtml = bridgeTemplate.replace(
 );
 
 await fs.mkdir(outputRoot, { recursive: true });
+await fs.mkdir(path.join(outputRoot, "brand"), { recursive: true });
+await fs.copyFile(path.join(root, "public/brand/youshi-space-icon-192.png"), path.join(outputRoot, "brand/youshi-space-icon-192.png"));
 if (singleRuntimeAcceptance) {
   const bundledIndex = offlineHtml.replace(
     "<html lang=\"zh-CN\">",

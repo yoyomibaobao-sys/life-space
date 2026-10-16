@@ -42,20 +42,20 @@ type Props = {
   onRenameSubcategory?: (
     chip: ArchiveTaxonomyChip,
     nextName?: string
-  ) => void | Promise<void>;
-  onDeleteSubcategory?: (chip: ArchiveTaxonomyChip) => void | Promise<void>;
+  ) => void | boolean | Promise<void | boolean>;
+  onDeleteSubcategory?: (chip: ArchiveTaxonomyChip) => void | boolean | Promise<void | boolean>;
   onCreateSubcategory?: (
     category: ArchiveCategory,
     name: string
-  ) => void | Promise<void>;
+  ) => void | boolean | Promise<void | boolean>;
   onResetGroup: () => void;
   onSelectGroup: (chip: ArchiveTaxonomyChip) => void;
   onRenameGroup?: (
     chip: ArchiveTaxonomyChip,
     nextName?: string
-  ) => void | Promise<void>;
-  onDeleteGroup?: (chip: ArchiveTaxonomyChip) => void | Promise<void>;
-  onCreateGroup?: (name: string) => void | Promise<void>;
+  ) => void | boolean | Promise<void | boolean>;
+  onDeleteGroup?: (chip: ArchiveTaxonomyChip) => void | boolean | Promise<void | boolean>;
+  onCreateGroup?: (name: string) => void | boolean | Promise<void | boolean>;
 }
 
 type TaxonomyAction =
@@ -130,8 +130,7 @@ export default function ArchiveTaxonomyPanel({
       if (!handler) return;
       setActionBusy(true);
       try {
-        await handler(actionTarget.chip, nextName);
-        setActionTarget(null);
+        if (await handler(actionTarget.chip, nextName) !== false) setActionTarget(null);
       } finally {
         setActionBusy(false);
       }
@@ -141,9 +140,9 @@ export default function ArchiveTaxonomyPanel({
     setActionBusy(true);
     try {
       if (actionTarget.kind === "subcategory") {
-        await onCreateSubcategory?.(actionTarget.category, nextName);
+        if (await onCreateSubcategory?.(actionTarget.category, nextName) === false) return;
       } else {
-        await onCreateGroup?.(nextName);
+        if (await onCreateGroup?.(nextName) === false) return;
       }
       setActionTarget(null);
     } finally {
@@ -159,8 +158,7 @@ export default function ArchiveTaxonomyPanel({
 
     setActionBusy(true);
     try {
-      await handler(actionTarget.chip);
-      setActionTarget(null);
+      if (await handler(actionTarget.chip) !== false) setActionTarget(null);
     } finally {
       setActionBusy(false);
     }
@@ -395,7 +393,7 @@ function TaxonomyChipButton({
   active: boolean;
   compact: boolean;
   onSelect: () => void;
-  onDelete?: () => void | Promise<void>;
+  onDelete?: () => void | boolean | Promise<void | boolean>;
   onRename?: () => void;
   onLongPress?: () => void;
 }) {

@@ -4,7 +4,6 @@ import type { CSSProperties } from "react";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import InternalLink from "@/components/navigation/InternalLink";
-import ConfirmDialog from "@/components/ConfirmDialog";
 import UiIcon from "@/components/ui/UiIcon";
 import {
   archiveCategoryOptions,
@@ -13,8 +12,6 @@ import {
 } from "@/lib/archive-categories";
 import type { ArchiveCategoryDepth, ArchiveCategoryDepths, ArchiveCategorySpace } from "@/lib/archive-category-settings";
 import { useLanguage } from "@/lib/i18n/useLanguage";
-import { useState, type FormEvent } from "react";
-import type { ProjectTaxonomyEntry } from "@/lib/android-project-taxonomy";
 
 export default function ProjectCategorySettingsView({
   activeSpace,
@@ -27,10 +24,6 @@ export default function ProjectCategorySettingsView({
   onToggleDepth,
   onSave,
   onBack,
-  entries = [],
-  onCreate,
-  onRename,
-  onDelete,
 }: {
   activeSpace: ArchiveCategorySpace;
   onSpaceChange: (space: ArchiveCategorySpace) => void;
@@ -42,47 +35,11 @@ export default function ProjectCategorySettingsView({
   onToggleDepth: (category: ArchiveCategory, depth: ArchiveCategoryDepth) => void;
   onSave: () => void;
   onBack?: () => void;
-  entries?: ProjectTaxonomyEntry[];
-  onCreate?: (category: ArchiveCategory, label: string, parentId?: string | null) => Promise<void>;
-  onRename?: (entry: ProjectTaxonomyEntry, label: string) => Promise<void>;
-  onDelete?: (entry: ProjectTaxonomyEntry) => Promise<void>;
 }) {
   const { language, t } = useLanguage();
   const isEnglish = language === "en";
   const pageTitle = t.archive_workspace.group_settings_title;
   const cloudLocked = activeSpace === "cloud" && cloudRequiresNetwork;
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const [editing, setEditing] = useState<ProjectTaxonomyEntry | null>(null);
-  const [editLabel, setEditLabel] = useState("");
-  const [deleting, setDeleting] = useState<ProjectTaxonomyEntry | null>(null);
-
-  async function create(event: FormEvent<HTMLFormElement>, category: ArchiveCategory, parentId?: string | null) {
-    event.preventDefault();
-    const key = parentId || category;
-    const value = drafts[key]?.trim();
-    if (!value || !onCreate) return;
-    setBusy(true);
-    try { await onCreate(category, value, parentId); setDrafts((current) => ({ ...current, [key]: "" })); }
-    finally { setBusy(false); }
-  }
-
-  async function rename() {
-    const value = editLabel.trim();
-    if (!editing || !value || !onRename) return;
-    setBusy(true);
-    try { if (value !== editing.label) await onRename(editing, value); setEditing(null); }
-    finally { setBusy(false); }
-  }
-
-  async function remove() {
-    if (!onDelete || !deleting) return;
-    setBusy(true);
-    try { await onDelete(deleting); setDeleting(null); } finally { setBusy(false); }
-  }
-
-  function startRename(entry: ProjectTaxonomyEntry) { setEditing(entry); setEditLabel(entry.label); }
-
   function updateDepth(category: ArchiveCategory, depth: ArchiveCategoryDepth) {
     if (cloudLocked) return;
     onToggleDepth(category, depth);
@@ -159,37 +116,20 @@ export default function ProjectCategorySettingsView({
                       ? (isEnglish ? "No groups" : "未开启分组")
                       : (isEnglish ? `${depth - 1} group ${depth === 2 ? "level" : "levels"}` : `${depth === 2 ? "一级" : "二级"}分组`)}</span>
                   </div>
-                  <SettingRow label={t.archive_workspace.main_category} value={isEnglish ? "Enabled" : "已启用"} />
                   <SettingRow
                     label={isEnglish ? "Enable level 1 groups" : "开启一级分组"}
                     checked={secondEnabled}
-                    onToggle={cloudLocked ? undefined : () => updateDepth(category, secondEnabled ? 1 : 2)}
+                    onToggle={() => updateDepth(category, secondEnabled ? 1 : 2)}
+                    disabled={cloudLocked}
                   />
                   {secondEnabled ? (
                     <SettingRow
                       label={isEnglish ? "Enable level 2 groups" : "开启二级分组"}
                       checked={thirdEnabled}
-                      onToggle={cloudLocked ? undefined : () => updateDepth(category, thirdEnabled ? 2 : 3)}
+                      onToggle={() => updateDepth(category, thirdEnabled ? 2 : 3)}
+                      disabled={cloudLocked}
                     />
                   ) : null}
-                  {secondEnabled && (onCreate || entries.length > 0) ? <div style={{ padding: 14 }}>
-                    {entries.filter((entry) => entry.kind === "subcategory" && entry.category === category).map((parent) => (
-                      <div key={parent.id} data-taxonomy-level="1" style={{ marginBottom: 12 }}>
-                        <div><strong>{parent.label}</strong>{onRename && !cloudLocked ? <button type="button" disabled={busy} onClick={() => startRename(parent)}>{isEnglish ? "Rename" : "重命名"}</button> : null}
-                          {onDelete && !cloudLocked ? <button type="button" disabled={busy} onClick={() => setDeleting(parent)}>{isEnglish ? "Delete" : "删除"}</button> : null}</div>
-                        {thirdEnabled ? <div style={{ paddingLeft: 16 }}>
-                          {entries.filter((child) => child.kind === "group" && child.parentId === parent.id).map((child) => <div key={child.id} data-taxonomy-level="2">
-                            {child.label}{onRename && !cloudLocked ? <button type="button" disabled={busy} onClick={() => startRename(child)}>{isEnglish ? "Rename" : "重命名"}</button> : null}
-                            {onDelete && !cloudLocked ? <button type="button" disabled={busy} onClick={() => setDeleting(child)}>{isEnglish ? "Delete" : "删除"}</button> : null}
-                          </div>)}
-                          {!cloudLocked && onCreate ? <form onSubmit={(event) => void create(event, category, parent.id)}><input aria-label={isEnglish ? "New level 2 group" : "新建二级分组"} value={drafts[parent.id] || ""} onChange={(event) => setDrafts((current) => ({ ...current, [parent.id]: event.target.value }))} />
-                            <button type="submit" disabled={busy}>{isEnglish ? "Add" : "新增"}</button></form> : null}
-                        </div> : null}
-                      </div>
-                    ))}
-                    {!cloudLocked && onCreate ? <form onSubmit={(event) => void create(event, category)}><input aria-label={isEnglish ? "New level 1 group" : "新建一级分组"} value={drafts[category] || ""} onChange={(event) => setDrafts((current) => ({ ...current, [category]: event.target.value }))} />
-                      <button type="submit" disabled={busy}>{isEnglish ? "Add" : "新增"}</button></form> : null}
-                  </div> : null}
                 </article>
               );
             })}
@@ -206,45 +146,35 @@ export default function ProjectCategorySettingsView({
           {saving ? (isEnglish ? "Saving..." : "保存中…") : (isEnglish ? "Save" : "保存")}
         </button>
       </div>
-      <ConfirmDialog open={Boolean(editing)} title={isEnglish ? "Rename group" : "重命名分组"}
-        message={editing?.label || ""} confirmDisabled={busy || !editLabel.trim()} onClose={() => setEditing(null)} onConfirm={rename}>
-        <input aria-label={isEnglish ? "Group name" : "分组名称"} value={editLabel} onChange={(event) => setEditLabel(event.target.value)} maxLength={80} />
-      </ConfirmDialog>
-      <ConfirmDialog open={Boolean(deleting)} title={isEnglish ? "Delete group" : "删除分组"}
-        message={isEnglish ? `Delete ${deleting?.label || ""}?` : `删除“${deleting?.label || ""}”？`}
-        danger confirmDisabled={busy} onClose={() => setDeleting(null)} onConfirm={remove} />
     </main>
   );
 }
 
 function SettingRow({
   label,
-  value,
   checked,
   onToggle,
+  disabled,
 }: {
   label: string;
-  value?: string;
-  checked?: boolean;
-  onToggle?: () => void;
+  checked: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
 }) {
   return (
     <div style={settingRowStyle}>
       <span>{label}</span>
-      {onToggle ? (
-        <button
-          type="button"
-          role="switch"
-          aria-checked={checked}
-          aria-label={label}
-          onClick={onToggle}
-          style={toggleStyle(Boolean(checked))}
-        >
-          <span style={toggleThumbStyle(Boolean(checked))} />
-        </button>
-      ) : (
-        <strong style={enabledTextStyle}>{value}</strong>
-      )}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
+        onClick={onToggle}
+        style={toggleStyle(checked)}
+      >
+        <span style={toggleThumbStyle(checked)} />
+      </button>
     </div>
   );
 }
@@ -263,7 +193,6 @@ const categoryListStyle: CSSProperties = { display: "grid", gap: 12 };
 const categoryCardStyle: CSSProperties = { overflow: "hidden", border: "1px solid #dfe8da", borderRadius: 16, background: "#fff", boxShadow: "0 5px 16px rgba(38, 61, 36, 0.04)" };
 const categoryHeadingStyle: CSSProperties = { minHeight: 52, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "0 15px", borderBottom: "1px solid #edf1e9", color: "#314b30" };
 const settingRowStyle: CSSProperties = { minHeight: 54, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "0 15px", borderBottom: "1px solid #f0f3ed", color: "#50604d", fontSize: 15 };
-const enabledTextStyle: CSSProperties = { color: "#4d7b49", fontSize: 14 };
 function toggleStyle(active: boolean): CSSProperties {
   return { position: "relative", width: 50, height: 30, flex: "0 0 50px", padding: 0, border: "1px solid #cad8c6", borderRadius: 999, background: active ? "#56854e" : "#e8eee5", cursor: "pointer" };
 }

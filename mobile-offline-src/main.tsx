@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useState,
   useRef,
+  useSyncExternalStore,
   type FormEvent,
 } from "react";
 import { createRoot } from "react-dom/client";
@@ -51,6 +52,8 @@ import {
   type StoredLocalOwnerContext,
 } from "@/lib/local-owner-context";
 import { migrateLegacyLocalOrigin } from "@/lib/local-origin-migration";
+import { regrantSavedSafDirectory } from "@/lib/local-saf-directory";
+import { getLocalSafDirectory } from "@/lib/local-saf-native";
 import { retireBundledLegacyServiceWorkers } from "@/lib/android-service-worker";
 import { normalizeLocalImageBlob } from "@/lib/local-image-blob";
 import {
@@ -61,6 +64,9 @@ import {
 } from "@/lib/archive-categories";
 
 import AuthCaptcha, { AUTH_CAPTCHA_ENABLED } from "@/components/AuthCaptcha";
+import { AndroidRegistration, AndroidRegistrationEmail } from "@/components/auth/AndroidRegistration";
+import AndroidBrandIntroduction from "@/components/brand/AndroidBrandIntroduction";
+import { markAndroidWelcomeCompleted, shouldShowAndroidWelcome } from "@/lib/android-first-use";
 import { formatBundledLoginError, loginBundledWithTurnstile } from "@/lib/android-auth-session";
 import {
   completeAndroidAuthLogin,
@@ -86,6 +92,8 @@ import KeyboardLayoutGuard from "@/components/KeyboardLayoutGuard";
 import { InternalNavigationProvider } from "@/components/navigation/InternalLink";
 import ProjectCategorySettingsView from "@/components/profile/ProjectCategorySettingsView";
 import PersonalSpaceMobileIdentity from "@/components/archive-ui/PersonalSpaceMobileIdentity";
+import AndroidCloudTrialReminder from "@/components/archive-ui/AndroidCloudTrialReminder";
+import AndroidCloudTrialEntry from "@/components/profile/AndroidCloudTrialEntry";
 import ArchiveTaxonomyPanel, { type ArchiveTaxonomyChip } from "@/components/archive-ui/ArchiveTaxonomyPanel";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import MobileBottomNavigationView, {
@@ -120,8 +128,12 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-time";
 import { supabase } from "@/lib/supabase";
+import { buildAuthEmailRedirect } from "@/lib/auth-return";
+import { App as CapacitorApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
-import { isAndroidOnline, recheckAndroidConnectivity, useAndroidConnectivity } from "@/lib/android-connectivity";
+import { qaShareOrigin } from "@/lib/android-native-share";
+import { Capacitor } from "@capacitor/core";
+import { isAndroidOnline, recheckAndroidConnectivity, useAndroidConnectivity, useAndroidConnectivityStatus } from "@/lib/android-connectivity";
 import { getRecentArchiveBrowseItems, saveRecentArchiveBrowse } from "@/lib/recent-browse";
 import {
   createCloudProjectTaxonomy, deleteCloudProjectTaxonomy, loadCloudProjectTaxonomy,
@@ -135,10 +147,12 @@ import { syncLocalArchiveToCloud, type LocalToCloudVisibility } from "@/lib/loca
 import { canAddLocalArchiveRecord } from "@/lib/local-archive-detail-adapters";
 import { readCloudTaxonomySnapshot } from "@/lib/cloud-taxonomy-snapshot";
 import { createLiveCloudArchive } from "@/lib/android-live-cloud-create";
-import { projectCreationDestinations, type CreationDestination, type QuickAddDraft, type QuickAddSource } from "@/lib/android-creation-capabilities";
+import { canReadAndroidCloudWorkspace, chooseProjectSources, projectCreationDestinations, workspaceSourceOptions, type CreationDestination, type QuickAddDraft, type QuickAddSource } from "@/lib/android-creation-capabilities";
 import { formatStorage } from "@/lib/user-profile-shared";
 import {
+  canCreateMembershipContent,
   getUserTypeLabel,
+  normalizeCloudTrialOfferRpcResult,
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
@@ -167,6 +181,7 @@ import { NewMarketPostContent } from "@/app/market/new/page";
 import AndroidExperienceCardDetail from "@/components/experience-card/AndroidExperienceCardDetail";
 import { MyExperienceCardsContent } from "@/app/experience-cards/page";
 import { ExperienceCardContent } from "@/app/experience-cards/[id]/page";
+import ExperienceCardEditor from "@/components/experience-card/ExperienceCardEditor";
 import AndroidProfileController from "@/components/profile/AndroidProfileController";
 import AndroidProfileInfoPage, { type AndroidProfileInfoKind } from "@/components/profile/AndroidProfileInfoPage";
 import MembershipPaymentPage from "@/app/membership/payment/page";
@@ -192,6 +207,13 @@ import {
   parseAndroidShellPath,
   resolveAndroidArchiveScreen,
 } from "@/lib/android-shell-app-routes";
+import {
+  COMPLETED_LOGIN_FLOW_KINDS,
+  COMPLETED_PROJECT_FLOW_KINDS,
+  describeShellHistoryPush,
+  marketDetailBackPopsToList,
+  planCompletedShellFlow,
+} from "@/lib/android-shell-history";
 
 const MAX_PHOTOS = 10;
 
@@ -301,6 +323,10 @@ type CloudArchiveSummary = {
 
 type Screen =
   | { kind: "list" }
+  | { kind: "welcome" }
+  | { kind: "about" }
+  | { kind: "register" }
+  | { kind: "check-email"; email: string }
   | { kind: "new-project"; guide?: SystemNameCandidate; destination?: CreationDestination }
   | { kind: "project-destination" }
   | { kind: "quick-add" }
@@ -311,6 +337,7 @@ type Screen =
   | { kind: "public-detail" }
   | { kind: "experience" }
   | { kind: "my-experience" }
+  | { kind: "experience-new"; search?: string }
   | { kind: "experience-detail"; id: string; returnTo?: "my-experience" }
   | { kind: "following" }
   | { kind: "market" }
@@ -321,7 +348,7 @@ type Screen =
   | { kind: "interests"; section: string }
   | { kind: "plant-detail"; id: string }
   | { kind: "guide-detail"; guideKey: string; guideId?: string }
-  | { kind: "profile" }
+  | { kind: "profile"; module?: "backup" }
   | { kind: "project-categories" }
   | { kind: "recent" }
   | { kind: "trash" }
@@ -351,6 +378,7 @@ const text = {
     home: "首页", follow: "关注", market: "集市", me: "我", guides: "指引", discover: "发现", experience: "经验",
     cloudUnavailable: "当前未联网，云端内容暂不可用", needNetwork: "需要联网", webOnly: "此功能暂需在网页中使用", cloudProjects: "云端项目", cloudLoading: "正在读取云端项目…",
     cloudLoadFailed: "云端项目读取失败，请稍后重试。", cloudSignIn: "登录后可查看云端项目",
+    localSpaceOff: "本地空间已关闭，请在用户信息中启用本地空间。",
     saveLocalCopy: "保存到本机", refreshLocalCopy: "更新本机副本", openLocalCopy: "打开本机副本",
     offlineCopies: "云端缓存副本",     cacheNotReady: "这个项目尚未缓存，请联网登录后等待后台准备。", cloudCacheReadOnly: "云端已有记录离线只读；新增记录先保存本机，联网后手动上传。", noCachedProjects: "还没有云项目缓存。请先联网登录，后台会准备轻量副本。",
     savingCloudCopy: "正在保存到本机…", cloudCopySaved: "云端项目已保存到本机",
@@ -369,6 +397,11 @@ const text = {
     offlineTitle: "当前离线，本地记录可用",
     offlineBody: "项目、记录和照片先保存在本机。联网后可手动上传待上传的云端内容；明确选择本地免费使用的项目不会自动上传。",
     migrationWarning: "旧版本地资料暂未完成迁移。现有资料不会被删除，请稍后重新打开 App 再试。",
+    safRegrantWarning: "本地资料文件夹的授权已失效。请重新授权原文件夹，资料不会被重建或覆盖。",
+    safRegrantAction: "重新授权原文件夹", safRegranting: "正在验证原文件夹…",
+    safRegrantCanceled: "已取消授权，原资料未改变；可以再次尝试。",
+    safRegrantWrong: "请选择原来的 LifeSpace 资料文件夹；原资料未改变。",
+    safRegrantFailed: "无法验证原文件夹及本地空间身份，原资料未改变；请检查目录后重试。",
     reconnect: "重新连接云端",
     newProject: "新建项目",
     localProjects: "本地项目",
@@ -422,6 +455,7 @@ const text = {
     home: "Home", follow: "Following", market: "Market", me: "Me", guides: "Guides", discover: "Discover", experience: "Experience",
     cloudUnavailable: "Cloud content is unavailable while offline", needNetwork: "A network connection is required", webOnly: "This feature is currently available on the website", cloudProjects: "Cloud projects", cloudLoading: "Loading cloud projects…",
     cloudLoadFailed: "Could not load cloud projects. Try again later.", cloudSignIn: "Sign in to view cloud projects",
+    localSpaceOff: "Local space is off. Enable local space in your profile.",
     saveLocalCopy: "Save on device", refreshLocalCopy: "Refresh device copy", openLocalCopy: "Open device copy",
     offlineCopies: "Cached cloud copy", cacheNotReady: "This project has not been cached yet. Sign in online and let it prepare in the background.", cloudCacheReadOnly: "Existing cloud records are read-only offline. New records stay on this device and you can upload them after reconnecting.", noCachedProjects: "No cached cloud projects yet. Sign in online to prepare lightweight copies.",
     savingCloudCopy: "Saving on device…", cloudCopySaved: "Cloud project saved on this device",
@@ -440,6 +474,11 @@ const text = {
     offlineTitle: "Cloud is temporarily unavailable. Local records still work.",
     offlineBody: "Projects, records and photos are saved on this device first. Upload pending cloud changes manually after reconnecting. Projects you mark as local-only stay local.",
     migrationWarning: "Previous local data has not finished migrating. Nothing was deleted; reopen the app later to retry.",
+    safRegrantWarning: "Access to your local data folder was lost. Reauthorize the original folder; existing data will not be replaced.",
+    safRegrantAction: "Reauthorize original folder", safRegranting: "Checking original folder…",
+    safRegrantCanceled: "Authorization canceled. Your data is unchanged; try again when ready.",
+    safRegrantWrong: "Select the original LifeSpace data folder. Your data is unchanged.",
+    safRegrantFailed: "The original folder and local space could not be verified. Your data is unchanged; check the folder and retry.",
     reconnect: "Reconnect to cloud",
     newProject: "New local project",
     localProjects: "Local projects",
@@ -567,13 +606,11 @@ function OfflineProjectCategorySettings({
   ownerUserId,
   online,
   cloudUserId,
-  cachedEntries,
   onBack,
 }: {
   ownerUserId: string;
   online: boolean;
   cloudUserId: string | null;
-  cachedEntries: ProjectTaxonomyEntry[];
   onBack: () => void;
 }) {
   const [activeSpace, setActiveSpace] = useState<ArchiveCategorySpace>(
@@ -587,25 +624,13 @@ function OfflineProjectCategorySettings({
   const [cloudLoading, setCloudLoading] = useState(false);
   const [error, setError] = useState("");
   const cloudAvailable = online && cloudUserId === ownerUserId;
-  const [localEntries, setLocalEntries] = useState<ProjectTaxonomyEntry[]>([]);
-  const [cloudEntries, setCloudEntries] = useState<ProjectTaxonomyEntry[]>([]);
-  const localContext = useMemo(() => ownerUserId ? { userId: ownerUserId } : null, [ownerUserId]);
-  const reloadLocal = useCallback(async () => {
-    setLocalEntries(mapLocalProjectTaxonomy(await listVisibleLocalTaxonomyItems(localContext)));
-  }, [localContext]);
-  const reloadCloud = useCallback(async () => {
-    if (cloudAvailable) setCloudEntries(await loadCloudProjectTaxonomy(ownerUserId));
-  }, [cloudAvailable, ownerUserId]);
-
-  useEffect(() => { void reloadLocal().catch((cause) => setError(String(cause))); }, [reloadLocal]);
-
   useEffect(() => {
     if (!cloudAvailable || activeSpace !== "cloud") return;
     let active = true;
     setCloudLoading(true);
     setError("");
-    void Promise.all([getCloudArchiveCategoryDepths(ownerUserId), loadCloudProjectTaxonomy(ownerUserId)]).then(([depths, entries]) => {
-      if (active) { setCloudDepths(depths); setCloudEntries(entries); }
+    void getCloudArchiveCategoryDepths(ownerUserId).then((depths) => {
+      if (active) setCloudDepths(depths);
     }).catch((cause) => {
       if (active) setError(cause instanceof Error ? cause.message : String(cause));
     }).finally(() => { if (active) setCloudLoading(false); });
@@ -623,37 +648,11 @@ function OfflineProjectCategorySettings({
     setError("");
     try {
       if (activeSpace === "cloud") await saveCloudArchiveCategoryDepths(ownerUserId, cloudDepths);
-      else saveLocalArchiveCategoryDepths(localDepths, ownerUserId);
+      else await saveLocalArchiveCategoryDepths(localDepths, ownerUserId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function mutateTaxonomy(action: "create" | "rename" | "delete", category: ArchiveCategory,
-    labelOrEntry: string | ProjectTaxonomyEntry, parentId?: string | null, nextLabel?: string) {
-    setError("");
-    try {
-      const entry = typeof labelOrEntry === "string" ? null : labelOrEntry;
-      if (activeSpace === "cloud") {
-        if (!cloudAvailable) throw new Error("需要联网");
-        if (action === "create") await createCloudProjectTaxonomy({ userId: ownerUserId, category, label: labelOrEntry as string, parentId });
-        else if (entry && action === "rename") await renameCloudProjectTaxonomy({ userId: ownerUserId, entry, label: nextLabel || "" });
-        else if (entry) await deleteCloudProjectTaxonomy({ userId: ownerUserId, entry });
-        await reloadCloud();
-      } else {
-        const parent = localEntries.find((item) => item.id === parentId);
-        const fields = { category, subcategory: entry?.kind === "group"
-          ? localEntries.find((item) => item.id === entry.parentId)?.label || null
-          : parent?.label || null };
-        if (action === "create") await createLocalTaxonomyItem({ ...fields, kind: parentId ? "group" : "subcategory", label: labelOrEntry as string }, localContext);
-        else if (entry && action === "rename") await renameLocalTaxonomyItem({ ...fields, kind: entry.kind, oldLabel: entry.label, newLabel: nextLabel || "" }, localContext);
-        else if (entry) await deleteLocalTaxonomyItem({ ...fields, kind: entry.kind, label: entry.label }, localContext);
-        await reloadLocal();
-      }
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
     }
   }
 
@@ -667,10 +666,6 @@ function OfflineProjectCategorySettings({
       error={error}
       cloudRequiresNetwork={!cloudAvailable}
       onToggleDepth={updateDepth}
-      entries={activeSpace === "cloud" ? (cloudAvailable ? cloudEntries : cachedEntries) : localEntries}
-      onCreate={(category, label, parentId) => mutateTaxonomy("create", category, label, parentId)}
-      onRename={(entry, label) => mutateTaxonomy("rename", entry.category, entry, entry.parentId, label)}
-      onDelete={(entry) => mutateTaxonomy("delete", entry.category, entry, entry.parentId)}
       onSave={() => void save()}
       onBack={onBack}
     />
@@ -681,6 +676,12 @@ function App() {
   const [language, setLanguage] = useState<Language>(getLanguage);
   const copy = text[language];
   const [screen, setScreenState] = useState<Screen>({ kind: "list" });
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
+  const shellStackRef = useRef<Screen[]>([{ kind: "list" }]);
+  const replaceCompletedFlowRef = useRef(false);
+  const pendingFlowRef = useRef<null | { landedCount: number; apply: () => void }>(null);
+  const marketDetailSourceKindRef = useRef<string | null>(null);
   const [quickAddDraft, setQuickAddDraft] = useState<QuickAddDraft | null>(null);
   const [detailAddRecordRequest, setDetailAddRecordRequest] = useState<{ archiveId: string; nonce: number } | null>(null);
   const [chooseProjectExpanded, setChooseProjectExpanded] = useState<{ cloud: boolean; local: boolean }>({ cloud: false, local: false });
@@ -724,22 +725,40 @@ function App() {
   }
 
   function setScreen(next: Screen, replace = false) {
-    const nextHistoryState = { offlineScreen: next, scrollY: 0 };
-    if (replace) {
-      window.history.replaceState(nextHistoryState, "", `#${next.kind}`);
+    const leaving = screenRef.current;
+    const replacing = replace || replaceCompletedFlowRef.current;
+    if (replacing) {
+      if (shellStackRef.current.length === 0) shellStackRef.current.push(next);
+      else shellStackRef.current[shellStackRef.current.length - 1] = next;
     } else {
-      const currentHistoryState = window.history.state && typeof window.history.state === "object"
-        ? window.history.state
-        : {};
-      window.history.replaceState(
-        { ...currentHistoryState, offlineScreen: screen, scrollY: window.scrollY },
-        "",
-        window.location.href,
-      );
-      window.history.pushState(nextHistoryState, "", `#${next.kind}`);
+      shellStackRef.current.push(next);
     }
+    if (next.kind === "market-detail") marketDetailSourceKindRef.current = leaving.kind;
+    const step = describeShellHistoryPush({
+      replace: replacing,
+      current: window.history.state,
+      liveScreen: leaving,
+      next,
+      scrollY: window.scrollY,
+    });
+    if (step.mode === "replace") {
+      window.history.replaceState(step.state, "", `#${next.kind}`);
+    } else {
+      window.history.replaceState(step.replaceCurrent, "", window.location.href);
+      window.history.pushState(step.pushed, "", `#${next.kind}`);
+    }
+    screenRef.current = next;
     setScreenState(next);
     window.scrollTo({ top: 0, behavior: "auto" });
+  }
+
+  function backFromMarketDetail() {
+    if (marketDetailBackPopsToList(marketDetailSourceKindRef.current)) {
+      marketDetailSourceKindRef.current = null;
+      goBackInShell({ kind: "market" });
+      return;
+    }
+    setScreen({ kind: "market" });
   }
 
   function goBackInShell(fallback: Screen = { kind: "profile" }) {
@@ -758,7 +777,7 @@ function App() {
     const profileChild = [
       "project-categories", "recent", "trash", "membership-payment", "membership-refund",
       "membership-benefits", "data-security", "legal", "feedback", "app-update",
-      "settings", "admin-memberships", "admin-guides", "admin-support",
+      "settings", "about", "admin-memberships", "admin-guides", "admin-support",
     ].includes(screen.kind);
     if (profileChild) {
       goBackInShell({ kind: "profile" });
@@ -766,14 +785,70 @@ function App() {
     }
     setScreen({ kind: "profile" });
   }
+  function finishCompletedFlow(flowKinds: ReadonlySet<string>, destinationKind: string, run: () => void) {
+    const plan = planCompletedShellFlow(shellStackRef.current, destinationKind, flowKinds);
+    const apply = () => {
+      replaceCompletedFlowRef.current = plan.replace;
+      try { run(); }
+      finally { replaceCompletedFlowRef.current = false; }
+    };
+    if (plan.go === 0) {
+      apply();
+      return;
+    }
+    pendingFlowRef.current = { landedCount: plan.landedCount, apply };
+    window.history.go(plan.go);
+  }
   useEffect(() => {
     window.history.replaceState({ offlineScreen: { kind: "list" }, scrollY: 0 }, "", "#list");
     const back = (event: PopStateEvent) => {
-      setScreenState(event.state?.offlineScreen || { kind: "list" });
+      if (pendingFlowRef.current) {
+        const job = pendingFlowRef.current;
+        pendingFlowRef.current = null;
+        const landed = shellStackRef.current.slice(0, job.landedCount);
+        shellStackRef.current = landed.length ? landed : [{ kind: "list" }];
+        screenRef.current = shellStackRef.current[shellStackRef.current.length - 1];
+        job.apply();
+        return;
+      }
+      if (document.visibilityState === "hidden") {
+        const nextKind = event.state?.offlineScreen?.kind;
+        if (!nextKind || nextKind === screenRef.current.kind) return;
+      }
+      const next = event.state?.offlineScreen || { kind: "list" };
+      const top = shellStackRef.current[shellStackRef.current.length - 1];
+      if (!top || top.kind !== next.kind) {
+        if (shellStackRef.current.length > 1) shellStackRef.current.pop();
+        if (shellStackRef.current.length === 0) shellStackRef.current.push(next);
+        else shellStackRef.current[shellStackRef.current.length - 1] = next;
+      }
+      screenRef.current = next;
+      setScreenState(next);
       restoreShellScroll(event.state?.scrollY);
     };
     window.addEventListener("popstate", back);
-    return () => window.removeEventListener("popstate", back);
+    // The activity back callback consumes the key. Without a listener it only
+    // calls WebView.goBack when canGoBack() is true, which misses this
+    // document's pushState history, so the system key does nothing. ADB
+    // KEYCODE_BACK and the nav-bar key both arrive here while this activity
+    // is resumed; a key injected into a system save sheet does not.
+    let disposed = false;
+    let nativeBack: { remove: () => Promise<void> } | undefined;
+    if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
+      void CapacitorApp.addListener("backButton", () => {
+        const overlayOpen = document.documentElement.dataset.mobileOverlayOpen === "true";
+        const canPopShell = Boolean(window.history.state?.offlineScreen) && window.history.length > 1;
+        if (window.history.length > 1 && (overlayOpen || canPopShell)) window.history.back();
+      }).then((handle) => {
+        if (disposed) void handle.remove();
+        else nativeBack = handle;
+      });
+    }
+    return () => {
+      disposed = true;
+      window.removeEventListener("popstate", back);
+      if (nativeBack) void nativeBack.remove();
+    };
   }, []);
   const [owner, setOwner] = useState<StoredLocalOwnerContext | null>(() =>
     loadRememberedLocalOwnerContext(),
@@ -796,11 +871,20 @@ function App() {
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [detailStatus, setDetailStatus] = useState<"idle" | "loading" | "ready" | "not-found" | "forbidden" | "error">("idle");
   const [loading, setLoading] = useState(true);
+  const [firstUseChecked, setFirstUseChecked] = useState(false);
+  const firstUseCheckStarted = useRef(false);
   const [migrationWarning, setMigrationWarning] = useState(false);
+  const [safRegrantNeeded, setSafRegrantNeeded] = useState(false);
+  const [safRegrantRunning, setSafRegrantRunning] = useState(false);
+  const [safRegrantError, setSafRegrantError] = useState("");
   const [toast, setToast] = useState("");
   const online = useAndroidConnectivity();
   const auth = useAndroidAuthState();
   const cloudUserId = auth.status === "signed-in" ? auth.sessionUserId : null;
+  const [cloudTrialAccess, setCloudTrialAccess] = useState<{
+    userId: string;
+    lifecycle: string;
+  } | null>(null);
   const [cloudArchives, setCloudArchives] = useState<CloudArchiveSummary[]>([]);
   const [cloudTaxonomy, setCloudTaxonomy] = useState<ProjectTaxonomyEntry[]>([]);
   const [localTaxonomy, setLocalTaxonomy] = useState<ProjectTaxonomyEntry[]>([]);
@@ -830,6 +914,21 @@ function App() {
   >("all");
   const connectivityEpoch = useRef(0);
   const lastRecoveryKey = useRef("");
+
+  useEffect(() => {
+    if (loading || auth.status === "checking" || firstUseCheckStarted.current) return;
+    firstUseCheckStarted.current = true;
+    void shouldShowAndroidWelcome({
+      signedIn: auth.status === "signed-in",
+      hasLocalContent: migrationWarning || safRegrantNeeded || archives.length > 0 || cloudCaches.length > 0 || pendingSync.length > 0 || unownedCount > 0,
+      hasRememberedOwner: Boolean(loadRememberedLocalOwnerContext()) || readLocalSpaceVisibilityPreference() !== null,
+      explicitlySignedOut: wasLocalOwnerExplicitlySignedOut(),
+    }).then((show) => {
+      if (show && screenRef.current.kind === "list") setScreen({ kind: "welcome" }, true);
+    }).finally(() => setFirstUseChecked(true));
+    // Decide once after initialization and auth settle; local data is untouched.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, auth.status]);
 
   const ownerContext: LocalArchiveOwnerContext | null = useMemo(
     () => owner
@@ -863,7 +962,7 @@ function App() {
     if (!isAndroidOnline()) return;
 
     try {
-      const [profileResult, membershipResult, experienceResult, accountResult] = await Promise.all([
+      const [profileResult, membershipResult, experienceResult, accountResult, trialOfferResult] = await Promise.all([
         supabase
           .from("profiles")
           .select("username, avatar_url, storage_used, storage_limit, location, country_code, country_name, region_name, city_name")
@@ -875,6 +974,7 @@ function App() {
           .select("id", { count: "exact", head: true })
           .eq("user_id", userId),
         supabase.from("users").select("account_number").eq("id", userId).maybeSingle(),
+        supabase.rpc("get_my_cloud_trial_offer"),
       ]);
 
       const nextProfile = profileResult.error
@@ -892,6 +992,11 @@ function App() {
 
       setSpaceProfile(nextProfile);
       setMembership(nextMembership);
+      const trialOffer = trialOfferResult.error ? null :
+        normalizeCloudTrialOfferRpcResult(trialOfferResult.data);
+      setCloudTrialAccess(trialOffer?.lifecycle_status
+        ? { userId, lifecycle: trialOffer.lifecycle_status }
+        : null);
       setExperienceCardCount(nextExperienceCardCount);
       writeShellIdentityCache(userId, {
         profile: nextProfile,
@@ -903,11 +1008,20 @@ function App() {
     }
   }, []);
 
+  const ownerContextRef = useRef(ownerContext);
+  const authenticatedOwnerRef = useRef(authenticatedOwnerContext);
+  const listRequestRef = useRef(0);
+  const cloudListRequestRef = useRef(0);
+  ownerContextRef.current = ownerContext;
+  authenticatedOwnerRef.current = authenticatedOwnerContext;
+
   const loadList = useCallback(async (context?: LocalArchiveOwnerContext | null) => {
-    const resolvedContext = context === undefined ? ownerContext : context;
+    const requestId = ++listRequestRef.current;
+    const resolvedContext = context === undefined ? ownerContextRef.current : context;
+    const authenticated = authenticatedOwnerRef.current;
     const privateContext =
-      authenticatedOwnerContext?.userId === resolvedContext?.userId
-        ? authenticatedOwnerContext
+      authenticated?.userId && authenticated.userId === resolvedContext?.userId
+        ? authenticated
         : null;
     const [result, cachedCloud, pending] = await Promise.all([
       listVisibleLocalArchiveSummaries(resolvedContext, {
@@ -920,22 +1034,35 @@ function App() {
         ? listPendingCloudSyncSummaries(privateContext)
         : Promise.resolve([]),
     ]);
+    if (requestId !== listRequestRef.current) return;
+    const currentAuthenticated = authenticatedOwnerRef.current;
+    const currentContext = context === undefined ? ownerContextRef.current : resolvedContext;
+    const currentPrivateId = currentAuthenticated?.userId &&
+      currentAuthenticated.userId === currentContext?.userId
+      ? currentAuthenticated.userId
+      : null;
+    if ((privateContext?.userId || null) !== currentPrivateId) return;
     setArchives(result.archives);
     setCloudCaches(cachedCloud);
     setUnownedCount(result.unownedCount);
     setPendingSync(pending);
     void listVisibleLocalTaxonomyItems(resolvedContext)
-      .then((rows) => setLocalTaxonomy(mapLocalProjectTaxonomy(rows)))
+      .then((rows) => {
+        if (requestId !== listRequestRef.current) return;
+        setLocalTaxonomy(mapLocalProjectTaxonomy(rows));
+      })
       .catch((error) => console.warn("local taxonomy", error));
-  }, [authenticatedOwnerContext, ownerContext]);
+  }, []);
 
   const loadCloudList = useCallback(async (userId?: string | null) => {
+    const requestId = ++cloudListRequestRef.current;
     const resolvedUserId = userId || authenticatedOwnerContext?.userId;
     if (
       !isAndroidOnline() ||
       !resolvedUserId ||
       authenticatedOwnerContext?.userId !== resolvedUserId
     ) {
+      if (requestId !== cloudListRequestRef.current) return;
       setCloudArchives([]);
       setCloudError("");
       return;
@@ -966,22 +1093,30 @@ function App() {
       } catch (mediaError) {
         console.warn("cloud cover resolution", mediaError);
       }
-      if (!isAndroidOnline()) return;
+      if (requestId !== cloudListRequestRef.current || !isAndroidOnline()) return;
       setCloudArchives(displayRows);
       setCloudError("");
       void Promise.all([loadCloudProjectTaxonomy(resolvedUserId), getCloudArchiveCategoryDepths(resolvedUserId)])
-        .then(([entries, depths]) => { if (isAndroidOnline()) { setCloudTaxonomy(entries); setCloudDepths(depths); } })
+        .then(([entries, depths]) => {
+          if (requestId !== cloudListRequestRef.current || !isAndroidOnline()) return;
+          setCloudTaxonomy(entries);
+          setCloudDepths(depths);
+        })
         .catch((error) => console.warn("cloud taxonomy", error));
       void refreshCloudOfflineCaches(
         (data || []) as CloudOfflineCacheArchiveSource[],
         { userId: resolvedUserId },
-      ).then(() => loadList({ userId: resolvedUserId }))
+      ).then(() => {
+        if (requestId !== cloudListRequestRef.current) return;
+        return loadList({ userId: resolvedUserId });
+      })
         .catch((cacheError) => console.warn("cloud cache refresh", cacheError));
     } catch (error) {
       console.warn("local shell cloud list", error);
+      if (requestId !== cloudListRequestRef.current) return;
       setCloudError(copy.cloudLoadFailed);
     } finally {
-      setCloudLoading(false);
+      if (requestId === cloudListRequestRef.current) setCloudLoading(false);
     }
   }, [authenticatedOwnerContext, copy.cloudLoadFailed, loadList]);
 
@@ -1132,7 +1267,11 @@ function App() {
     async function initialize() {
       try {
         assertLocalOfflineAvailable();
-        const migration = await migrateLegacyLocalOrigin();
+        const savedSaf = await getLocalSafDirectory();
+        const needsRegrant = Boolean(savedSaf.uri && !savedSaf.available);
+        setSafRegrantNeeded(needsRegrant);
+        // Do not run legacy handoff while the committed SAF source is inaccessible.
+        const migration = needsRegrant ? null : await migrateLegacyLocalOrigin();
         if (cancelled) return;
         let nextOwner = loadRememberedLocalOwnerContext();
         if (!nextOwner && !wasLocalOwnerExplicitlySignedOut()) {
@@ -1158,7 +1297,7 @@ function App() {
         void retireBundledLegacyServiceWorkers().catch((error) =>
           console.warn("bundled service worker retirement", error));
         if (
-          migration.status === "migrated" &&
+          migration?.status === "migrated" &&
           migration.archiveCount + migration.recordCount + migration.imageCount > 0
         ) {
           showToast(copy.migrated);
@@ -1166,7 +1305,9 @@ function App() {
       } catch (error) {
         console.warn("offline initialization", error);
         if (cancelled) return;
-        setMigrationWarning(true);
+        const savedSaf = await getLocalSafDirectory().catch(() => null);
+        if (savedSaf?.uri && !savedSaf.available) setSafRegrantNeeded(true);
+        else setMigrationWarning(true);
         try {
           await loadList();
         } catch {
@@ -1235,7 +1376,7 @@ function App() {
     ].find((row) => row.id === archiveId);
     if (item) saveRecentArchiveBrowse({ id: item.id, title: item.title,
       systemName: item.system_name || item.species_name, category: item.category, userId: item.local_owner_user_id });
-    setScreen({ kind: "detail", archiveId }, ["edit-project", "new-project", "new-record", "edit-record"].includes(screen.kind));
+    setScreen({ kind: "detail", archiveId }, ["edit-project", "new-project", "new-record", "edit-record", "cloud-login"].includes(screen.kind));
   }
 
   function openDiscoveryProject(item: DiscoveryProjectFeedItem, back: "activity" | "discover-search") {
@@ -1266,10 +1407,20 @@ function App() {
 
   function openOnlineWeb(pathname: string, search = "") {
     if (!online) { showToast(copy.needNetwork); return; }
+    // Market editing is web-only; QA must use its matching HTTPS service, never production.
+    let origin = "https://life-space.uk";
+    if (/^\/market\/[^/]+\/edit(?:\/|$)/.test(pathname)) {
+      try {
+        origin = qaShareOrigin() || origin;
+      } catch {
+        showToast(copy.webOnly);
+        return;
+      }
+    }
     // The native custom tab resolves the remote host outside WebViewLocalServer.
     // Closing it returns to the same bundled React document.
-    const url = new URL(pathname + search, "https://life-space.uk");
-    if (url.origin !== "https://life-space.uk") return;
+    const url = new URL(pathname + search, origin);
+    if (url.origin !== origin) return;
     void Browser.open({ url: url.href }).catch(() => showToast(copy.webOnly));
   }
 
@@ -1332,6 +1483,14 @@ function App() {
       setScreen({ kind: "app-update" });
       return true;
     }
+    if (routed.kind === "about") {
+      setScreen({ kind: "about" });
+      return true;
+    }
+    if (routed.kind === "register") {
+      setScreen({ kind: "register" });
+      return true;
+    }
     if (routed.kind === "login") {
       const returnPath = routed.id && !/^\/(?:login|register)(?:\/|$)/.test(routed.id)
         ? routed.id
@@ -1371,9 +1530,15 @@ function App() {
       setScreen({ kind: "my-experience" });
       return true;
     }
+    if (routed.kind === "experience-new") {
+      const createPath = `/experience-cards/new${search ? (search.startsWith("?") ? search : `?${search}`) : ""}`;
+      if (auth.status !== "signed-in") { openCloudLogin("profile", undefined, createPath); return true; }
+      setScreen({ kind: "experience-new", search });
+      return true;
+    }
     if (routed.kind === "experience-detail" && routed.id) {
       setScreen({ kind: "experience-detail", id: routed.id,
-        returnTo: screen.kind === "my-experience" ? "my-experience" : undefined });
+        returnTo: screenRef.current.kind === "my-experience" ? "my-experience" : undefined });
       return true;
     }
     if (routed.kind === "following") {
@@ -1680,29 +1845,38 @@ function App() {
     pending: authenticatedOwnerContext ? pendingSync : [],
     preferLive: liveCloudWorkspace,
   });
-  const hasLocalSpaceContent = workspace.localOnly.length > 0;
-  const localSpaceVisible = auth.status !== "signed-in"
-    ? true
-    : (localSpacePreference ?? hasLocalSpaceContent);
+  const localSpaceEnabled = localSpacePreference ?? true;
+  const cloudReadable = canReadAndroidCloudWorkspace({
+    auth: auth.status,
+    userId: cloudUserId,
+    membership,
+    trialAccess: cloudTrialAccess,
+  });
   useEffect(() => {
-    if (auth.status !== "signed-in") {
-      if (sourceFilter !== "local") setSourceFilter("local");
-      return;
-    }
-    if (!localSpaceVisible && sourceFilter !== "cloud") {
-      setSourceFilter("cloud");
-      setSubcategoryFilter(null);
-      setGroupFilter(null);
-    }
-  }, [auth.status, localSpaceVisible, sourceFilter]);
+    if (auth.status === "checking") return;
+    const available = workspaceSourceOptions(auth.status, localSpaceEnabled, cloudReadable);
+    if (!available.length || available.includes(sourceFilter)) return;
+    setSourceFilter(auth.status === "signed-out" && localSpaceEnabled ? "local" : available[0]);
+    setSubcategoryFilter(null);
+    setGroupFilter(null);
+  }, [auth.status, localSpaceEnabled, cloudReadable, sourceFilter]);
   function updateLocalSpaceVisibility(visible: boolean) {
     setLocalSpacePreference(visible);
     writeLocalSpaceVisibilityPreference(visible);
-    if (!visible) {
-      setSourceFilter("cloud");
-      setSubcategoryFilter(null);
-      setGroupFilter(null);
+  }
+  function openNewProjectEntry() {
+    if (auth.status === "checking") return;
+    const signedIn = auth.status === "signed-in";
+    if (!signedIn && !localSpaceEnabled) {
+      showToast(copy.localSpaceOff);
+      return;
     }
+    const destinations = projectCreationDestinations(online, signedIn, localSpaceEnabled);
+    if (destinations.length === 1 && destinations[0] !== "login") {
+      setScreen({ kind: "new-project", destination: destinations[0] });
+      return;
+    }
+    setScreen({ kind: "project-destination" });
   }
   const filteredLocalArchives = workspace.localOnly.filter((archive) => filterCategory(archive) &&
     (!subcategoryFilter || archive.subcategory === subcategoryLabel) &&
@@ -1745,11 +1919,11 @@ function App() {
     nextLabel?: string,
   ) {
     const entry = chip && selectedTaxonomy.find((item) => item.id === chip.id && item.kind === kind && item.category === category);
-    if (action !== "create" && !entry) return;
+    if (action !== "create" && !entry) return false;
     try {
       if (sourceFilter === "local") {
         const parent = kind === "group" ? localTaxonomy.find((item) => item.id === subcategoryFilter && item.kind === "subcategory" && item.category === category) : null;
-        if (kind === "group" && !parent) return;
+        if (kind === "group" && !parent) return false;
         const fields = { kind, category, subcategory: parent?.label || null };
         if (action === "create") await createLocalTaxonomyItem({ ...fields, label: nextLabel || "" }, ownerContext);
         else if (action === "rename" && entry) await renameLocalTaxonomyItem({ ...fields, oldLabel: entry.label, newLabel: nextLabel || "" }, ownerContext);
@@ -1773,7 +1947,7 @@ function App() {
       } else if (sourceFilter === "cloud" && online && authenticatedOwnerContext?.userId) {
         const userId = authenticatedOwnerContext.userId;
         const parentId = kind === "group" ? subcategoryFilter : null;
-        if (kind === "group" && !parentId) return;
+        if (kind === "group" && !parentId) return false;
         if (action === "create") await createCloudProjectTaxonomy({ userId, category, label: nextLabel || "", parentId });
         else if (action === "rename" && entry) await renameCloudProjectTaxonomy({ userId, entry, label: nextLabel || "" });
         else if (entry) await deleteCloudProjectTaxonomy({ userId, entry });
@@ -1783,9 +1957,13 @@ function App() {
         }
         setCloudTaxonomy(await loadCloudProjectTaxonomy(userId));
         await loadCloudList(userId);
+      } else {
+        return false;
       }
+      return true;
     } catch (error) {
       showToast(error instanceof Error ? error.message : copy.cloudLoadFailed);
+      return false;
     }
   }
   const cloudSourceCount = workspace.counts.cloud;
@@ -2042,7 +2220,7 @@ function App() {
     }
     return {
       ...item,
-      active: !["activity", "experience", "my-experience", "experience-detail", "following", "market", "market-mine", "market-new", "market-detail", "guides", "plant-detail", "guide-detail", "discover-search", "public-detail"].includes(screen.kind),
+      active: !["activity", "experience", "my-experience", "experience-new", "experience-detail", "following", "market", "market-mine", "market-new", "market-detail", "guides", "plant-detail", "guide-detail", "discover-search", "public-detail"].includes(screen.kind),
       onSelect: goList,
     };
   }) as [
@@ -2052,7 +2230,7 @@ function App() {
     MobileBottomNavigationItem,
   ];
 
-  const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "my-experience", "experience-detail", "guides", "following", "market", "market-mine", "market-new", "market-detail", "profile", "project-categories", "plant-detail", "guide-detail", "public-detail"].includes(screen.kind);
+  const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "my-experience", "experience-new", "experience-detail", "guides", "following", "market", "market-mine", "market-new", "market-detail", "profile", "project-categories", "plant-detail", "guide-detail", "public-detail"].includes(screen.kind);
   const detailOwnsTopNav = ["detail", "cloud-detail", "public-cloud-detail", "edit-project", "new-record", "edit-record", "new-project", "project-destination"].includes(screen.kind);
   const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
   const storageLimitBytes = Math.max(
@@ -2070,7 +2248,36 @@ function App() {
     { signedIn: hasAuthenticatedIdentity, membership: hasAuthenticatedIdentity ? membership : null },
     language,
   );
-  if (loading) {
+  function renderCloudAccessOptions() {
+    const signedIn = auth.status === "signed-in" && Boolean(cloudUserId);
+    const canOfferTrial = !signedIn || !membership;
+    const trialLoginTo = screen.kind === "local-transfer" ? "local-transfer" : "list-cloud";
+    return <section className="panel" data-android-cloud-access-options="true">
+      <strong>{language === "zh" ? "使用 LifeSpace 云空间" : "Use LifeSpace cloud space"}</strong>
+      <p>{language === "zh" ? "云端保存项目和照片，请选择使用方式。" : "Save projects and photos in the cloud. Choose an option."}</p>
+      {canOfferTrial ? signedIn && cloudUserId ? (
+        <AndroidCloudTrialEntry
+          key={cloudUserId}
+          userId={cloudUserId}
+          online={online}
+          membership={membership}
+          onChanged={() => { void loadShellIdentity(cloudUserId); }}
+        />
+      ) : <button type="button" className="secondary-button" onClick={() =>
+        openCloudLogin(trialLoginTo, screen.kind === "local-transfer" ? screen.archiveId : undefined)
+      }>{language === "zh" ? "开通90天云端试用" : "Start 90-day cloud trial"}</button> : null}
+      <div className="action-row">
+        <button type="button" className="secondary-button" onClick={() => {
+          if (!online) { showToast(copy.needNetwork); return; }
+          if (!signedIn) { openCloudLogin("membership-payment"); return; }
+          setScreen({ kind: "membership-payment" });
+        }}>{language === "zh" ? "升级Plus会员" : "Upgrade to Plus"}</button>
+      </div>
+      {!online ? <p>{language === "zh" ? "联网后可领取试用或开通 Plus。" : "Connect to claim a trial or subscribe to Plus."}</p> : null}
+    </section>;
+  }
+
+  if (loading || !firstUseChecked) {
     return <main className="offline-shell loading">{copy.loading}</main>;
   }
 
@@ -2090,6 +2297,14 @@ function App() {
     >
       <KeyboardLayoutGuard />
     <main className="offline-shell">
+      {screen.kind === "welcome" || screen.kind === "about" ? <AndroidBrandIntroduction
+        language={language} onLanguageChange={toggleLanguage}
+        onBack={screen.kind === "about" ? returnToProfile : undefined}
+        onRegister={screen.kind === "welcome" ? () => { markAndroidWelcomeCompleted(); setScreen({ kind: "register" }); } : auth.status === "signed-out" ? () => setScreen({ kind: "register" }) : undefined}
+        onLogin={screen.kind === "welcome" ? () => { markAndroidWelcomeCompleted(); openCloudLogin("profile"); } : auth.status === "signed-out" ? () => openCloudLogin("profile") : undefined}
+        onLocalUse={screen.kind === "welcome" ? () => { markAndroidWelcomeCompleted(); setScreen({ kind: "list" }, true); } : undefined}
+        onBrowseHome={screen.kind === "about" ? () => setScreen({ kind: "activity" }) : undefined}
+      /> : null}
       {screen.kind === "list" ? (
         <PersonalSpaceMobileIdentity
           avatarUrl={hasAuthenticatedIdentity ? spaceProfile?.avatar_url : null}
@@ -2115,6 +2330,35 @@ function App() {
         />
       ) : null}
 
+      {screen.kind === "list" && auth.status === "signed-in" ? (
+        <AndroidCloudTrialReminder
+          key={authenticatedOwnerContext?.userId || owner?.userId}
+          userId={authenticatedOwnerContext?.userId || null}
+          online={online}
+          onOpenBackup={() => setScreen({ kind: "profile", module: "backup" })}
+        />
+      ) : null}
+
+      {safRegrantNeeded ? (
+        <section className="notice warning" role="status">
+          <p>{copy.safRegrantWarning}</p>
+          {safRegrantError ? <p>{safRegrantError}</p> : null}
+          <button type="button" disabled={safRegrantRunning} onClick={() => {
+            setSafRegrantRunning(true);
+            setSafRegrantError("");
+            void regrantSavedSafDirectory().then(() => {
+              // Resume the existing startup and mirror flow only after a verified regrant.
+              window.location.reload();
+            }).catch((error) => {
+              const message = error instanceof Error ? error.message : "";
+              setSafRegrantError(message.includes("No LifeSpace data directory was selected")
+                ? copy.safRegrantCanceled
+                : message.includes("Select the original LifeSpace data folder")
+                  ? copy.safRegrantWrong : copy.safRegrantFailed);
+            }).finally(() => setSafRegrantRunning(false));
+          }}>{safRegrantRunning ? copy.safRegranting : copy.safRegrantAction}</button>
+        </section>
+      ) : null}
       {migrationWarning ? (
         <section className="notice warning"><p>{copy.migrationWarning}</p></section>
       ) : null}
@@ -2125,26 +2369,26 @@ function App() {
         <ArchiveWorkspaceTemplate<ShellSourceFilter>
           online={online}
           showConnectivityNotice={false}
-          sourceOptions={auth.status !== "signed-in"
-            ? [{ value: "local", label: copy.local, count: workspace.counts.local }]
-            : localSpaceVisible
-              ? [
-                  { value: "all", label: copy.all, count: workspace.counts.all },
-                  { value: "cloud", label: copy.cloud, count: cloudSourceCount },
-                  { value: "local", label: copy.local, count: workspace.counts.local },
-                ]
-              : [{ value: "cloud", label: copy.cloud, count: cloudSourceCount }]}
+          sourceOptions={workspaceSourceOptions(auth.status, localSpaceEnabled, cloudReadable).map((value) => ({
+            value,
+            ...(value === "all"
+              ? { label: copy.all, count: workspace.counts.all }
+              : value === "cloud"
+                ? { label: copy.cloud, count: cloudSourceCount }
+                : { label: copy.local, count: workspace.counts.local }),
+          }))}
           activeSource={sourceFilter}
+          packVisibleSources
           onSelectSource={(source) => {
             setSourceFilter(source);
             setSubcategoryFilter(null);
             setGroupFilter(null);
             setScreen({ kind: "list" });
           }}
-          onCreateArchive={() => setScreen({ kind: "project-destination" })}
+          onCreateArchive={() => openNewProjectEntry()}
           showCreateToolbar={false}
           sourceTrailingSlot={(
-            <button type="button" onClick={() => setScreen({ kind: "project-destination" })}>
+            <button type="button" onClick={() => openNewProjectEntry()}>
               +{copy.project}
             </button>
           )}
@@ -2192,7 +2436,7 @@ function App() {
             </section>
           ) : null}
         >
-          {sourceFilter !== "local" && authenticatedOwnerContext && filteredPending.length ? (
+          {auth.status === "signed-in" && sourceFilter !== "local" && authenticatedOwnerContext && filteredPending.length ? (
             sourceFilter === "cloud" ? <section data-android-cloud-pending="true">
               <div className="panel pending-upload-summary">
                 <h2 className="workspace-section-label">{language === "zh" ? "待上传" : "Pending uploads"} {workspace.pending.length}</h2>
@@ -2206,7 +2450,8 @@ function App() {
               <div className="project-list">{filteredPending.map(renderPendingProjectCard)}</div>
             </section> : <div className="project-list" data-android-pending-cards="true">{filteredPending.map(renderPendingProjectCard)}</div>
           ) : null}
-          {sourceFilter !== "local" ? (
+          {sourceFilter === "cloud" && auth.status !== "checking" && (auth.status !== "signed-in" || !canCreateMembershipContent(membership)) ? renderCloudAccessOptions() : null}
+          {auth.status === "signed-in" && cloudReadable && sourceFilter !== "local" ? (
             liveCloudWorkspace ? (
               <>
                 {sourceFilter === "cloud" && filteredPending.length > 0 && filteredCloudArchives.length > 0 ? <h2 className="workspace-section-label">{language === "zh" ? "云端" : "Cloud"}</h2> : null}
@@ -2218,14 +2463,11 @@ function App() {
                   </div>
                 ) : null}
                 {!cloudLoading && !cloudError && sourceFilter === "cloud" && filteredCloudArchives.length === 0 && filteredPending.length === 0 ? (
-                  <section className="panel empty"><strong>{copy.cloudProjects}</strong>{copy.noProjects}</section>
+                  <section className="panel empty"><strong>{copy.cloudProjects}</strong>{language === "zh" ? "还没有云端项目" : "No cloud projects yet"}</section>
                 ) : null}
               </>
             ) : (
               <>
-                {online && auth.status === "signed-out" && sourceFilter === "cloud" ? (
-                  <section className="panel empty"><p>{copy.cloudSignIn}</p><button type="button" onClick={() => openCloudLogin("list-cloud")}>{copy.login}</button></section>
-                ) : null}
                 {cloudError && cloudUserId ? <section className="notice warning"><p>{cloudError}</p></section> : null}
                 {auth.status === "signed-in" &&
                 !online &&
@@ -2243,12 +2485,12 @@ function App() {
             )
           ) : null}
 
-          {sourceFilter !== "cloud" ? (
+          {localSpaceEnabled && sourceFilter !== "cloud" ? (
             filteredLocalArchives.length ? (
               <div className="project-list">
                 {(sourceFilter === "all" ? activeFilteredLocalArchives : orderedFilteredLocalArchives).map(renderLocalProjectCard)}
               </div>
-            ) : sourceFilter === "local" ? (
+            ) : sourceFilter === "local" && !safRegrantNeeded ? (
               <section className="panel empty">
                 <strong>{copy.noProjects}</strong>
                 {copy.noProjectsHint}
@@ -2256,7 +2498,7 @@ function App() {
             ) : null
           ) : null}
 
-          {sourceFilter === "all" &&
+          {auth.status === "signed-in" && localSpaceEnabled && sourceFilter === "all" &&
           ((liveCloudWorkspace ? endedFilteredCloudArchives.length : endedFilteredCloudCaches.length) > 0 || endedFilteredLocalArchives.length > 0) ? (
             <div className="project-list" data-android-ended-projects="true">
               {liveCloudWorkspace ? endedFilteredCloudArchives.map(renderCloudProjectCard) : endedFilteredCloudCaches.map(renderCloudCacheCard)}
@@ -2264,8 +2506,9 @@ function App() {
             </div>
           ) : null}
 
-          {sourceFilter === "all" &&
+          {auth.status === "signed-in" && localSpaceEnabled && sourceFilter === "all" &&
           filteredLocalArchives.length === 0 &&
+          !safRegrantNeeded &&
           filteredPending.length === 0 &&
           (liveCloudWorkspace
             ? !cloudLoading && filteredCloudArchives.length === 0
@@ -2290,7 +2533,19 @@ function App() {
       ) : null}
 
       {screen.kind === "new-project" ? (
-        <ProjectForm
+        (screen.destination === "live-cloud" || screen.destination === "pending-cloud") &&
+        !canCreateMembershipContent(membership) ? (
+          <div data-android-shell-page="cloud-create-access">
+            <MobilePageHeaderView
+              title={copy.newProject}
+              titleText={copy.newProject}
+              showBack
+              ariaLabel={copy.back}
+              onBack={() => quickAddDraft ? setScreen({ kind: "choose-project" }) : goList()}
+            />
+            {renderCloudAccessOptions()}
+          </div>
+        ) : <ProjectForm
           language={language}
           copy={copy}
           owner={screen.destination === "local-only" ? owner : authenticatedOwnerContext as StoredLocalOwnerContext | null}
@@ -2300,18 +2555,40 @@ function App() {
           guide={screen.guide}
           onCancel={() => quickAddDraft ? setScreen({ kind: "choose-project" }) : goList()}
           onSaved={async (archive) => {
-            await loadList();
+            try {
+              await loadList();
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "";
+              if (message !== "SAF revision conflict." && message !== "SAF concurrent revision conflict.") throw error;
+              console.error("SAF project committed; rereading the list after a revision conflict.", error);
+              try { await loadList(); }
+              catch (retryError) {
+                console.error("SAF project committed; opening it before the list refresh finishes.", retryError);
+              }
+            }
             showToast(
               archive.sync?.operation_kind === "create-archive"
                 ? copy.createPendingCloudSuccess
                 : copy.createSuccess,
             );
-            if (quickAddDraft) setScreen({ kind: "new-record", archiveId: archive.id });
-            else openDetail(archive.id);
+            if (quickAddDraft) {
+              finishCompletedFlow(COMPLETED_PROJECT_FLOW_KINDS, "new-record", () => {
+                setScreen({ kind: "new-record", archiveId: archive.id });
+              });
+            } else {
+              finishCompletedFlow(COMPLETED_PROJECT_FLOW_KINDS, "detail", () => {
+                const item = [...archives, ...(authenticatedOwnerContext ? cloudCaches : [])].find((row) => row.id === archive.id);
+                if (item) saveRecentArchiveBrowse({ id: item.id, title: item.title,
+                  systemName: item.system_name || item.species_name, category: item.category, userId: item.local_owner_user_id });
+                setScreen({ kind: "detail", archiveId: archive.id });
+              });
+            }
           }}
           onLiveSaved={async (id) => {
             await loadCloudList(authenticatedOwnerContext?.userId);
-            setScreen({ kind: "cloud-detail", archiveId: id });
+            finishCompletedFlow(COMPLETED_PROJECT_FLOW_KINDS, "cloud-detail", () => {
+              setScreen({ kind: "cloud-detail", archiveId: id });
+            });
             showToast(copy.createSuccess);
           }}
         />
@@ -2400,12 +2677,15 @@ function App() {
           message={language === "zh" ? "项目详情加载失败。" : "The project failed to render."}
           backLabel={copy.mySpace} onBack={goList}>
           <CloudProjectRuntime
-            key={`${screen.archiveId}:${online}:${authenticatedOwnerContext?.userId || "signed-out"}`}
+            key={`${screen.archiveId}:${authenticatedOwnerContext?.userId || "signed-out"}`}
             archiveId={screen.archiveId}
             online={online}
             authenticatedOwnerContext={authenticatedOwnerContext}
             onBack={goList}
-            onCacheChanged={() => loadList(authenticatedOwnerContext)}
+            onCacheChanged={async () => {
+              await loadList(authenticatedOwnerContext);
+              await loadCloudList(authenticatedOwnerContext?.userId);
+            }}
             onAddRecord={(id) => setScreen({ kind: "new-record", archiveId: id })}
             onDeleteArchive={(id) => void handleDeleteArchive(id)}
             onDeleteRecord={(recordId, id) => void handleDeleteRecord(recordId, id)}
@@ -2624,13 +2904,13 @@ function App() {
           {auth.status === "checking" ? (
             <section className="panel empty">{copy.cloudLoading}</section>
           ) : (
-            <><FollowPage />{online && auth.status === "signed-out" ? <button type="button" onClick={() => openCloudLogin("following")}>{copy.login}</button> : null}</>
+            <><FollowPage />{online && auth.status === "signed-out" ? <button type="button" className="primary-button" style={{ display: "block", margin: "16px auto" }} onClick={() => openCloudLogin("following")}>{copy.login}</button> : null}</>
           )}
         </div>
       ) : null}
 
-      {screen.kind === "market" ? (
-        <div data-android-shell-page="market">
+      {screen.kind === "market" || screen.kind === "market-detail" ? (
+        <div data-android-shell-page="market" hidden={screen.kind !== "market"}>
           <MarketPage />
         </div>
       ) : null}
@@ -2654,11 +2934,34 @@ function App() {
       })() : null}
 
       {screen.kind === "market-detail" ? <AndroidMarketDetailController id={screen.id}
-        online={online} onBack={() => setScreen({ kind: "market" })} /> : null}
+        online={online} onBack={backFromMarketDetail} /> : null}
 
       {screen.kind === "my-experience" ? <MyExperienceCardsContent onRequireLogin={() => openCloudLogin("profile", undefined, "/experience-cards")} /> : null}
+      {screen.kind === "experience-new" ? (() => {
+        const params = new URLSearchParams((screen.search || "").replace(/^\?/, ""));
+        return <div data-android-shell-page="experience-new">
+          <ExperienceCardEditor
+            routerless
+            initialArchiveId={params.get("archiveId")}
+            onMissingUser={() => openCloudLogin("profile", undefined, `/experience-cards/new${params.get("archiveId") ? `?archiveId=${params.get("archiveId")}` : ""}`)}
+            onOpenHref={(href) => {
+              const url = new URL(href, "https://life-space.uk");
+              if (!applyShellPath(url.pathname, url.search)) setScreen({ kind: "my-experience" });
+            }}
+            onSaved={(cardId) => setScreen(cardId
+              ? { kind: "experience-detail", id: cardId, returnTo: "my-experience" }
+              : { kind: "my-experience" })}
+          />
+        </div>;
+      })() : null}
       {screen.kind === "experience-detail" ? screen.returnTo === "my-experience" ? (
-        <ExperienceCardContent key={screen.id} id={screen.id} onBack={() => setScreen({ kind: "my-experience" })} />
+        <ExperienceCardContent key={screen.id} id={screen.id} routerless
+          onBack={() => setScreen({ kind: "my-experience" })}
+          onMissingUser={() => openCloudLogin("profile", undefined, "/experience-cards")}
+          onOpenHref={(href) => {
+            const url = new URL(href, "https://life-space.uk");
+            if (!applyShellPath(url.pathname, url.search)) setScreen({ kind: "my-experience" });
+          }} />
       ) : (
         <AndroidExperienceCardDetail key={screen.id} cardId={screen.id} onBack={() => setScreen({ kind: "experience" })} />
       ) : null}
@@ -2678,6 +2981,7 @@ function App() {
             onBack={goList}
           >
             <AndroidProfileController
+              initialModule={screen.module}
               snapshot={buildOfflineProfileSnapshot({
                 owner: auth.status === "signed-in" ? owner : null,
                 profile: auth.status === "signed-in" ? spaceProfile : null,
@@ -2685,12 +2989,13 @@ function App() {
                 experienceCardCount: auth.status === "signed-in" ? experienceCardCount : null,
               })}
               online={online && cloudUserId === owner?.userId}
+              signedIn={auth.status === "signed-in"}
               onBack={() => goBackInShell({ kind: "list" })}
               onLogout={auth.status === "signed-in" ? () => void logoutFromProfile() : undefined}
               onLogin={online && auth.status === "signed-out" ? () => openCloudLogin("profile") : undefined}
               onProfileSaved={() => cloudUserId ? void loadShellIdentity(cloudUserId) : undefined}
-              localSpaceVisible={localSpaceVisible}
-              onLocalSpaceVisibilityChange={auth.status === "signed-in" ? updateLocalSpaceVisibility : undefined}
+              localSpaceVisible={localSpaceEnabled}
+              onLocalSpaceVisibilityChange={updateLocalSpaceVisibility}
             />
           </MobileShellErrorBoundary>
         </div>
@@ -2709,7 +3014,6 @@ function App() {
               ownerUserId={ownerContext?.userId || owner?.userId || ""}
               online={online}
               cloudUserId={cloudUserId}
-              cachedEntries={cachedTaxonomy}
               onBack={returnToProfile}
             />
           </MobileShellErrorBoundary>
@@ -2777,9 +3081,18 @@ function App() {
           onBack={() => goBackInShell({ kind: "guides" })} />
       ) : null}
       {screen.kind === "guide-detail" ? <GuideDetailView id={screen.guideId || screen.guideKey} offline={!online} offlineGuide={activeGuide} offlineSignedIn={auth.status === "signed-in"} onBack={() => goBackInShell({ kind: "guides" })} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
-      {screen.kind === "cloud-login" ? <CloudLogin copy={copy} onBack={() => goBackInShell({ kind: "list" })} onSuccess={(userId) => {
+      {screen.kind === "cloud-login" ? <CloudLogin copy={copy} online={online} onBack={() => goBackInShell({ kind: "list" })}
+        onRegister={() => setScreen({ kind: "register" })}         onSuccess={(userId) => {
         const destination = screen;
         void loadShellIdentity(userId);
+        const destinationKind = destination.returnPath
+          ? (parseAndroidShellPath(new URL(destination.returnPath, "https://life-space.uk").pathname, new URL(destination.returnPath, "https://life-space.uk").search)?.kind || "profile")
+          : destination.returnTo === "list-cloud" ? "list"
+          : destination.returnTo === "local-transfer" && destination.archiveId ? "local-transfer"
+          : destination.returnTo === "interests" ? "interests"
+          : destination.returnTo !== "local-transfer" ? destination.returnTo
+          : "list";
+        finishCompletedFlow(COMPLETED_LOGIN_FLOW_KINDS, destinationKind, () => {
         if (destination.returnPath) {
           const url = new URL(destination.returnPath, "https://life-space.uk");
           applyShellPath(url.pathname, url.search);
@@ -2792,7 +3105,17 @@ function App() {
         }
         else if (destination.returnTo === "interests") setScreen({ kind: "interests", section: "plant" });
         else if (destination.returnTo !== "local-transfer") setScreen({ kind: destination.returnTo });
+        });
       }} /> : null}
+      {screen.kind === "register" ? <AndroidRegistration online={online}
+        onBack={() => goBackInShell({ kind: "list" })}
+        onLogin={() => openCloudLogin("profile")}
+        onLocalUse={() => { markAndroidWelcomeCompleted(); setScreen({ kind: "list" }, true); }}
+        onConfirmEmail={(email) => setScreen({ kind: "check-email", email })}
+        onSignedIn={(userId) => { void loadShellIdentity(userId); setScreen({ kind: "list" }, true); }} /> : null}
+      {screen.kind === "check-email" ? <AndroidRegistrationEmail email={screen.email} online={online}
+        onBack={() => goBackInShell({ kind: "register" })}
+        onLogin={() => openCloudLogin("profile")} /> : null}
       {screen.kind === "local-transfer" ? (() => {
         const archive = archives.find((row) => row.id === screen.archiveId);
         return <div data-android-local-transfer="true">
@@ -2802,6 +3125,7 @@ function App() {
           {archive && canOfferLocalCloudTransfer(archive) ? <>
             <p><strong>{archive.title}</strong></p>
             <p>{language === "zh" ? "上传到云端不等于公开。上传成功后，本地项目将移出本地列表。" : "Uploading to cloud does not make this public. Once complete, the project leaves the local list."}</p>
+            {!canCreateMembershipContent(membership) ? renderCloudAccessOptions() : <>
             <fieldset disabled={transferRunning}>
               <legend>{language === "zh" ? "可见性" : "Visibility"}</legend>
               <label><input type="radio" name="android-local-transfer-visibility" checked={transferVisibility === "private"}
@@ -2818,13 +3142,14 @@ function App() {
               <button type="button" disabled={transferRunning} onClick={() => openDetail(archive.id)}>{copy.cancel}</button>
             </div>
             {!online ? <p>{language === "zh" ? "联网后可上传到云端" : "Connect to upload to cloud"}</p> : null}
+            </>}
           </> : <p>{language === "zh" ? "这个本地项目已不可转到云端。" : "This device project is no longer available for transfer."}</p>}
           </section>
         </div>;
       })() : null}
       {screen.kind === "project-destination" ? <div data-android-shell-page="project-destination">
         <MobilePageHeaderView title={copy.newProject} titleText={copy.newProject} showBack ariaLabel={copy.back} onBack={() => goBackInShell({ kind: "list" })} />
-        <section className="panel project-destination-panel"><div className="project-list">{projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <button type="button" className="secondary-button project-destination-button" key={destination} onClick={() => destination === "login" ? openCloudLogin("project-destination") : setScreen({ kind: "new-project", destination })}><span>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</span>{destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</button>)}</div></section>
+        <section className="panel project-destination-panel"><div className="project-list">{projectCreationDestinations(online, auth.status === "signed-in", localSpaceEnabled).map((destination) => <button type="button" className="secondary-button project-destination-button" key={destination} onClick={() => destination === "login" ? openCloudLogin("project-destination") : setScreen({ kind: "new-project", destination })}><span>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</span>{destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</button>)}</div></section>
       </div> : null}
       {screen.kind === "choose-project" ? (() => {
         const recentRank = new Map(getRecentArchiveBrowseItems().map((item, index) => [item.id, index]));
@@ -2841,28 +3166,34 @@ function App() {
           .map((archive) => ({ id: archive.id, title: archive.title, open: () => setScreen({ kind: "new-record", archiveId: archive.id }) }));
         const visibleCloud = chooseProjectExpanded.cloud ? cloudOptions : cloudOptions.slice(0, 4);
         const visibleLocal = chooseProjectExpanded.local ? localOptions : localOptions.slice(0, 4);
+        const chooseSources = auth.status === "checking"
+          ? (localSpaceEnabled ? ["local" as const] : [])
+          : chooseProjectSources(auth.status === "signed-in", localSpaceEnabled);
+        const localSpaceClosed = auth.status === "signed-out" && !localSpaceEnabled;
         return <div data-android-shell-page="choose-project">
           <MobilePageHeaderView title={copy.chooseProject} titleText={copy.chooseProject} showBack ariaLabel={copy.back} onBack={() => { setQuickAddDraft(null); goList(); }} />
           <section className="panel choose-project-panel">
-            <div className="choose-project-columns">
-              <section className="choose-project-column" aria-label={copy.cloud}>
+            {localSpaceClosed ? <p role="status">{copy.localSpaceOff}</p> : chooseSources.length ? (
+            <div className={chooseSources.length === 1 ? "choose-project-columns single" : "choose-project-columns"}>
+              {chooseSources.includes("cloud") ? <section className="choose-project-column" aria-label={copy.cloud}>
                 <h2>{copy.cloud}</h2>
                 {!online && authenticatedOwnerContext ? <p className="choose-project-sync-hint">{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</p> : null}
                 <div className={`choose-project-list${chooseProjectExpanded.cloud ? " expanded" : ""}`}>
                   {visibleCloud.map((item) => <button type="button" className="secondary-button choose-project-button" key={item.id} onClick={item.open}>{item.title}</button>)}
                 </div>
                 {cloudOptions.length > 4 ? <button type="button" className="choose-project-more" onClick={() => setChooseProjectExpanded((value) => ({ ...value, cloud: !value.cloud }))}>{chooseProjectExpanded.cloud ? (language === "zh" ? "收起" : "Show less") : (language === "zh" ? `更多项目（${cloudOptions.length - 4}）⌄` : `More (${cloudOptions.length - 4}) ⌄`)}</button> : null}
-              </section>
-              <section className="choose-project-column" aria-label={copy.local}>
+              </section> : null}
+              {chooseSources.includes("local") ? <section className="choose-project-column" aria-label={copy.local}>
                 <h2>{copy.local}</h2>
                 <div className={`choose-project-list${chooseProjectExpanded.local ? " expanded" : ""}`}>
                   {visibleLocal.map((item) => <button type="button" className="secondary-button choose-project-button" key={item.id} onClick={item.open}>{item.title}</button>)}
                 </div>
                 {localOptions.length > 4 ? <button type="button" className="choose-project-more" onClick={() => setChooseProjectExpanded((value) => ({ ...value, local: !value.local }))}>{chooseProjectExpanded.local ? (language === "zh" ? "收起" : "Show less") : (language === "zh" ? `更多项目（${localOptions.length - 4}）⌄` : `More (${localOptions.length - 4}) ⌄`)}</button> : null}
-              </section>
+              </section> : null}
             </div>
+            ) : null}
             <div className="choose-project-create-actions">
-              {projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <div key={destination} className="choose-project-create-item"><button type="button" className="primary-button" onClick={() => destination === "login" ? openCloudLogin("choose-project") : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</button>{!online && destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</div>)}
+              {localSpaceClosed ? null : projectCreationDestinations(online, auth.status === "signed-in", localSpaceEnabled).map((destination) => <div key={destination} className="choose-project-create-item"><button type="button" className="primary-button" onClick={() => destination === "login" ? openCloudLogin("choose-project") : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</button>{!online && destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</div>)}
               <button type="button" className="secondary-button choose-project-cancel" onClick={() => { setQuickAddDraft(null); goList(); }}>{copy.cancel}</button>
             </div>
           </section>
@@ -2870,7 +3201,7 @@ function App() {
       })() : null}
       <input ref={quickGallery} type="file" accept="image/*" multiple hidden onChange={(event) => { void acceptQuickAddFiles(event.target.files, "gallery"); event.target.value = ""; }} />
       {screen.kind === "settings" ? <div data-android-shell-page="settings"><MobilePageHeaderView title={copy.settings} titleText={copy.settings} showBack ariaLabel={copy.back} onBack={returnToProfile} /><section className="panel"><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{auth.status === "signed-in" ? <button type="button" className="danger-button" onClick={() => void explicitAndroidLogout()}>{copy.logout}</button> : null}</div></section></div> : null}
-      <MobileBottomNavigationView
+      {!["welcome", "register", "check-email"].includes(screen.kind) ? <MobileBottomNavigationView
         ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
         items={bottomNavigationItems}
         centerAction={(
@@ -2923,7 +3254,7 @@ function App() {
             </div>
           )
         )}
-      />
+      /> : null}
       <AppConfirmDialog
         open={Boolean(trashMoveConfirm)}
         title={language === "zh" ? "移入回收站" : "Move to trash"}
@@ -3144,6 +3475,17 @@ function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin, onLoc
   </section>;
 }
 
+function readMobileOverlayOpen() {
+  return document.documentElement.dataset.mobileOverlayOpen === "true";
+}
+
+function subscribeMobileOverlayOpen(onStoreChange: () => void) {
+  const node = document.documentElement;
+  const observer = new MutationObserver(onStoreChange);
+  observer.observe(node, { attributes: true, attributeFilter: ["data-mobile-overlay-open"] });
+  return () => observer.disconnect();
+}
+
 function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onBack, onCacheChanged, onAddRecord, onDeleteArchive, onDeleteRecord, quickAddDraft, addRecordRequest = 0, onQuickAddSaved }: {
   archiveId: string;
   online: boolean;
@@ -3158,11 +3500,25 @@ function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onB
   onQuickAddSaved?: () => void;
 }) {
   const { language } = useLanguage();
+  const connectivity = useAndroidConnectivityStatus();
+  const imageFullscreenOpen = useSyncExternalStore(
+    subscribeMobileOverlayOpen,
+    readMobileOverlayOpen,
+    () => false,
+  );
+  const presentationOnline = useRef(connectivity.status === "online");
+  if (connectivity.status === "online") presentationOnline.current = true;
+  else if (connectivity.status === "offline" && !imageFullscreenOpen) presentationOnline.current = false;
+  // A failed resume probe must not unmount an open record image. Writes stay
+  // behind isAndroidOnline(); closing the image applies the cache view.
+  const showLiveCloud = imageFullscreenOpen || connectivity.status === "checking"
+    ? presentationOnline.current
+    : online;
   const [cached, setCached] = useState<LocalArchiveDetail | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading");
-  const lastAddRecordRequest = useRef(0);
+  const lastAddRecordRequest = useRef(addRecordRequest);
   useEffect(() => {
-    if (online || !authenticatedOwnerContext) {
+    if (showLiveCloud || !authenticatedOwnerContext) {
       if (!authenticatedOwnerContext) {
         setCached(null);
         setStatus("missing");
@@ -3180,13 +3536,17 @@ function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onB
         setStatus(result?.status === "ready" ? "ready" : "missing");
       }).catch(() => { if (active) setStatus("error"); });
     return () => { active = false; };
-  }, [archiveId, online, authenticatedOwnerContext]);
+  }, [archiveId, showLiveCloud, authenticatedOwnerContext]);
 
   useEffect(() => {
-    if (online || status !== "ready" || !cached || !addRecordRequest || addRecordRequest === lastAddRecordRequest.current) return;
+    if (showLiveCloud) {
+      lastAddRecordRequest.current = addRecordRequest;
+      return;
+    }
+    if (status !== "ready" || !cached || !addRecordRequest || addRecordRequest === lastAddRecordRequest.current) return;
     lastAddRecordRequest.current = addRecordRequest;
     onAddRecord(cached.archive.id);
-  }, [addRecordRequest, cached, onAddRecord, online, status]);
+  }, [addRecordRequest, cached, onAddRecord, showLiveCloud, status]);
 
   if (!authenticatedOwnerContext?.userId) return <ArchiveProjectDetailStatus
     status="forbidden"
@@ -3195,7 +3555,7 @@ function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onB
     backLabel={language === "zh" ? "返回我的空间" : "Back to My Space"}
     onBack={onBack} />;
 
-  if (online) return <CloudArchiveDetailController
+  if (showLiveCloud) return <CloudArchiveDetailController
     archiveId={archiveId} userId={authenticatedOwnerContext.userId} onBack={onBack} onCacheChanged={onCacheChanged}
     initialFiles={quickAddDraft?.files} initialCapturedAt={quickAddDraft?.capturedAt}
     initialNote={quickAddDraft?.note} addRecordRequest={addRecordRequest} showFloatingAdd={false}
@@ -3218,24 +3578,46 @@ function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onB
 
 function CloudLogin({
   copy,
+  online,
   onBack,
+  onRegister,
   onSuccess,
 }: {
   copy: OfflineCopy;
+  online: boolean;
   onBack: () => void;
+  onRegister: () => void;
   onSuccess: (userId: string) => void;
 }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [rememberEmail, setRememberEmail] = useState(true);
+  const [lastRecoverySentAt, setLastRecoverySentAt] = useState(0);
+  const { language, t } = useLanguage();
+  const loginTitle = language === "zh" ? "帐号登录" : "Sign in";
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
+  useEffect(() => {
+    try {
+      const savedEmail = window.localStorage.getItem("remember_email");
+      if (savedEmail && emailInputRef.current && !emailInputRef.current.value) {
+        emailInputRef.current.value = savedEmail;
+      }
+    } catch {
+      // Email preference is optional and must not block login.
+    }
+  }, []);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = emailInputRef.current?.value.trim().toLowerCase() || "";
+    const password = passwordInputRef.current?.value || "";
     if (!normalizedEmail || !password) return;
+    if (!online) { setMessage(t.auth.network_local_fallback); return; }
     if (!AUTH_CAPTCHA_ENABLED || !captchaToken) {
       setMessage(!AUTH_CAPTCHA_ENABLED
         ? "人机验证配置不可用，请稍后重试。"
@@ -3248,6 +3630,12 @@ function CloudLogin({
     try {
       const user = await loginBundledWithTurnstile({ email: normalizedEmail, password,
         captchaToken, siteKeyConfigured: AUTH_CAPTCHA_ENABLED });
+      try {
+        if (rememberEmail) window.localStorage.setItem("remember_email", normalizedEmail);
+        else window.localStorage.removeItem("remember_email");
+      } catch {
+        // Email preference is optional and never stores the password.
+      }
       completeAndroidAuthLogin(user);
       onSuccess(user.id);
     } catch (error) {
@@ -3259,44 +3647,110 @@ function CloudLogin({
     }
   }
 
+  async function sendPasswordRecovery() {
+    if (!online) { setMessage(t.auth.network_local_fallback); return; }
+    const normalizedEmail = emailInputRef.current?.value.trim().toLowerCase() || "";
+    if (!normalizedEmail) { setMessage(t.auth.enter_email); return; }
+    if (Date.now() - lastRecoverySentAt < 30000) { setMessage(t.auth.retry_after_30_seconds); return; }
+    if (!AUTH_CAPTCHA_ENABLED || !captchaToken) { setMessage(t.auth.captcha_required); return; }
+    // The existing callback is hosted by the production site and uses its Auth project.
+    // A QA recovery token must never be sent there without a separate QA callback.
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") !== "https://eidltoikfpnrzxruvawf.supabase.co") {
+      setMessage(language === "zh" ? "测试环境尚未配置独立的密码恢复回调，请勿使用正式站链接。" : "This test environment has no separate password recovery callback yet.");
+      return;
+    }
+    setSubmitting(true);
+    setMessage("");
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo: buildAuthEmailRedirect("recovery"), captchaToken,
+      });
+      if (error) setMessage(`${t.auth.send_failed_prefix}${error.message}`);
+      else { setLastRecoverySentAt(Date.now()); setMessage(t.auth.reset_email_sent); }
+    } catch { setMessage(t.auth.network_error); }
+    finally {
+      setCaptchaToken(null);
+      setCaptchaResetKey((value) => value + 1);
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div data-android-shell-page="cloud-login">
-      <MobilePageHeaderView title={copy.cloudSignIn} titleText={copy.cloudSignIn} showBack ariaLabel={copy.back} onBack={onBack} />
+      <MobilePageHeaderView title={loginTitle} titleText={loginTitle} showBack ariaLabel={copy.back} onBack={onBack} />
       <section className="panel">
-      <h1>{copy.cloudSignIn}</h1>
-      <form className="form" onSubmit={submit}>
+      <form className="form" style={{ gridTemplateColumns: "minmax(0, 1fr)" }} onSubmit={submit}>
         <div className="field">
           <label>{copy.email}</label>
           <input
             type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            name="username"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            ref={emailInputRef}
             required
           />
         </div>
         <div className="field">
           <label>{copy.password}</label>
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
+          <div style={{ position: "relative" }}>
+            <input
+              type={passwordVisible ? "text" : "password"}
+              name="password"
+              autoComplete="current-password"
+              ref={passwordInputRef}
+              style={{ paddingRight: 52 }}
+              required
+            />
+            <button
+              type="button"
+              aria-label={passwordVisible ? t.auth.hide_password : t.auth.show_password}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => setPasswordVisible((visible) => !visible)}
+              style={{
+                position: "absolute", right: 6, top: "50%",
+                transform: "translateY(-50%)", width: 40, height: 40,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                border: 0, padding: 0, background: "transparent", color: "#52634d",
+                cursor: "pointer",
+              }}
+            >
+              <UiIcon name={passwordVisible ? "eye-off" : "eye"} size={18} />
+            </button>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 4 }}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, whiteSpace: "nowrap" }}>
+            <input type="checkbox" checked={rememberEmail} onChange={(event) => setRememberEmail(event.target.checked)} />
+            {t.auth.remember_email}
+          </label>
+          <button type="button" disabled={submitting} onClick={() => void sendPasswordRecovery()}
+            style={{ border: 0, padding: 0, background: "none", color: "#315d39", fontSize: 13, fontWeight: 650,
+              textDecoration: "underline", textUnderlineOffset: 2, whiteSpace: "nowrap", cursor: "pointer" }}>
+            {t.auth.forgot_password}
+          </button>
         </div>
         <AuthCaptcha
+          interactionOnly
           action="auth"
           onTokenChange={setCaptchaToken}
           resetKey={captchaResetKey}
         />
         {message ? <p className="project-meta" role="alert">{message}</p> : null}
         <div className="submit-row">
-          <button type="submit" className="primary-button" disabled={submitting}>
+          <button type="submit" className="primary-button" disabled={submitting || !online}>
             {submitting ? copy.loading : copy.login}
           </button>
         </div>
       </form>
+      <p style={{ margin: "16px 0 0", textAlign: "center", fontSize: 13 }}>
+        {language === "zh" ? "还没有账号？" : "New to LifeSpace? "}
+        <button type="button" onClick={onRegister} style={{ border: 0, padding: 0, background: "none",
+          color: "#315d39", font: "inherit", fontWeight: 650, textDecoration: "underline", cursor: "pointer" }}>
+          {t.auth.register_account}
+        </button>
+      </p>
       </section>
     </div>
   );
@@ -3328,6 +3782,7 @@ function ProjectForm({
   onLiveSaved?: (archiveId: string) => void | Promise<void>;
 }) {
   const cloudOperationId = useRef(crypto.randomUUID());
+  const durableCreateRef = useRef<LocalArchive | null>(null);
   const [title, setTitle] = useState(archive?.title || guide?.label || "");
   const [category, setCategory] = useState<ArchiveCategory>(archive?.category || guide?.category || "plant");
   const [subcategory, setSubcategory] = useState(archive?.subcategory || "");
@@ -3429,7 +3884,7 @@ function ProjectForm({
         );
         await onSaved(updated);
       } else {
-        const created = await createLocalArchive({
+        const created = durableCreateRef.current || await createLocalArchive({
           title,
           category,
           subcategory: subcategory || null,
@@ -3452,6 +3907,7 @@ function ProjectForm({
           sync_destination: owner?.userId && destination === "pending-cloud" ? "pending-cloud" : "local-only",
           migration_visibility: destination === "pending-cloud" ? visibility : null,
         });
+        durableCreateRef.current = created;
         await onSaved(created);
       }
     } catch (nextError) {

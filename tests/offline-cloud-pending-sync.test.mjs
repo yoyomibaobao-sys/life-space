@@ -145,6 +145,30 @@ test("cloud snapshots are not pending and pure local work never enters the queue
   assert.equal((await indexedDB.databases())[0].version, 6);
 });
 
+test("an explicitly independent saved local copy never queues new records to its source cloud", async () => {
+  await fixture();
+  const database = await request(indexedDB.open("life-space-local-offline", 6));
+  const transaction = database.transaction("archives", "readwrite");
+  const done = finished(transaction);
+  const archiveStore = transaction.objectStore("archives");
+  const archive = await request(archiveStore.get("cloud-local-copy"));
+  archive.local_role = "local-project";
+  archive.saf_local_space_id = "6003441b-dc56-4e8d-aad5-ab995b806d76";
+  archiveStore.put(archive);
+  await done;
+  database.close();
+
+  const record = await dbModule.createLocalRecord({
+    archive_id: "cloud-local-copy",
+    note: "独立本地副本的新记录",
+  });
+  assert.equal(record.sync.status, "local-only");
+  assert.equal(record.sync.operation_kind, null);
+  const queue = await dbModule.preparePendingCloudSyncQueue(owner);
+  assert.equal(queue.queuedRecordCount, 0);
+  assert.deepEqual(await dbModule.listPendingCloudSyncSummaries(owner), []);
+});
+
 test("new cloud-origin records and photos receive stable pending operation identities", async () => {
   await fixture();
   const record = await dbModule.createLocalRecord({

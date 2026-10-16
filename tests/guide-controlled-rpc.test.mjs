@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { build } from "esbuild";
@@ -137,9 +138,9 @@ test("real guide SQL restricts guests/basic to active summaries and grants full 
 
 test("the browser's guide helper bundle contains no full editorial templates", async () => {
   const { outputFiles } = await build({
-    entryPoints: [new URL("../lib/public-guide-library.ts", import.meta.url).pathname],
+    entryPoints: [fileURLToPath(new URL("../lib/public-guide-library.ts", import.meta.url))],
     bundle: true, platform: "browser", format: "esm", write: false,
-    alias: { "@": new URL("../", import.meta.url).pathname },
+    alias: { "@": fileURLToPath(new URL("../", import.meta.url)) },
   });
   const browserBundle = outputFiles[0].text;
   assert.ok(browserBundle.includes("getPublicGuideSummary"));

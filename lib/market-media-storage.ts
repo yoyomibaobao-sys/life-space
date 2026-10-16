@@ -1,3 +1,6 @@
+import { Capacitor, CapacitorHttp } from "@capacitor/core";
+import { resolveMatchingCloudOrigin } from "@/lib/android-cloud-export";
+import { requestAndroidRemoteApi } from "@/lib/android-remote-api";
 import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import { supabase } from "@/lib/supabase";
@@ -50,12 +53,76 @@ async function getAuthHeaders(includeJson = false) {
   return headers;
 }
 
+function marketMutationResult(
+  status: number,
+  httpOk: boolean,
+  result: { ok?: unknown; cleanup?: unknown } | null,
+): MarketMutationResult {
+  return {
+    ok: httpOk && result?.ok === true,
+    status,
+    cleanup:
+      result?.cleanup === "processed" || result?.cleanup === "queued"
+        ? result.cleanup
+        : null,
+  };
+}
+
+async function requestNativeMarketMutation(
+  path: string,
+  method: "DELETE" | "PUT",
+  body?: unknown,
+): Promise<MarketMutationResult> {
+  const { origin } = resolveMatchingCloudOrigin();
+  if (origin === "https://life-space.uk") {
+    const result = await requestAndroidRemoteApi<{ ok?: unknown; cleanup?: unknown }>(path, {
+      method,
+      ...(body === undefined ? {} : { json: body }),
+    });
+    return marketMutationResult(result.status, result.ok, result.data);
+  }
+  const url = new URL(path, origin);
+  if (url.origin !== origin || !url.pathname.startsWith("/api/")) {
+    return { ok: false, status: 0, cleanup: null };
+  }
+  const token = (await supabase.auth.getSession()).data.session?.access_token;
+  if (!token) return { ok: false, status: 401, cleanup: null };
+  const response = await CapacitorHttp.request({
+    url: url.href,
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    data: body === undefined ? undefined : JSON.stringify(body),
+    disableRedirects: true,
+    responseType: "json",
+    connectTimeout: 10000,
+    readTimeout: 30000,
+  });
+  const responseUrl = response.url ? new URL(response.url, url) : url;
+  if (responseUrl.origin !== origin || (response.status >= 300 && response.status < 400)) {
+    return { ok: false, status: response.status, cleanup: null };
+  }
+  let data: { ok?: unknown; cleanup?: unknown } | null = null;
+  if (response.data !== "" && response.data != null) {
+    data = (typeof response.data === "string" ? JSON.parse(response.data) : response.data) as {
+      ok?: unknown;
+      cleanup?: unknown;
+    };
+    if (typeof data !== "object" || data === null) return { ok: false, status: response.status, cleanup: null };
+  }
+  return marketMutationResult(response.status, response.status >= 200 && response.status < 300, data);
+}
+
 async function requestMarketMutation(
   path: string,
   method: "DELETE" | "PUT",
   body?: unknown,
 ): Promise<MarketMutationResult> {
   try {
+    if (Capacitor.isNativePlatform()) return await requestNativeMarketMutation(path, method, body);
     const response = await fetch(path, {
       method,
       headers: await getAuthHeaders(body !== undefined),
@@ -67,14 +134,7 @@ async function requestMarketMutation(
       cleanup?: unknown;
     } | null;
 
-    return {
-      ok: response.ok && result?.ok === true,
-      status: response.status,
-      cleanup:
-        result?.cleanup === "processed" || result?.cleanup === "queued"
-          ? result.cleanup
-          : null,
-    };
+    return marketMutationResult(response.status, response.ok, result);
   } catch {
     return { ok: false, status: 0, cleanup: null };
   }

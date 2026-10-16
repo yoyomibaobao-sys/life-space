@@ -12,12 +12,16 @@ type AuthCaptchaProps = {
   action: "auth" | "register" | "resend";
   onTokenChange: (token: string | null) => void;
   resetKey: number;
+  compact?: boolean;
+  interactionOnly?: boolean;
 };
 
 export default function AuthCaptcha({
   action,
   onTokenChange,
   resetKey,
+  compact = false,
+  interactionOnly = false,
 }: AuthCaptchaProps) {
   const { t } = useLanguage();
 
@@ -27,6 +31,8 @@ export default function AuthCaptcha({
       action={action}
       onTokenChange={onTokenChange}
       resetKey={resetKey}
+      compact={compact}
+      interactionOnly={interactionOnly}
       loadingText={t.auth.captcha_loading}
       errorText={t.auth.captcha_load_failed}
     />

@@ -7,6 +7,8 @@ type TurnstileOptions = {
   action: string;
   theme: "auto";
   language: "auto";
+  size?: "compact";
+  appearance?: "interaction-only";
   callback: (token: string) => void;
   "expired-callback": () => void;
   "error-callback": () => void;
@@ -31,6 +33,8 @@ type Props = {
   resetKey: number;
   loadingText: string;
   errorText: string;
+  compact?: boolean;
+  interactionOnly?: boolean;
 };
 
 const SCRIPT_ID = "cloudflare-turnstile";
@@ -43,6 +47,8 @@ export default function TurnstileChallengeView({
   resetKey,
   loadingText,
   errorText,
+  compact = false,
+  interactionOnly = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
@@ -106,6 +112,8 @@ export default function TurnstileChallengeView({
       action,
       theme: "auto",
       language: "auto",
+      ...(compact ? { size: "compact" as const } : {}),
+      ...(interactionOnly ? { appearance: "interaction-only" as const } : {}),
       callback: (token) => onTokenChangeRef.current(token),
       "expired-callback": () => onTokenChangeRef.current(null),
       "error-callback": () => onTokenChangeRef.current(null),
@@ -120,7 +128,7 @@ export default function TurnstileChallengeView({
       widgetIdRef.current = null;
       onTokenChangeRef.current(null);
     };
-  }, [action, scriptReady, siteKey]);
+  }, [action, scriptReady, siteKey, compact, interactionOnly]);
 
   useEffect(() => {
     if (resetKey === 0 || !window.turnstile || !widgetIdRef.current) return;
@@ -132,7 +140,7 @@ export default function TurnstileChallengeView({
   if (!siteKey) return null;
 
   return (
-    <div style={containerStyle}>
+    <div style={interactionOnly ? { ...containerStyle, marginTop: 4, minHeight: 0 } : containerStyle}>
       <div ref={containerRef} />
       {!scriptReady && !scriptFailed ? (
         <p style={messageStyle}>{loadingText}</p>

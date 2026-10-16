@@ -39,6 +39,7 @@ import { deleteCachedExperienceCardVideo } from "@/lib/experience-card-video-cac
 import type { ExperienceCardDetail } from "@/lib/experience-card-types";
 import { formatStorageBytes } from "@/lib/membership";
 import { supabase } from "@/lib/supabase";
+import { publicExperienceCardUrl, sharePublicCard } from "@/lib/android-native-share";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type PendingAction = "publish" | "unpublish" | "delete" | null;
@@ -62,10 +63,13 @@ export default function ExperienceCardPage({
   return <ExperienceCardContent id={id} onDeleted={() => router.replace("/experience-cards")} />;
 }
 
-export function ExperienceCardContent({ id, onBack, onDeleted }: {
+export function ExperienceCardContent({ id, onBack, onDeleted, routerless, onMissingUser, onOpenHref }: {
   id: string;
   onBack?: () => void;
   onDeleted?: () => void;
+  routerless?: boolean;
+  onMissingUser?: () => void;
+  onOpenHref?: (href: string) => void;
 }) {
   const { language, t } = useLanguage();
   const [detail, setDetail] = useState<ExperienceCardDetail | null>(null);
@@ -321,13 +325,10 @@ export function ExperienceCardContent({ id, onBack, onDeleted }: {
 
   async function shareCard() {
     if (!detail?.isPubliclyAvailable) return;
-    const url = getCardShareUrl();
-
     try {
-      if (navigator.share) {
-        await navigator.share({ title: detail.card.title, url });
-        return;
-      }
+      const url = getCardShareUrl(detail.card.id);
+      const outcome = await sharePublicCard(detail.card.title, url);
+      if (outcome === "shared" || outcome === "canceled") return;
       await copyCardLink();
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
@@ -337,9 +338,8 @@ export function ExperienceCardContent({ id, onBack, onDeleted }: {
 
   async function copyCardLink() {
     if (!detail?.isPubliclyAvailable) return;
-    const url = getCardShareUrl();
-
     try {
+      const url = getCardShareUrl(detail.card.id);
       await navigator.clipboard.writeText(url);
       showToast(t.experience.public_link_copied);
     } catch {
@@ -770,6 +770,9 @@ export function ExperienceCardContent({ id, onBack, onDeleted }: {
               cardId={detail.card.id}
               onDirtyChange={setEditorDirty}
               onCardSaved={handleEditorSaved}
+              routerless={routerless}
+              onMissingUser={onMissingUser}
+              onOpenHref={onOpenHref}
             />
           ) : null}
         </section>
@@ -837,11 +840,8 @@ export function ExperienceCardContent({ id, onBack, onDeleted }: {
   );
 }
 
-function getCardShareUrl() {
-  const url = new URL(window.location.href);
-  url.search = "";
-  url.hash = "";
-  return url.toString();
+function getCardShareUrl(cardId: string) {
+  return publicExperienceCardUrl(window.location.origin, cardId);
 }
 
 function OverviewItem({

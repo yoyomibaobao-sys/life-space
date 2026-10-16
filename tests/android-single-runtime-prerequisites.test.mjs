@@ -10,10 +10,10 @@ import { androidNextApiInventory } from "../lib/android-api-inventory.ts";
 const root = process.cwd();
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-async function loadModule(entry, stubs = {}) {
+async function loadModule(entry, stubs = {}, define = {}) {
   const output = path.join(root, `.android-contract-${process.pid}-${Math.random().toString(36).slice(2)}.mjs`);
   const result = await build({
-    entryPoints: [entry], bundle: true, write: false, platform: "node", format: "esm", outfile: output,
+    entryPoints: [entry], bundle: true, write: false, platform: "node", format: "esm", outfile: output, define,
     plugins: [{ name: "contract-stubs", setup(ctx) {
       ctx.onResolve({ filter: /^@\// }, (args) => Object.hasOwn(stubs, args.path)
         ? { path: args.path, namespace: "contract" }
@@ -97,6 +97,17 @@ test("followed public project resolves by archive ID without treating another ow
   assert.equal((await module.resolveCloudArchiveRoute("followed-1", client)).publicSummary, null);
   archive = { ...archive, trashed_at: "2026-09-01" };
   assert.equal(await module.resolveCloudArchiveRoute("followed-1", client), null);
+});
+
+test("QA session is not sent to the production API", async () => {
+  const module = await loadModule("lib/android-remote-api.ts", { "@/lib/supabase": "export const supabase = {};" }, {
+    "process.env.NEXT_PUBLIC_SUPABASE_URL": JSON.stringify("https://mablwxlipcgbmbnfdbkc.supabase.co"),
+  });
+  assert.throws(() => module.remoteApiUrl("/api/health"), /qa_export_to_production_rejected/);
+  await assert.rejects(module.requestAndroidRemoteApi("/api/trash", {
+    token: "qa-token", isNative: true,
+    nativeRequest: async () => { throw new Error("production request must not start"); },
+  }), /qa_export_to_production_rejected/);
 });
 
 test("native API transport carries Bearer auth for all JSON methods and rejects redirects, HTML and network failure", async () => {

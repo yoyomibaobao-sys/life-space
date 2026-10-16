@@ -127,11 +127,11 @@ jobs:
       - name: Install web dependencies
         run: npm ci
 
-      - name: Run Android shell contracts
-        run: npm run test:android:acceptance
-
       - name: Sync Capacitor Android project
         run: npm run android:sync
+
+      - name: Run Android shell contracts
+        run: npm run test:android:acceptance
 
       - name: Verify bundled Android shell is browser-safe
         if: ${{ inputs.single_runtime_acceptance != true }}

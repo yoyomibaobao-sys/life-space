@@ -154,11 +154,17 @@ test("signed-out Follow stays in the Android shell instead of forcing login", ()
   assert.match(follow, /if \(!shellNavigate\) navigate\(buildLoginHref\(getCurrentInternalPath\(\)\)\)/);
 });
 
-test("personal-space source tabs keep fixed slots when some sources are hidden", () => {
+test("Android packs visible source tabs from the left and web keeps fixed slots", () => {
   const switcher = read("components/archive-ui/ArchiveSourceSwitcher.tsx");
+  const shell = read("mobile-offline-src/main.tsx");
+  const web = read("app/archive/page.tsx");
   assert.match(switcher, /repeat\(3, minmax\(0, 1fr\)\) auto/);
+  assert.match(switcher, /gridColumn: 4/);
   assert.match(switcher, /value === "cloud"\) return 2/);
   assert.match(switcher, /value === "local"\) return 3/);
+  assert.match(switcher, /packVisibleSources \? index \+ 1 : sourceSlotColumn\(item\.value\)/);
+  assert.match(shell, /packVisibleSources/);
+  assert.doesNotMatch(web, /packVisibleSources/);
 });
 
 test("trash cards retain local and cloud preview images", () => {

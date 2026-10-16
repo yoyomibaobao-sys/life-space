@@ -1,6 +1,6 @@
 "use client";
 
-import InternalLink from "@/components/navigation/InternalLink";
+import InternalLink, { useInternalNavigate } from "@/components/navigation/InternalLink";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   formatMarketTime,
@@ -26,6 +26,7 @@ import { getCompactCardLocation } from "@/lib/card-location";
 import { useAndroidConnectivity } from "@/lib/android-connectivity";
 
 export default function MarketPage() {
+  const shellNavigate = useInternalNavigate();
   const { language, t } = useLanguage();
   const [items, setItems] = useState<MarketPostDisplayRow[]>([]);
   const [profiles, setProfiles] = useState<Map<string, ProfileBrief>>(new Map());
@@ -180,6 +181,7 @@ export default function MarketPage() {
       {isMobileViewport ? (
         <MobileContentTopBar
           ariaLabel={t.market.type}
+          showGuestLanguageSwitcher={!shellNavigate}
           items={[
             { key: "all", label: t.market.all, active: typeFilter === "all", onClick: () => setTypeFilter("all") },
             ...getMarketPostTypeOptions(language).map((item) => ({

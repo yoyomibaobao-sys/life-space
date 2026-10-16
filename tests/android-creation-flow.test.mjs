@@ -57,15 +57,36 @@ test("pending cloud IDs validate category and parent, while missing and legacy l
   assert.equal(legacy.warning, taxonomy.TAXONOMY_SYNC_WARNING);
 });
 
-test("four states expose precise project destinations and existing photo targets", () => {
-  assert.deepEqual(capabilities.projectCreationDestinations(true, true), ["live-cloud", "local-only"]);
-  assert.deepEqual(capabilities.projectCreationDestinations(false, true), ["pending-cloud", "local-only"]);
-  assert.deepEqual(capabilities.projectCreationDestinations(true, false), ["local-only", "login"]);
-  assert.deepEqual(capabilities.projectCreationDestinations(false, false), ["local-only"]);
-  assert.deepEqual(capabilities.quickAddExistingSources(true, true), ["live-cloud", "local-only"]);
-  assert.deepEqual(capabilities.quickAddExistingSources(false, true), ["cloud-cache", "pending-cloud", "local-only"]);
-  assert.deepEqual(capabilities.quickAddExistingSources(true, false), ["local-only"]);
-  assert.deepEqual(capabilities.quickAddExistingSources(false, false), ["local-only"]);
+test("local space preference controls workspace sources and creation without a login detour", () => {
+  assert.deepEqual(capabilities.workspaceSourceOptions("checking", true), ["local"]);
+  assert.deepEqual(capabilities.workspaceSourceOptions("checking", false), []);
+  assert.deepEqual(capabilities.workspaceSourceOptions("signed-out", true), ["cloud", "local"]);
+  assert.deepEqual(capabilities.workspaceSourceOptions("signed-out", false), ["cloud"]);
+  assert.deepEqual(capabilities.workspaceSourceOptions("signed-in", true), ["all", "cloud", "local"]);
+  assert.deepEqual(capabilities.workspaceSourceOptions("signed-in", false), ["cloud"]);
+  assert.deepEqual(capabilities.workspaceSourceOptions("signed-in", true, false), ["cloud", "local"]);
+  assert.deepEqual(capabilities.workspaceSourceOptions("signed-in", false, false), ["cloud"]);
+
+  assert.deepEqual(capabilities.projectCreationDestinations(true, true, true), ["live-cloud", "local-only"]);
+  assert.deepEqual(capabilities.projectCreationDestinations(false, true, true), ["pending-cloud", "local-only"]);
+  assert.deepEqual(capabilities.projectCreationDestinations(true, true, false), ["live-cloud"]);
+  assert.deepEqual(capabilities.projectCreationDestinations(false, true, false), ["pending-cloud"]);
+  assert.deepEqual(capabilities.projectCreationDestinations(true, false, true), ["local-only"]);
+  assert.deepEqual(capabilities.projectCreationDestinations(false, false, true), ["local-only"]);
+  assert.deepEqual(capabilities.projectCreationDestinations(true, false, false), []);
+  assert.deepEqual(capabilities.projectCreationDestinations(false, false, false), []);
+
+  assert.deepEqual(capabilities.chooseProjectSources(true, true), ["cloud", "local"]);
+  assert.deepEqual(capabilities.chooseProjectSources(true, false), ["cloud"]);
+  assert.deepEqual(capabilities.chooseProjectSources(false, true), ["local"]);
+  assert.deepEqual(capabilities.chooseProjectSources(false, false), []);
+
+  assert.deepEqual(capabilities.quickAddExistingSources(true, true, true), ["live-cloud", "local-only"]);
+  assert.deepEqual(capabilities.quickAddExistingSources(false, true, true), ["cloud-cache", "pending-cloud", "local-only"]);
+  assert.deepEqual(capabilities.quickAddExistingSources(true, true, false), ["live-cloud"]);
+  assert.deepEqual(capabilities.quickAddExistingSources(false, true, false), ["cloud-cache", "pending-cloud"]);
+  assert.deepEqual(capabilities.quickAddExistingSources(true, false, true), ["local-only"]);
+  assert.deepEqual(capabilities.quickAddExistingSources(false, false, false), []);
 });
 
 test("center action opens the in-app camera, supports album or skip, then preserves draft through project choice", () => {
@@ -82,6 +103,11 @@ test("center action opens the in-app camera, supports album or skip, then preser
   assert.match(shell, /acceptQuickAddImageFiles[\s\S]*setQuickAddDraft\(\{ files, capturedAt, source, note: "" \}\)[\s\S]*setScreen\(\{ kind: "choose-project" \}\)/);
   assert.match(shell, /kind: "cloud-login"; returnTo: "choose-project"/);
   assert.match(shell, /openCloudLogin\("choose-project"\)/);
+  assert.match(shell, /destinations\.length === 1 && destinations\[0\] !== "login"[\s\S]*kind: "new-project"/);
+  assert.match(shell, /copy\.localSpaceOff/);
+  assert.match(shell, /choose-project-columns single/);
+  assert.match(shell, /localSpaceClosed \? <p role="status">\{copy\.localSpaceOff\}<\/p>/);
+  assert.doesNotMatch(shell.slice(shell.indexOf("function updateLocalSpaceVisibility"), shell.indexOf("function openNewProjectEntry")), /deleteLocal|revokePersistable|localSpaceId/);
   assert.match(shell, /initialFiles=\{quickAddDraft\?\.files\}/);
   assert.match(shell, /setQuickAddDraft\(null\)/);
   assert.match(read("app/archive/[id]/AddRecord.tsx"), /initialFiles[\s\S]*appendFiles\(initialFiles\)/);

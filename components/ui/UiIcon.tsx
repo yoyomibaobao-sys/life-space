@@ -18,6 +18,7 @@ export type UiIconName =
   | "close"
   | "comment"
   | "duration"
+  | "download"
   | "edit"
   | "eye"
   | "eye-off"
@@ -148,6 +149,8 @@ function IconPaths({ name }: { name: UiIconName }) {
       return <><path d="M4 9v11h16V9M3 9l2-6h14l2 6" /><path d="M3 9a3 3 0 0 0 5 2 3 3 0 0 0 4 0 3 3 0 0 0 4 0 3 3 0 0 0 5-2M9 20v-5h6v5" /></>;
     case "trash":
       return <><path d="M4 7h16M9 3h6l1 4H8ZM7 7l1 14h8l1-14M10 11v6M14 11v6" /></>;
+    case "download":
+      return <><path d="M12 3v13m-5-5 5 5 5-5" /><path d="M4 17v4h16v-4" /></>;
     case "upload":
       return <><path d="M12 16V3M7 8l5-5 5 5" /><path d="M4 14v7h16v-7" /></>;
     case "user":

@@ -32,12 +32,24 @@ type HeadCache = { identity: { localSpaceId: string; createdAt: string };
 const verifiedHeads = new WeakMap<SafStorage, HeadCache>();
 const pendingVerifications = new WeakMap<SafStorage, Promise<SafState | null>>();
 const directoryEpochs = new WeakMap<SafStorage, number>();
+const commitEpochs = new WeakMap<SafStorage, number>();
+
+function currentCommitEpoch(storage: SafStorage) {
+  return commitEpochs.get(storage) ?? 0;
+}
+
+/** Drop in-flight scans so a commit that landed during them cannot be published as current. */
+function advanceCommitEpoch(storage: SafStorage) {
+  commitEpochs.set(storage, currentCommitEpoch(storage) + 1);
+  pendingVerifications.delete(storage);
+}
 
 /** A directory selection changes the native bridge's tree without changing its adapter object. */
 export function invalidateSafVerifiedHead(storage: SafStorage) {
   verifiedHeads.delete(storage);
   pendingVerifications.delete(storage);
   directoryEpochs.set(storage, (directoryEpochs.get(storage) ?? 0) + 1);
+  advanceCommitEpoch(storage);
 }
 
 async function required(storage: SafStorage, path: string, sha256?: string) {
@@ -155,7 +167,16 @@ export async function readSafCommitted(storage: SafStorage): Promise<SafState | 
   const pending = pendingVerifications.get(storage);
   if (pending) return pending;
   const epoch = directoryEpochs.get(storage) ?? 0;
-  const verification = readSafCommittedUnshared(storage, epoch);
+  const commitEpoch = currentCommitEpoch(storage);
+  let verification!: Promise<SafState | null>;
+  verification = (async () => {
+    const state = await readSafCommittedUnshared(storage, epoch, commitEpoch);
+    if (currentCommitEpoch(storage) !== commitEpoch || (directoryEpochs.get(storage) ?? 0) !== epoch) {
+      if (pendingVerifications.get(storage) === verification) pendingVerifications.delete(storage);
+      return readSafCommitted(storage);
+    }
+    return state;
+  })();
   pendingVerifications.set(storage, verification);
   try { return await verification; }
   finally {
@@ -164,7 +185,7 @@ export async function readSafCommitted(storage: SafStorage): Promise<SafState | 
 }
 
 /** Manifest is only a hint. A complete, hash-linked marker chain is authoritative. */
-async function readSafCommittedUnshared(storage: SafStorage, epoch: number): Promise<SafState | null> {
+async function readSafCommittedUnshared(storage: SafStorage, epoch: number, commitEpoch = currentCommitEpoch(storage)): Promise<SafState | null> {
   const identity = await readIdentity(storage);
   const root = await storage.list("");
   if (!identity && root.length) throw Error("Nonempty unknown LifeSpace directory; initialization refused.");
@@ -235,7 +256,7 @@ async function readSafCommittedUnshared(storage: SafStorage, epoch: number): Pro
     }
   }
   if (!head) {
-    verifiedHeads.delete(storage);
+    if (currentCommitEpoch(storage) === commitEpoch) verifiedHeads.delete(storage);
     if (markers.length || root.includes("manifest.json")) throw Error("No valid SAF commit; data retained.");
     return null; // Valid identity, but initial commit has not completed.
   }
@@ -280,7 +301,9 @@ async function readSafCommittedUnshared(storage: SafStorage, epoch: number): Pro
   if ((directoryEpochs.get(storage) ?? 0) !== epoch) {
     throw Error("SAF directory changed during verification; reconnect and retry.");
   }
-  verifiedHeads.set(storage, { identity, markers, checkpointSha256, head });
+  if (currentCommitEpoch(storage) === commitEpoch) {
+    verifiedHeads.set(storage, { identity, markers, checkpointSha256, head });
+  }
   return { manifest, commit: head.commit, source: {
     entries, taxonomy: head.snapshot.taxonomy, categoryDepths: head.snapshot.categoryDepths,
   } };
@@ -299,7 +322,8 @@ async function commitSafContentUnlocked(storage: SafStorage, source: SafContent,
   expectedRevision: string | null) {
   const identity = await readIdentity(storage);
   if (!identity) throw Error("Initialize or reconnect a LifeSpace directory first.");
-  const current = await readSafCommitted(storage);
+  const baselineEpoch = directoryEpochs.get(storage) ?? 0;
+  const current = await readSafCommittedUnshared(storage, baselineEpoch, currentCommitEpoch(storage));
   if ((current?.commit.revision ?? null) !== expectedRevision) throw Error("SAF revision conflict.");
   const revision = crypto.randomUUID();
   const references: SafSnapshot["entries"] = [];
@@ -348,8 +372,8 @@ async function commitSafContentUnlocked(storage: SafStorage, source: SafContent,
     snapshotPath, snapshotSha256, createdAt };
   assertSafCommit(marker);
   // Recheck before the marker; the bridge serializes this directory's writers.
-  if ((await readSafCommittedUnshared(storage, directoryEpochs.get(storage) ?? 0))?.commit.revision !==
-      (current?.commit.revision)) {
+  const fresh = await readSafCommittedUnshared(storage, directoryEpochs.get(storage) ?? 0, currentCommitEpoch(storage));
+  if ((fresh?.commit.revision ?? null) !== (current?.commit.revision ?? null)) {
     throw Error("SAF concurrent revision conflict.");
   }
   const markerPath = `commits/${String(marker.sequence).padStart(12, "0")}-${revision}.json`;
@@ -367,6 +391,7 @@ async function commitSafContentUnlocked(storage: SafStorage, source: SafContent,
     await storage.checkpoint("manifest.json", checkpointBytes);
     checkpointSha256 = await safSha256(checkpointBytes);
   } catch { /* recoverable */ }
+  advanceCommitEpoch(storage);
   const prior = verifiedHeads.get(storage);
   if ((!current && !prior) || (prior?.identity.localSpaceId === identity.localSpaceId &&
       prior.head.commit.revision === current?.commit.revision)) {

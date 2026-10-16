@@ -26,6 +26,8 @@ import {
   STORAGE_UPLOAD_MAINTENANCE_SYNC_NOT_STARTED_MESSAGE,
 } from "@/lib/storage-upload-maintenance";
 import { supabase } from "@/lib/supabase";
+import { canCreateMembershipContent, normalizeMembershipRpcResult } from "@/lib/membership";
+import { stableTransferRecordId, uniqueCloudArchiveTitle } from "@/lib/local-transfer-identity";
 import { createNativeSafStorage, getLocalSafDirectory } from "@/lib/local-saf-native";
 import { readSafCommitted } from "@/lib/local-saf-core";
 import {
@@ -136,6 +138,19 @@ function logArchiveMutationError(
   });
 }
 
+async function chooseNewCloudArchiveTitle(userId: string, original: string) {
+  const names = new Set<string>();
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await supabase.from("archives").select("title")
+      .eq("user_id", userId).range(offset, offset + 499);
+    if (error) throw Error("无法核对云端项目名称，请稍后重试。");
+    const page = data || [];
+    for (const row of page) names.add(String(row.title || "").trim());
+    if (page.length < 500) break;
+  }
+  return uniqueCloudArchiveTitle(original, names);
+}
+
 async function findExistingCloudRecord(params: {
   archiveId: string;
   userId: string;
@@ -180,7 +195,9 @@ async function ensureCloudArchive(params: {
       ? params.archive.plant_id
       : null;
   const basePayload = {
-    title: params.archive.title.trim(),
+    title: params.preparedTransfer
+      ? await chooseNewCloudArchiveTitle(params.userId, params.archive.title.trim())
+      : params.archive.title.trim(),
     category: params.archive.category,
     species_id: speciesId,
     species_name_snapshot:
@@ -218,14 +235,7 @@ async function ensureCloudArchive(params: {
         if (error) throw new Error(`创建云端项目失败：${getSupabaseErrorMessage(error)}`);
       },
     }, transfer, params.userId, basePayload);
-    if (!resolved.wasExisting) return resolved.id;
-    // Never update a same-ID remote archive until its owner and token are verified.
-    const { data, error } = await supabase.from("archives").update(basePayload)
-      .eq("id", resolved.id).eq("user_id", transfer.targetUserId)
-      .eq("local_transfer_token", transfer.localTransferToken).select("id").maybeSingle();
-    if (error || data?.id !== resolved.id) {
-      throw new Error(`更新转云目标失败：${getSupabaseErrorMessage(error)}`);
-    }
+    // A retry preserves the already-created remote title and target identity.
     return resolved.id;
   }
 
@@ -266,6 +276,7 @@ async function ensureCloudRecord(params: {
   visibility: LocalToCloudVisibility;
   record: LocalRecordWithImages;
   cycleId?: string | null;
+  stableTargetId?: string | null;
 }) {
   const recordVisibility = params.record.source_cloud_visibility === "public" || params.record.source_cloud_visibility === "private"
     ? params.record.source_cloud_visibility
@@ -277,6 +288,41 @@ async function ensureCloudRecord(params: {
     photo_time: params.record.record_time,
     record_time: params.record.record_time,
   };
+  if (params.stableTargetId) {
+    const targetId = params.stableTargetId;
+    const verify = async () => {
+      const result = await supabase.from("records").select("id,user_id,archive_id")
+        .eq("id", targetId).maybeSingle();
+      if (result.error) throw Error("核对转云记录失败，请重试。");
+      if (result.data && (result.data.user_id !== params.userId ||
+          result.data.archive_id !== params.archiveId)) {
+        throw Error("转云记录身份冲突，已停止上传。");
+      }
+      return result.data;
+    };
+    let existing = await verify();
+    if (!existing) {
+      const insert = await supabase.from("records").insert([{
+        id: targetId, archive_id: params.archiveId, cycle_id: params.cycleId || null,
+        user_id: params.userId, note: params.record.note || "",
+        visibility: recordVisibility, photo_time: params.record.record_time,
+        record_time: params.record.record_time,
+        upload_time: params.record.created_at || new Date().toISOString(),
+        created_at: params.record.created_at || undefined, status_tag: null,
+      }]);
+      existing = await verify();
+      if (!existing) throw Error(insert.error?.message || "创建转云记录失败，请重试。");
+    }
+    const update = await supabase.from("records").update(currentPayload)
+      .eq("id", targetId).eq("archive_id", params.archiveId).eq("user_id", params.userId);
+    if (update.error) throw Error("更新转云记录失败，请重试。");
+    await updateLocalRecordSyncMeta(params.record.id, {
+      status: "pending-cloud-sync", cloud_archive_id: params.archiveId,
+      cloud_record_id: targetId, last_sync_at: new Date().toISOString(),
+    });
+    return targetId;
+  }
+
   const existingRecordId = cleanText(params.record.sync?.cloud_record_id);
   if (existingRecordId) {
     const { error } = await supabase
@@ -805,6 +851,14 @@ export async function syncLocalArchiveToCloud(params: {
       error: "请先登录，再转到云空间。",
     };
   }
+  const { data: authenticated, error: authError } = await supabase.auth.getUser();
+  if (authError || authenticated.user?.id !== userId) {
+    return { success: false, error: "请用当前云账号重新验证身份后转云。" };
+  }
+  const { data: membershipData, error: membershipError } = await supabase.rpc("get_my_membership");
+  if (membershipError || !canCreateMembershipContent(normalizeMembershipRpcResult(membershipData))) {
+    return { success: false, error: "当前云权益不可用，本地项目和待上传内容已保留。" };
+  }
 
   const detail = await getLocalArchiveDetail(params.localArchiveId, params.ownerContext);
   if (!detail) {
@@ -877,7 +931,7 @@ export async function syncLocalArchiveToCloud(params: {
   }
 
   const sourceCloudArchiveId = cleanText(archive.source_cloud_archive_id);
-  if (sourceCloudArchiveId && !archive.migration_cloud_archive_id) {
+  if (sourceCloudArchiveId && !archive.migration_cloud_archive_id && !preparedTransfer) {
     const { data: sourceArchive, error: sourceArchiveError } = await supabase
       .from("archives")
       .select("id")
@@ -993,6 +1047,9 @@ export async function syncLocalArchiveToCloud(params: {
         visibility: params.visibility,
         record,
         cycleId: cloudCycleId,
+        stableTargetId: preparedTransfer
+          ? await stableTransferRecordId(preparedTransfer.targetCloudArchiveId, record.id)
+          : null,
       });
       if (record.location) {
         const { error: locationError } = await supabase.rpc("set_record_location", { p_record_id: cloudRecordId, p_location: record.location });

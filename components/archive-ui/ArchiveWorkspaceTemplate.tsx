@@ -27,6 +27,7 @@ type Props<T extends string> = {
   filtersSlot?: ReactNode;
   noticeSlot?: ReactNode;
   sourceTrailingSlot?: ReactNode;
+  packVisibleSources?: boolean;
   children: ReactNode;
   online?: boolean;
   showConnectivityNotice?: boolean;
@@ -45,6 +46,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
   filtersSlot,
   noticeSlot,
   sourceTrailingSlot,
+  packVisibleSources = false,
   children,
   online: controlledOnline,
   showConnectivityNotice = true,
@@ -73,6 +75,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
         activeValue={activeSource}
         onSelect={onSelectSource}
         trailingSlot={sourceTrailingSlot}
+        packVisibleSources={packVisibleSources}
       />
 
       {showCreateToolbar ? (

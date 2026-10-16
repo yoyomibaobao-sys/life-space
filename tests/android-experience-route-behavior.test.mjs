@@ -21,11 +21,12 @@ function actualShellNavigation(initial) {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
   }).outputText;
   return new Function("parseAndroidShellPath", "initial", `
-    let screen = initial;
-    const auth = { status: "signed-in" };
-    const setScreen = (next) => { screen = next; };
-    ${js}
-    return { navigate: applyShellPath, current: () => screen, setScreen };
+  let screen = initial;
+  const screenRef = { current: screen };
+  const auth = { status: "signed-in" };
+  const setScreen = (next) => { screen = next; screenRef.current = next; };
+  ${js}
+  return { navigate: applyShellPath, current: () => screen, setScreen, screenRef };
   `)(parseAndroidShellPath, initial);
 }
 
@@ -39,7 +40,7 @@ function renderedExperienceDetail(screen, onBack) {
   }).code;
   const ExperienceCardContent = function ExperienceCardContent() {};
   const AndroidExperienceCardDetail = function AndroidExperienceCardDetail() {};
-  const render = new Function("React", "ExperienceCardContent", "AndroidExperienceCardDetail", `${transformed}; return render;`)(React, ExperienceCardContent, AndroidExperienceCardDetail);
+  const render = new Function("React", "ExperienceCardContent", "AndroidExperienceCardDetail", "openCloudLogin", "applyShellPath", `${transformed}; return render;`)(React, ExperienceCardContent, AndroidExperienceCardDetail, () => {}, () => false);
   const tree = render(screen, onBack);
   return React.Children.toArray(tree.props.children).find((child) => child?.props?.onBack);
 }
@@ -66,4 +67,10 @@ test("personal and public experience routes remain distinct and their detail bac
   assert.equal(publicDetail.type.name, "AndroidExperienceCardDetail");
   publicDetail.props.onBack();
   assert.equal(navigation.current().kind, "experience");
+
+  navigation.screenRef.current = { kind: "my-experience" };
+  navigation.navigate("/experience-cards/card-3");
+  assert.equal(navigation.current().returnTo, "my-experience");
+  assert.deepEqual(parseAndroidShellPath("/experience-cards/new", "?archiveId=project-1"), { kind: "experience-new" });
+  assert.notEqual(parseAndroidShellPath("/experience-cards/card-1").kind, "experience-new");
 });

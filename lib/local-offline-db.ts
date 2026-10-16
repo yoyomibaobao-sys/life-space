@@ -762,6 +762,9 @@ export function resolveIntendedCloudArchiveId(archive: LocalArchive) {
 }
 
 function archiveParticipatesInPendingCloudSync(archive: LocalArchive) {
+  // A saved local copy keeps its cloud source only as provenance, not as a sync target.
+  if (archive.local_role === "local-project" &&
+      normalizeOptionalText(archive.source_cloud_saved_at)) return false;
   return Boolean(
     normalizeOptionalText(archive.source_cloud_archive_id) ||
       isPendingCloudCreateArchive(archive)
@@ -1316,7 +1319,7 @@ async function mirrorCommittedCloudSaf(state: SafState, ownerUserId: string) {
 }
 
 /** Adopt only known-owner legacy cloud rows; never prompt for a folder on reads. */
-async function connectedCloudSafState(ownerUserId: string): Promise<SafState | null> {
+async function connectedCloudSafState(ownerUserId: string, attempt = 0): Promise<SafState | null> {
   const state = await connectedLocalSafState();
   if (!state) return null;
   await safAccountKey(ownerUserId);
@@ -1358,8 +1361,15 @@ async function connectedCloudSafState(ownerUserId: string): Promise<SafState | n
   }
   if (additions.length) {
     const storage = createNativeSafStorage();
-    await commitSafContent(storage, { ...state.source,
-      entries: [...state.source.entries, ...additions] }, state.commit.revision);
+    try {
+      await commitSafContent(storage, { ...state.source,
+        entries: [...state.source.entries, ...additions] }, state.commit.revision);
+    } catch (error) {
+      // The local project commit can land while this read-path adoption still
+      // holds the previous revision. Re-read once so the new head is kept.
+      if (attempt < 1 && isSafRevisionConflict(error)) return connectedCloudSafState(ownerUserId, attempt + 1);
+      throw error;
+    }
     const committed = await readSafCommitted(storage);
     if (!committed || additions.some((entry) => !committed.source.entries.some((row) => row.id === entry.id))) {
       throw Error("SAF cloud migration commit could not be verified.");
@@ -1502,6 +1512,11 @@ async function removeCloudSafArchive(ownerUserId: string, archiveId: string) {
   try { await mirrorCommittedCloudSaf(committed, ownerUserId); }
   catch (error) { console.error("SAF cloud removal committed; mirror will rebuild on next read:", error); }
   return true;
+}
+
+function isSafRevisionConflict(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  return message === "SAF revision conflict." || message === "SAF concurrent revision conflict.";
 }
 
 async function connectedLocalSafState(createIfMissing = false): Promise<SafState | null> {
@@ -2333,7 +2348,10 @@ export async function createLocalTaxonomyItem(
         isLocalTaxonomyVisibleToOwner(row, ownerContext) &&
         localTaxonomyKey(row) === localTaxonomyKey(item)
     );
-  if (existing) return existing;
+  if (existing) {
+    if (isAndroidSafAvailable() && existing.saf_local_space_id) throw Error("此分组已存在");
+    return existing;
+  }
 
   if (isAndroidSafAvailable()) {
     return commitLocalSafTaxonomy((content, localSpaceId) => {
@@ -4205,6 +4223,57 @@ export async function getLocalArchiveByCloudSource(
           isLocalArchiveVisibleToOwner(archive, ownerContext)
       ) || null
   );
+}
+
+/** Commit a downloaded cloud project as an independent local SAF copy.
+ * The caller supplies complete media bytes; IDB changes only after the
+ * immutable SAF commit marker has been read back and validated.
+ */
+export async function commitCloudArchiveSafCopy(input: {
+  archive: LocalArchive;
+  records: LocalRecord[];
+  images: LocalImage[];
+}) {
+  if (!isAndroidSafAvailable()) throw Error("Android SAF storage is required for this copy.");
+  const sourceId = normalizeOptionalText(input.archive.source_cloud_archive_id);
+  if (!sourceId || input.archive.local_role !== "local-project" ||
+      !input.archive.source_cloud_saved_at ||
+      input.archive.sync.status !== "local-only") {
+    throw Error("Invalid independent cloud copy identity.");
+  }
+  const state = await connectedLocalSafState(true);
+  if (!state) throw Error("Connect the LifeSpace data folder before saving.");
+  const existing = state.source.entries.find((entry) =>
+    entry.kind === "local-project" && entry.partition === "local" &&
+    entry.archive.source_cloud_archive_id === sourceId);
+  if (existing) return { archive: existing.archive, alreadySaved: true };
+  if (state.source.entries.some((entry) => entry.id === input.archive.id) ||
+      (await getRowById<LocalArchive>(ARCHIVE_STORE, input.archive.id))) {
+    throw Error("Local project ID conflict; no copy was saved.");
+  }
+  const recordIds = new Set(input.records.map((record) => record.id));
+  if (recordIds.size !== input.records.length ||
+      input.records.some((record) => record.archive_id !== input.archive.id) ||
+      new Set(input.images.map((image) => image.id)).size !== input.images.length ||
+      input.images.some((image) => image.archive_id !== input.archive.id ||
+        !recordIds.has(image.record_id) || !image.blob || image.blob.size <= 0)) {
+    throw Error("Cloud copy record or media verification failed.");
+  }
+  const archive = { ...input.archive, saf_local_space_id: state.manifest.localSpaceId };
+  const entry = { id: archive.id, kind: "local-project" as const,
+    partition: "local" as const, archive, records: input.records, images: input.images };
+  const storage = createNativeSafStorage();
+  await commitSafContent(storage,
+    { ...state.source, entries: [...state.source.entries, entry] }, state.commit.revision);
+  const committed = await readSafCommitted(storage);
+  if (!committed || committed.commit.revision === state.commit.revision ||
+      !committed.source.entries.some((row) => row.id === entry.id &&
+        row.records.length === entry.records.length && row.images.length === entry.images.length)) {
+    throw Error("Cloud copy SAF commit could not be verified.");
+  }
+  try { await mirrorCommittedLocalSaf(committed); }
+  catch (error) { console.error("SAF copy committed; mirror will rebuild on next read:", error); }
+  return { archive, alreadySaved: false };
 }
 
 export async function getCloudOfflineCacheByCloudSource(
