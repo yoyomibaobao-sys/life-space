@@ -68,6 +68,14 @@ export async function GET(request: Request) {
   if (payment.status === "confirmed") {
     return redirectTo(request, "/membership/payment/success");
   }
+  // A refunded order is terminal. Never invoke the external Capture API for it.
+  if (payment.status === "refunded") {
+    return redirectTo(request, "/membership/payment?paypal=refunded");
+  }
+  // Align with the approved-order Webhook's valid local order states.
+  if (!["pending_payment", "canceled", "expired"].includes(payment.status)) {
+    return redirectTo(request, "/membership/payment?paypal=invalid-order");
+  }
 
   try {
     let paypalOrder = await getPayPalOrder(paypalOrderId);
