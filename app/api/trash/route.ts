@@ -119,7 +119,18 @@ export async function GET(request: Request) {
     return noStoreJson({ ok: true, items }, 200);
   }
 
-  const admin = getSupabaseAdmin();
+  let admin: ReturnType<typeof getSupabaseAdmin>;
+  try {
+    admin = getSupabaseAdmin();
+  } catch {
+    console.warn("cloud trash preview lookup unavailable", {
+      errorCode: "preview_admin_unavailable",
+    });
+    return noStoreJson(
+      { ok: true, items: items.map((item) => ({ ...item, previewUrl: null })) },
+      200
+    );
+  }
   const trashEntryIds = items.map((item) => item.trashEntryId);
   const [entryResult, mediaResult] = await Promise.all([
     admin
