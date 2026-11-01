@@ -164,7 +164,7 @@ test("Android packs visible source tabs from the left and web keeps fixed slots"
   assert.match(switcher, /value === "local"\) return 3/);
   assert.match(switcher, /packVisibleSources \? index \+ 1 : sourceSlotColumn\(item\.value\)/);
   assert.match(shell, /packVisibleSources/);
-  assert.doesNotMatch(web, /packVisibleSources/);
+  assert.match(web, /packVisibleSources=\{isCapacitorAndroid\(\)\}/);
 });
 
 test("trash cards retain local and cloud preview images", () => {
