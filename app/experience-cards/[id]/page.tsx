@@ -1,5 +1,4 @@
 "use client";
-import ReportLink from "@/components/support/ReportLink";
 
 import InternalLink from "@/components/navigation/InternalLink";
 import {
@@ -692,7 +691,6 @@ export function ExperienceCardContent({ id, onBack, onDeleted, routerless, onMis
           ) : null}
         </article>
       </section>
-      {!isOwner && <ReportLink targetUrl={`/experience-cards/${detail.card.id}`} />}
 
       {isOwner && !detail.sourceIsComplete ? (
         <section style={warningStyle}>

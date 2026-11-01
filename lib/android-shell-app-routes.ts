@@ -28,6 +28,7 @@ export type AndroidShellRouteKind =
   | "legal"
   | "legal-page"
   | "feedback"
+  | "report"
   | "app-update"
   | "login"
   | "register"
@@ -65,7 +66,7 @@ export function getAndroidRouteCapability(pathname: string): AndroidRouteCapabil
       path === "/feedback" || path === "/app-update" || path === "/membership/payment" || path === "/membership/refund" ||
       /^\/local\/archive\//.test(path) || /^\/plant\//.test(path)) return "hybrid";
   if (path === "/login" || path === "/register" || path === "/admin/memberships" ||
-      path === "/admin/guides" || path === "/admin/support") return "online-controller";
+      path === "/admin/guides" || path === "/admin/support" || path === "/report") return "online-controller";
   if (path === "/plant" || path === "/" || path === "/about" || path === "/membership/benefits" || path === "/profile/data-security" || path === "/legal" ||
       /^\/legal\/(?:privacy|terms|refunds|contact)$/.test(path)) return "local";
   if (path === "/discover" || path === "/discover/search" || path === "/experience" ||
@@ -203,6 +204,7 @@ export function parseAndroidShellPath(
   const legalPage = path.match(/^\/legal\/(privacy|terms|refunds|contact)$/);
   if (legalPage) return { kind: "legal-page", id: legalPage[1] };
   if (path === "/feedback") return { kind: "feedback" };
+  if (path === "/report") return { kind: "report", id: params.get("target") || "" };
   if (path === "/app-update") return { kind: "app-update" };
   if (path === "/about") return { kind: "about" };
   if (path === "/register") return { kind: "register" };

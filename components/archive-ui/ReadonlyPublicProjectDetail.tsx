@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import ArchiveProjectDetailView from "@/components/archive-ui/ArchiveProjectDetailView";
 import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
+import ProjectRecordReportPicker from "@/components/support/ProjectRecordReportPicker";
 import ArchiveProjectDetailStatus, { ArchiveProjectDetailLoading } from "@/components/archive-ui/ArchiveProjectDetailStatus";
 import type { ArchiveProjectDetailTabId } from "@/components/archive-ui/archiveProjectDetailLayout";
 import type { ArchiveDetailArchive, LightboxImage, RecordItem } from "@/lib/archive-detail-types";
@@ -116,6 +117,7 @@ export default function ReadonlyPublicProjectDetail({ item, language, onBack }: 
       onDeleteMedia={async () => undefined} onVisibilityChange={async () => undefined}
       onSetHelpStatus={async () => undefined} onRemoveTag={() => undefined}
       onAddTag={async () => undefined} />}
+    reportSlot={<ProjectRecordReportPicker archiveId={archive.id} records={records} language={language} />}
     lightbox={lightbox ? { ...lightbox, metaText: formatDateTime(lightbox.record.record_time),
       dayText: `${t.record.day_prefix} ${getDayNumber(records.at(-1)?.record_time || archive.created_at || lightbox.record.record_time, lightbox.record.record_time)}${t.record.day_suffix ? ` ${t.record.day_suffix}` : ""}`,
       note: lightbox.record.note || "", onChange: (index) => setLightbox((current) => current ? { ...current, index } : null),

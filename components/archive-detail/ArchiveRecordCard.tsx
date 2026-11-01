@@ -1,5 +1,4 @@
 "use client";
-import ReportLink from "@/components/support/ReportLink";
 import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-time";
 
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
@@ -490,7 +489,6 @@ export default function ArchiveRecordCard({
             ) : null}
           </>
         )}
-      {!isLocalMode && mode !== "owner" && <ReportLink targetUrl={`/archive/${archive.id}?record=${item.id}`} />}
     </ArchiveRecordCardShell>
   );
 }

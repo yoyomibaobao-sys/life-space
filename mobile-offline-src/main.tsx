@@ -191,6 +191,8 @@ import AndroidAppUpdatePage from "@/app/app-update/page";
 import AdminMembershipsPage from "@/app/admin/memberships/page";
 import AdminGuideReviewPage from "@/app/admin/guides/page";
 import AdminSupportPage from "@/app/admin/support/page";
+import SupportCenter from "@/components/support/SupportCenter";
+import { getReportTarget } from "@/lib/support-links";
 import {
   DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
   getCloudArchiveCategoryDepths,
@@ -369,6 +371,7 @@ type Screen =
   | { kind: "legal" }
   | { kind: "legal-page"; id: string }
   | { kind: "feedback" }
+  | { kind: "report"; target: string }
   | { kind: "app-update" }
   | { kind: "admin-memberships" }
   | { kind: "admin-guides" }
@@ -1535,6 +1538,13 @@ function App() {
     }
     if (routed.kind === "feedback") {
       setScreen({ kind: "feedback" });
+      return true;
+    }
+    if (routed.kind === "report") {
+      if (!online) { showToast(copy.needNetwork); return true; }
+      const target = getReportTarget(routed.id);
+      if (!target) { showToast(language === "zh" ? "只能举报公开记录。" : "Only public records can be reported."); return true; }
+      setScreen({ kind: "report", target: target.url });
       return true;
     }
     if (routed.kind === "app-update") {
@@ -3119,6 +3129,13 @@ function App() {
       {screen.kind === "feedback" ? <AndroidProfileInfoPage
         kind="feedback" online={online} signedIn={auth.status === "signed-in"}
         onBack={returnToProfile} onNavigate={(path) => { applyShellPath(path); }} /> : null}
+      {screen.kind === "report" ? (
+        online ? <div data-android-shell-page="safety-report">
+          <MobilePageHeaderView title={language === "zh" ? "内容安全反馈" : "Safety report"}
+            showBack ariaLabel={copy.back} onBack={() => goBackInShell({ kind: "list" })} />
+          <SupportCenter kind="report" initialTarget={screen.target} />
+        </div> : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />
+      ) : null}
       {screen.kind === "app-update" ? <AndroidAppUpdatePage onBack={returnToProfile} /> : null}
       {screen.kind === "admin-memberships" ? (
         online ? <div data-android-shell-page="admin-memberships"><AdminMembershipsPage onBack={returnToProfile} /></div>

@@ -25,6 +25,36 @@ export type AdminSupportSubmissionRow = SupportSubmissionRow & {
   same_target_count: number | string;
 };
 
+export type AdminSupportReportGroupRow = {
+  target_type: string;
+  target_id: string;
+  target_url: string | null;
+  representative_id: string;
+  report_count: number | string;
+  first_report_at: string;
+  group_status: "open" | "resolved";
+};
+
+export type AdminSupportReportDetailRow = {
+  id: string;
+  user_id: string;
+  category: string;
+  content: string | null;
+  source_url: string | null;
+  target_type: string | null;
+  target_id: string | null;
+  target_url: string | null;
+  supplement: string | null;
+  supplemented_at: string | null;
+  status: SupportSubmissionStatus;
+  resolution: string | null;
+  admin_note: string | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+  total_count: number | string;
+};
+
 export type SupportRpcResult = {
   ok?: boolean;
   error?: string;
@@ -43,13 +73,9 @@ export const FEEDBACK_CATEGORIES = [
 ] as const;
 
 export const REPORT_CATEGORIES = [
-  "spam",
-  "harassment",
-  "misleading",
-  "unsafe",
-  "ip",
-  "impersonation",
-  "other",
+  "violence_threat_hate",
+  "harassment_privacy_fraud",
+  "other_severe",
 ] as const;
 
 export function getSupportStatusLabel(
@@ -75,6 +101,9 @@ export function getFeedbackCategoryLabel(value: string, language: "zh" | "en") {
 
 export function getReportCategoryLabel(value: string, language: "zh" | "en") {
   const labels: Record<string, [string, string]> = {
+    violence_threat_hate: ["暴力、威胁或仇恨", "Violence, threats or hate"],
+    harassment_privacy_fraud: ["骚扰、隐私侵犯或欺诈", "Harassment, privacy violations or fraud"],
+    other_severe: ["其他严重违规行为", "Other serious safety violations"],
     spam: ["垃圾或广告", "Spam or advertising"],
     harassment: ["骚扰或攻击", "Harassment or abuse"],
     misleading: ["虚假或误导", "False or misleading"],

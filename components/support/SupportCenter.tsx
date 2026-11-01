@@ -15,25 +15,27 @@ import styles from "./support.module.css";
 
 const FEEDBACK_EMAIL = "yoyomibaobao@gmail.com";
 
-export default function SupportCenter({ kind }: { kind: SupportSubmissionKind }) {
+export default function SupportCenter({ kind, initialTarget = "" }: { kind: SupportSubmissionKind; initialTarget?: string }) {
   const { language, t } = useLanguage();
   const copy = getSupportCopy(language);
   const { userId, error, retry } = useSupportIdentity();
   const params = useSearchParams();
   const [emailStatus, setEmailStatus] = useState("");
   const path = kind === "report" ? "/report" : "/feedback";
-  const returnTo = `${path}${params.toString() ? `?${params.toString()}` : ""}`;
+  const returnTo = initialTarget && kind === "report"
+    ? `/report?target=${encodeURIComponent(initialTarget)}`
+    : `${path}${params.toString() ? `?${params.toString()}` : ""}`;
   return <main className={styles.page}>
     <Link href="/profile" className="mobile-app-desktop-only">{copy.back}</Link>
     <h1 className="mobile-app-desktop-only">{kind === "report" ? copy.report : copy.feedback}</h1>
     <div className={styles.row}>
       <p className={styles.note}>{copy.intro}</p>
-      <Link href={kind === "report" ? "/feedback" : "/report"}>{kind === "report" ? copy.feedback : copy.reports}</Link>
+      {kind === "report" && <Link href="/feedback">{copy.feedback}</Link>}
     </div>
     {error ? <p role="alert" className={styles.error}>{copy.loadError} <button className={styles.secondary} onClick={retry}>{copy.retry}</button></p>
       : userId === undefined ? <p role="status">{copy.loading}</p>
       : !userId ? <section className={styles.card}><p>{copy.signInHint}</p><Link href={buildLoginHref(returnTo)}>{copy.signIn}</Link></section>
-      : <SignedInSupport key={`${userId}-${kind}-${params.get("target") || ""}`} kind={kind} />}
+      : <SignedInSupport key={`${userId}-${kind}-${initialTarget || params.get("target") || ""}`} kind={kind} initialTarget={initialTarget} />}
     <aside className={styles.card}>
       <h2>{copy.emailTitle}</h2><p className={styles.note}>{copy.emailHint}</p>
       <div className={styles.actions}>
@@ -50,11 +52,11 @@ export default function SupportCenter({ kind }: { kind: SupportSubmissionKind })
   </main>;
 }
 
-function SignedInSupport({ kind }: { kind: SupportSubmissionKind }) {
+function SignedInSupport({ kind, initialTarget }: { kind: SupportSubmissionKind; initialTarget: string }) {
   const { language } = useLanguage();
   const copy = getSupportCopy(language);
   const params = useSearchParams();
-  const [targetInput, setTargetInput] = useState(params.get("target") || "");
+  const [targetInput, setTargetInput] = useState(initialTarget || params.get("target") || "");
   const [category, setCategory] = useState("");
   const [content, setContent] = useState("");
   const [source, setSource] = useState("");
@@ -66,7 +68,7 @@ function SignedInSupport({ kind }: { kind: SupportSubmissionKind }) {
   const [submittedId, setSubmittedId] = useState("");
   const categories = kind === "report" ? REPORT_CATEGORIES : FEEDBACK_CATEGORIES;
   const categoryLabel = kind === "report" ? getReportCategoryLabel : getFeedbackCategoryLabel;
-  const requiredContent = kind === "feedback" || category === "other";
+  const requiredContent = kind === "feedback";
   const target = getReportTarget(targetInput);
 
   async function submit(event: FormEvent) {
@@ -86,7 +88,7 @@ function SignedInSupport({ kind }: { kind: SupportSubmissionKind }) {
       });
       const result = data as SupportRpcResult | null;
       if (error || !result?.ok) { setMessage(result?.error === "rate_limited" ? copy.rateLimited : copy.submitError); return; }
-      setFailed(false); setMessage(result.duplicate ? copy.duplicate : copy.submitted);
+      setFailed(false); setMessage(result.duplicate ? copy.duplicate : kind === "report" ? copy.reportSubmitted : copy.submitted);
       if (!result.duplicate) setContent("");
       setSubmittedId(result.id || ""); setRevision(value => value + 1);
     } catch { setMessage(copy.submitError); }

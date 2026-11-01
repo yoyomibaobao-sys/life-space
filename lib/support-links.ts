@@ -22,12 +22,12 @@ export function getReportTarget(value?: string | null) {
   const path = safeSupportUrl(value);
   if (!path) return null;
   const url = new URL(path, ORIGIN);
-  const match = url.pathname.match(/^\/(archive|experience-cards|market|user)\/([^/]+)\/?$/);
-  if (!match || !UUID.test(match[2])) return null;
-  const types: Record<string, string> = { archive: "archive", "experience-cards": "experience_card", market: "market_post", user: "user" };
-  const record = match[1] === "archive" ? url.searchParams.get("record") : null;
-  const id = match[2].toLowerCase();
-  return { type: record ? "record" : types[match[1]], id: record || id, url: `/${match[1]}/${id}${record ? `?record=${record}` : ""}` };
+  const match = url.pathname.match(/^\/archive\/([^/]+)\/?$/);
+  const record = url.searchParams.get("record");
+  if (!match || !UUID.test(match[1]) || !record || !UUID.test(record)) return null;
+  const archiveId = match[1].toLowerCase();
+  const id = record.toLowerCase();
+  return { type: "record", id, url: `/archive/${archiveId}?record=${id}` };
 }
 
 export function buildReportHref(targetUrl: string) {

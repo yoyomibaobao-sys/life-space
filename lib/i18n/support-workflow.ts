@@ -5,10 +5,10 @@ const zh = {
   loading: "正在读取…", loadError: "读取失败，请检查网络后重试。", retry: "重试",
   empty: "暂无提交记录。", recent: "显示最近 100 条记录。", notInRecent: "这条记录未出现在最近记录中。",
   category: "类型", choose: "请选择", content: "说明", optional: "（可选）",
-  target: "被举报内容链接", targetHint: "项目、记录、经验卡、集市或用户空间的 LifeSpace 链接。",
+  target: "被举报内容链接", targetHint: "仅限公开项目中的具体记录链接，请从项目详情的“举报记录”入口选择记录。",
   targetError: "请填写有效的 LifeSpace 内容链接。", source: "相关页面链接（可选）",
   required: "请选择类型并填写必要的说明。", submit: "提交", submitting: "提交中…",
-  submitError: "提交失败，输入内容已保留，请稍后重试。", submitted: "已提交，可在下方查看处理状态。",
+  submitError: "提交失败，输入内容已保留，请稍后重试。", submitted: "已提交，可在下方查看处理状态。", reportSubmitted: "感谢反馈，我们会根据平台安全规则核查。",
   duplicate: "你已举报过这条内容，可在下方查看处理进度。", rateLimited: "今天提交较多，请稍后再试。",
   privacy: "请勿填写密码、验证码或不必要的私人资料。",
   supplement: "补充说明", supplementHint: "请补充具体问题、发生位置或可核实的细节。每条记录可补充一次。",
@@ -23,7 +23,7 @@ const zh = {
   sameTarget: "同一内容待处理数", confirm: "确认登记此处理结果并通知提交人？",
   confirmGroup: "确认将同一内容的待处理举报一并结案，并通知所有提交人？",
   updated: "处理状态已更新。", actionError: "处理失败，请刷新状态后重试。",
-  back: "返回用户信息", reportThis: "举报此内容", newSubmission: "提交新的反馈",
+  back: "返回用户信息", reportThis: "举报记录", newSubmission: "提交新的反馈",
 } as const;
 const en: Record<keyof typeof zh, string> = {
   report: "Report", reports: "My reports", feedback: "Feedback & contact", history: "Submissions & progress",
@@ -32,10 +32,10 @@ const en: Record<keyof typeof zh, string> = {
   loading: "Loading…", loadError: "Could not load. Check your connection and retry.", retry: "Retry",
   empty: "No submissions yet.", recent: "Showing your most recent 100 submissions.", notInRecent: "This submission is not in the recent records.",
   category: "Category", choose: "Select one", content: "Details", optional: " (optional)",
-  target: "Reported content link", targetHint: "A LifeSpace project, record, experience card, market post, or user space link.",
+  target: "Reported content link", targetHint: "Only public record links. Select a record using the report entry on its project detail page.",
   targetError: "Enter a valid LifeSpace content link.", source: "Related page link (optional)",
   required: "Choose a category and enter the required details.", submit: "Submit", submitting: "Submitting…",
-  submitError: "Could not submit. Your text is kept here; please retry.", submitted: "Submitted. Check progress below.",
+  submitError: "Could not submit. Your text is kept here; please retry.", submitted: "Submitted. Check progress below.", reportSubmitted: "Thank you for your report. We will review it under our platform safety rules.",
   duplicate: "You have already reported this item. Check its progress below.", rateLimited: "You have made several submissions today. Please try later.",
   privacy: "Do not include passwords, verification codes, or unnecessary personal information.",
   supplement: "Additional information", supplementHint: "Add the specific problem, where it occurred, or details we can check. You can add information once per submission.",
@@ -50,6 +50,6 @@ const en: Record<keyof typeof zh, string> = {
   sameTarget: "Open reports for this item", confirm: "Record this result and notify the submitter?",
   confirmGroup: "Close all open reports about this item and notify all submitters?",
   updated: "Status updated.", actionError: "Could not update. Refresh the status and retry.",
-  back: "Back to user information", reportThis: "Report this content", newSubmission: "Send new feedback",
+  back: "Back to user information", reportThis: "Report record", newSubmission: "Send new feedback",
 };
 export const getSupportCopy = (language: "zh" | "en") => language === "en" ? en : zh;

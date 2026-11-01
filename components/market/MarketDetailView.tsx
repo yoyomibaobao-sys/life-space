@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import InternalLink from "@/components/navigation/InternalLink";
-import ReportLink from "@/components/support/ReportLink";
 import MarketCommentsSection from "@/components/market/MarketCommentsSection";
 import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import UiIcon from "@/components/ui/UiIcon";
@@ -284,7 +283,7 @@ export default function MarketDetailView({ payload, loading, working, online, on
               </div>
             ) : null}
           </section>
-          {!isOwner && <ReportLink targetUrl={`/market/${item.id}`} />}
+
         </div>
       </main>
 

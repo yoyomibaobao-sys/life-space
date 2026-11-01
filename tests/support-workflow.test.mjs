@@ -19,7 +19,11 @@ test("report links accept canonical content paths and strip sensitive URL fields
   const target = getReportTarget(`/archive/${uid(1)}?record=${uid(2)}&token=secret`);
   assert.equal(target.type, "record"); assert.equal(target.id, uid(2));
   assert.equal(target.url, `/archive/${uid(1)}?record=${uid(2)}`);
-  assert.equal(buildReportHref(`/market/${uid(3)}`), `/report?target=${encodeURIComponent(`/market/${uid(3)}`)}`);
+  assert.equal(getReportTarget(`/archive/${uid(1)}`), null);
+  assert.equal(getReportTarget(`/market/${uid(3)}`), null);
+  assert.equal(getReportTarget(`/experience-cards/${uid(2)}`), null);
+  assert.equal(getReportTarget(`/user/${uid(2)}`), null);
+  assert.equal(buildReportHref(`/archive/${uid(1)}?record=${uid(2)}`), `/report?target=${encodeURIComponent(`/archive/${uid(1)}?record=${uid(2)}`)}`);
 });
 
 test("support RPCs isolate users, deduplicate reports, limit supplements, and notify grouped outcomes", async () => {

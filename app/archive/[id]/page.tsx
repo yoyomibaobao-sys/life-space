@@ -1,5 +1,5 @@
 "use client";
-import ReportLink from "@/components/support/ReportLink";
+import ProjectRecordReportPicker from "@/components/support/ProjectRecordReportPicker";
 
 import PlantingRegionEditor from "@/components/archive/PlantingRegionEditor";
 import type { PlantingRegion } from "@/lib/planting-region";
@@ -2075,7 +2075,7 @@ saveRecentArchiveBrowse({
       )}
       isProjectFollowed={isProjectFollowed}
       onToggleFollow={() => void toggleProjectFollow()}
-      reportSlot={!isOwner ? <ReportLink targetUrl={"/archive/" + activeArchive.id} /> : null}
+      reportSlot={!isOwner && activeArchive.is_public ? <ProjectRecordReportPicker archiveId={activeArchive.id} records={records} language={language} /> : null}
       statusNotice={isOwner && !canWriteCloud ? (
         <div style={archiveProjectDetailReadOnlyNoticeStyle}>
           <span>
