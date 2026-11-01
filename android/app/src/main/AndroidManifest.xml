@@ -10,6 +10,10 @@
             <action android:name="android.intent.action.SEND" />
             <data android:mimeType="video/mp4" />
         </intent>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <package android:name="com.huawei.photos" />
     </queries>
 
     <application

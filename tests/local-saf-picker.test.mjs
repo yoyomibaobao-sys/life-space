@@ -26,6 +26,12 @@ test("the picker hints the saved tree before the default folder without probing 
   assert.doesNotMatch(chooser, /getContentResolver|listRoot|fileMetadata|\.query\(|\.mkdir/);
 });
 
+test("Huawei gallery and camera picker handlers remain discoverable", () => {
+  const manifest = fs.readFileSync("android/app/src/main/AndroidManifest.xml", "utf8");
+  assert.match(manifest, /android\.media\.action\.IMAGE_CAPTURE/);
+  assert.match(manifest, /<package android:name="com\.huawei\.photos"\s*\/>/);
+});
+
 test("system cancellation, candidate validation and existing inline recovery guidance remain", () => {
   const callback = plugin.slice(plugin.indexOf("public void directorySelected("), plugin.indexOf("public void confirmDirectory("));
   assert.match(callback, /result\.getResultCode\(\) != Activity\.RESULT_OK/);
