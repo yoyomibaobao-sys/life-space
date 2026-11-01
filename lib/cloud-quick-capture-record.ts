@@ -180,10 +180,12 @@ export async function saveQuickCaptureAsFirstCloudRecord({
   archiveId,
   userId,
   quickCaptureId,
+  visibility = "public",
 }: {
   archiveId: string;
   userId: string;
   quickCaptureId: string;
+  visibility?: "public" | "private";
 }) {
   const capture = await getQuickCapture(quickCaptureId);
   if (!capture) throw new CloudQuickCaptureError("capture_missing");
@@ -210,7 +212,7 @@ export async function saveQuickCaptureAsFirstCloudRecord({
     capture.createdAt || new Date().toISOString(),
   );
   const { data: record, error: recordError } = await supabase.rpc("create_record_with_location", {
-    p_archive_id: archiveId, p_cycle_id: null, p_note: "", p_visibility: "public",
+    p_archive_id: archiveId, p_cycle_id: null, p_note: "", p_visibility: visibility,
     p_record_time: recordTime, p_status_tag: null, p_location: loadDefaultRecordLocation(userId),
   }).single<{ id: string }>();
 

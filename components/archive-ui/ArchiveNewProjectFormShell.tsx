@@ -27,6 +27,7 @@ type Props = {
   plantingRegionControl?: ReactNode;
   note: string;
   onNoteChange: (value: string) => void;
+  visibilityControl?: ReactNode;
   notice: ReactNode;
   submitText: string;
   loadingText: string;
@@ -54,6 +55,7 @@ export default function ArchiveNewProjectFormShell({
   plantingRegionControl,
   note,
   onNoteChange,
+  visibilityControl,
   notice,
   submitText,
   loadingText,
@@ -175,6 +177,7 @@ export default function ArchiveNewProjectFormShell({
             />
           </ArchiveNewProjectField>
 
+          {visibilityControl}
           <section className={styles.notice}>{notice}</section>
 
           <div style={actionRowStyle}>

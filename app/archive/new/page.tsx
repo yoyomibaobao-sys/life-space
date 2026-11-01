@@ -107,6 +107,7 @@ function NewArchiveContent() {
 
   const [source, setSource] = useState("");
   const [note, setNote] = useState("");
+  const [archiveIsPublic, setArchiveIsPublic] = useState(DEFAULT_ARCHIVE_IS_PUBLIC);
 
   const [loading, setLoading] = useState(false);
   const [membership, setMembership] = useState<MyMembership | null>(null);
@@ -260,6 +261,7 @@ function NewArchiveContent() {
     }
 
     let archiveId = createdArchiveId;
+    const recordVisibility = archiveIsPublic ? DEFAULT_RECORD_VISIBILITY : "private";
     if (!archiveId) {
       const selectedSpecies = speciesId ? systemCandidates.find((s) => s.plantId === speciesId) : null;
       const speciesNameSnapshot =
@@ -275,8 +277,8 @@ function NewArchiveContent() {
           system_name: category === "plant" ? null : cleanSystemName,
           source: cleanObjectName || null, note: note.trim() || null,
           planting_region: normalizePlantingRegion(plantingRegion),
-          is_public: DEFAULT_ARCHIVE_IS_PUBLIC,
-          default_record_visibility: DEFAULT_RECORD_VISIBILITY,
+          is_public: archiveIsPublic,
+          default_record_visibility: recordVisibility,
         },
       });
 
@@ -287,6 +289,22 @@ function NewArchiveContent() {
       }
       archiveId = createdArchive;
       setCreatedArchiveId(archiveId);
+    }
+
+    // The RPC may have committed even when a follow-up read fails.
+    // Retain the returned ID so retrying cannot create a duplicate.
+    const { data: savedArchive, error: readError } = await supabase
+      .from("archives")
+      .select("id,user_id,is_public,default_record_visibility")
+      .eq("id", archiveId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (readError || !savedArchive || savedArchive.is_public !== archiveIsPublic || savedArchive.default_record_visibility !== recordVisibility) {
+      setLoading(false);
+      showToast(language === "en"
+        ? "Project created, but its visibility could not be confirmed. Check My Space before retrying."
+        : "项目已创建，但无法确认公开状态，请先在我的空间核对后再重试。");
+      return;
     }
 
     if (selectedPlanId && archiveId && !createdArchiveId) {
@@ -310,6 +328,7 @@ function NewArchiveContent() {
           archiveId,
           userId: user.id,
           quickCaptureId,
+          visibility: recordVisibility,
         });
       } catch (captureError) {
         setLoading(false);
@@ -427,7 +446,32 @@ function NewArchiveContent() {
       }
       note={note}
       onNoteChange={setNote}
-      notice={copy.cloud_notice}
+      visibilityControl={
+        <fieldset style={{ minWidth: 0, margin: 0, padding: "12px 14px", border: "1px solid #dce5d8", borderRadius: 12 }}>
+          <legend style={{ padding: "0 5px", fontWeight: 650 }}>
+            {language === "en" ? "Project visibility" : "项目可见性"}
+          </legend>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 18 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input type="radio" name="cloud-project-visibility" value="public"
+                checked={archiveIsPublic} disabled={Boolean(createdArchiveId)}
+                onChange={() => setArchiveIsPublic(true)} />
+              {copy.public_discover}
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input type="radio" name="cloud-project-visibility" value="private"
+                checked={!archiveIsPublic} disabled={Boolean(createdArchiveId)}
+                onChange={() => setArchiveIsPublic(false)} />
+              {copy.private_only}
+            </label>
+          </div>
+        </fieldset>
+      }
+      notice={archiveIsPublic ? copy.cloud_notice : (
+        language === "en"
+          ? "Only you can view this cloud project and its future records; you can change visibility later."
+          : "此云端项目及今后新增记录仅自己可见；创建后仍可修改公开方式。"
+      )}
       submitText={copy.create_project}
       loadingText={copy.creating}
       submitting={loading}

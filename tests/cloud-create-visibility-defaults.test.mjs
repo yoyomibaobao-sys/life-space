@@ -34,11 +34,14 @@ test("cloud project visibility defaults and transitions stay unified", async () 
 
   assert.match(newProject, /const DEFAULT_ARCHIVE_IS_PUBLIC = true/);
   assert.match(newProject, /const DEFAULT_RECORD_VISIBILITY = "public"/);
-  assert.match(newProject, /is_public: DEFAULT_ARCHIVE_IS_PUBLIC/);
-  assert.match(newProject, /default_record_visibility: DEFAULT_RECORD_VISIBILITY/);
+  assert.match(newProject, /useState\(DEFAULT_ARCHIVE_IS_PUBLIC\)/);
+  assert.match(newProject, /is_public: archiveIsPublic/);
+  assert.match(newProject, /recordVisibility = archiveIsPublic \? DEFAULT_RECORD_VISIBILITY : "private"/);
+  assert.match(newProject, /default_record_visibility: recordVisibility/);
   assert.match(addRecord, /useState<RecordVisibility>\(archiveIsPublic \? "public" : "private"\)/);
   assert.match(addRecord, /visibility: finalVisibility/);
-  assert.match(quickCapture, /visibility: "public"/);
+  assert.match(quickCapture, /p_visibility: visibility/);
+  assert.match(newProject, /visibility: recordVisibility/);
   assert.match(archiveList, /newValue \? "make_my_archive_public" : "make_my_archive_private"/);
   assert.match(archiveDetail, /nextValue \? "make_my_archive_public" : "make_my_archive_private"/);
   assert.match(migration, /create or replace function public\.make_my_archive_public/);
