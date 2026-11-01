@@ -79,6 +79,7 @@ import {
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
+import { isAndroidRecordGallery, pickAndroidRecordPhotos } from "@/lib/android-record-gallery";
 import {
   buildRecordPhotoGroups,
   limitRecordPhotoBatch,
@@ -133,7 +134,7 @@ function getOngoingDays(createdAt?: string | null) {
   return Math.max(1, Math.floor((today - startDate) / dayMs) + 1);
 }
 
-function fileListToArray(files: FileList | null) {
+function fileListToArray(files: FileList | File[] | null) {
   return Array.from(files || []).filter((file) => file.type.startsWith("image/"));
 }
 
@@ -432,7 +433,7 @@ export default function LocalArchiveDetailPage() {
     setLocalLightboxRecord(null);
   }
 
-  function appendFiles(files: FileList | null) {
+  function appendFiles(files: FileList | File[] | null) {
     const images = fileListToArray(files);
     if (images.length === 0) return;
     const { accepted, rejectedCount } = limitRecordPhotoBatch(images);
@@ -1438,7 +1439,19 @@ export default function LocalArchiveDetailPage() {
             </div>
 
             <div style={imageActionRowStyle}>
-              <label style={imagePickerStyle}>
+              <label
+                style={imagePickerStyle}
+                onClick={(event) => {
+                  if (!isAndroidRecordGallery()) return;
+                  event.preventDefault();
+                  void pickAndroidRecordPhotos().then(({ files, truncated }) => {
+                    appendFiles(files);
+                    if (truncated) {
+                      showToast(recordCopy.photo_batch_trimmed_prefix + " " + MAX_RECORD_PHOTOS_PER_ADD + " " + recordCopy.photo_batch_trimmed_suffix);
+                    }
+                  }).catch(() => showToast(language === "zh" ? "无法读取图库照片。" : "Unable to read gallery photos."));
+                }}
+              >
                 {recordCopy.choose_photos}
                 <input
                   type="file"

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import InternalLink from "@/components/navigation/InternalLink";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { getBehaviorRestrictionErrorText } from "@/lib/behavior-restriction-errors";
 import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
@@ -37,6 +38,7 @@ import {
 } from "@/lib/archive-cycle-dates";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
+import { isAndroidRecordGallery, pickAndroidRecordPhotos } from "@/lib/android-record-gallery";
 import { toLocalDateTimeInputValue } from "@/lib/date-time";
 import {
   buildRecordPhotoGroups,
@@ -294,6 +296,22 @@ export default function AddRecord({
     setFilePreviews((prev) => [...prev, ...previews]);
   }
 
+  async function chooseFromGallery() {
+    if (!isAndroidRecordGallery()) {
+      chooseInputRef.current?.click();
+      return;
+    }
+    try {
+      const { files: selected, truncated } = await pickAndroidRecordPhotos();
+      appendFiles(selected);
+      if (truncated) {
+        showToast(copy.photo_batch_trimmed_prefix + " " + MAX_RECORD_PHOTOS_PER_ADD + " " + copy.photo_batch_trimmed_suffix);
+      }
+    } catch {
+      showToast(language === "zh" ? "无法读取图库照片。" : "Unable to read gallery photos.");
+    }
+  }
+
   function appendFiles(nextFiles: File[]) {
     if (nextFiles.length === 0) return;
     const { accepted, rejectedCount } = limitRecordPhotoBatch(nextFiles);
@@ -346,6 +364,8 @@ export default function AddRecord({
 
     if (error) {
       console.error("record 创建失败", error);
+      const restrictionMessage = getBehaviorRestrictionErrorText(error, language);
+      if (restrictionMessage) showToast(restrictionMessage);
       return null;
     }
 
@@ -645,7 +665,7 @@ export default function AddRecord({
         );
 
         if (archiveError || publicationResult !== true) {
-          showToast(copy.publish_shell_failed);
+          showToast(getBehaviorRestrictionErrorText(archiveError, language) || copy.publish_shell_failed);
           setLoading(false);
           return;
         }
@@ -934,7 +954,7 @@ export default function AddRecord({
               <button type="button" onClick={() => cameraInputRef.current?.click()} disabled={loading || membershipLoading || contentBlocked} style={mobilePhotoButtonStyle}>
                 {copy.take_photo}
               </button>
-              <button type="button" onClick={() => chooseInputRef.current?.click()} disabled={loading || membershipLoading || contentBlocked} style={mobilePhotoButtonStyle}>
+              <button type="button" onClick={() => { void chooseFromGallery(); }} disabled={loading || membershipLoading || contentBlocked} style={mobilePhotoButtonStyle}>
                 {copy.choose_photos}
               </button>
             </div>
@@ -943,7 +963,7 @@ export default function AddRecord({
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <button
               type="button"
-              onClick={() => chooseInputRef.current?.click()}
+              onClick={() => { void chooseFromGallery(); }}
               disabled={loading || membershipLoading || contentBlocked}
               style={{
                 padding: "10px 14px",

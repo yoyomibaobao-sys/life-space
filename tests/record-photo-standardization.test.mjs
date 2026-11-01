@@ -43,6 +43,52 @@ test("local-to-cloud transfer reuses sanitized photos and sanitizes a copy of le
   assert.match(sync, /height: standard\?\.height \?\? params\.image\.height \?\? null/);
 });
 
+test("quick camera album reuses Android record gallery but keeps web, camera and skip paths", async () => {
+  const shell = await source("mobile-offline-src/main.tsx");
+  const camera = await source("components/mobile/AndroidQuickCamera.tsx");
+  const start = shell.indexOf("  async function openQuickAddAlbum() {");
+  const end = shell.indexOf("  function skipQuickAddPhotos()", start);
+  assert.ok(start >= 0 && end > start);
+  const handler = shell.slice(start, end);
+  assert.match(handler, /if \(!isAndroidRecordGallery\(\)\) \{ quickGallery\.current\?\.click\(\); return; \}/);
+  assert.match(handler, /await pickAndroidRecordPhotos\(\)/);
+  assert.match(handler, /await acceptQuickAddImageFiles\(files, "gallery"\)/);
+  assert.match(handler, /if \(truncated\) showToast\(copy\.photoLimit\)/);
+  assert.match(shell, /onAlbum=\{\(\) => void openQuickAddAlbum\(\)\}/);
+  assert.match(shell, /onCapture=\{\(file\) => acceptQuickAddImageFiles\(\[file\], "camera"\)\}/);
+  assert.match(shell, /onSkip=\{skipQuickAddPhotos\}/);
+  assert.match(camera, /onClick=\{onAlbum\}/);
+});
+
+test("cloud record composer uses the native gallery without changing web picker or restriction handling", async () => {
+  const addRecord = await source("app/archive/[id]/AddRecord.tsx");
+  const start = addRecord.indexOf("  async function chooseFromGallery() {");
+  const end = addRecord.indexOf("  function appendFiles(", start);
+  assert.ok(start >= 0 && end > start);
+  const handler = addRecord.slice(start, end);
+  assert.match(handler, /if \(!isAndroidRecordGallery\(\)\)[\s\S]*chooseInputRef\.current\?\.click\(\)/);
+  assert.match(handler, /await pickAndroidRecordPhotos\(\)/);
+  assert.match(handler, /appendFiles\(selected\)/);
+  assert.match(addRecord, /onClick=\{\(\) => \{ void chooseFromGallery\(\); \}\}/);
+  assert.match(addRecord, /getBehaviorRestrictionErrorText/);
+});
+
+test("local record composer accepts native gallery files while retaining the browser file input", async () => {
+  const localRecord = await source("app/local/archive/[id]/page.tsx");
+  assert.match(localRecord, /function fileListToArray\(files: FileList \| File\[\] \| null\)/);
+  assert.match(localRecord, /function appendFiles\(files: FileList \| File\[\] \| null\)/);
+  const labelEnd = localRecord.indexOf("recordCopy.choose_photos");
+  const labelStart = localRecord.lastIndexOf("<label", labelEnd);
+  const handlerEnd = localRecord.indexOf("</label>", labelStart);
+  assert.ok(labelStart >= 0 && handlerEnd > labelStart);
+  const handler = localRecord.slice(labelStart, handlerEnd);
+  assert.match(handler, /if \(!isAndroidRecordGallery\(\)\) return/);
+  assert.match(handler, /event\.preventDefault\(\)/);
+  assert.match(handler, /pickAndroidRecordPhotos\(\)/);
+  assert.match(handler, /appendFiles\(files\)/);
+  assert.match(handler, /<input[\s\S]*type="file"/);
+});
+
 test("the web UI states the standard and does not promise automatic system-album writes", async () => {
   const [cloudComposer, localComposer, rules, zhCopy, enCopy] = await Promise.all([
     source("app/archive/[id]/AddRecord.tsx"),
