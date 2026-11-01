@@ -10,6 +10,7 @@ import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import AdminTrialCleanupPreview from "@/components/admin/AdminTrialCleanupPreview";
+import AdminBehaviorPermissions from "@/components/admin/AdminBehaviorPermissions";
 import {
   formatMembershipDate,
   formatStorageBytes,
@@ -2294,6 +2295,7 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
                 </div>
 
                 </details>
+                <AdminBehaviorPermissions userId={selected.user_id} disabled={Boolean(selected.auth_missing)} />
                 <details key={`${selected.user_id}-account`} style={{ marginBlock: 14 }}><summary style={adminDetailSummaryStyle}>{language === "zh" ? "账号操作" : "Account actions"}</summary>
                   <p style={smallTextStyle}>{language === "zh" ? "停用会员权益会保留账号和资料；永久注销会删除账号及关联内容。" : "Stopping benefits keeps the account and its data. Permanent deletion removes the account and related content."}</p>
                   <div style={actionRowStyle}>
