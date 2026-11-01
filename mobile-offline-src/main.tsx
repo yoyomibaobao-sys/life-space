@@ -18,6 +18,7 @@ import {
   createLocalArchive,
   createLocalRecord,
   deleteLocalArchive,
+  cancelNeverUploadedCloudArchive,
   deleteLocalRecord,
   resolveLocalArchiveDetail,
   inferSingleLocalArchiveOwnerContext,
@@ -218,7 +219,16 @@ import {
 const MAX_PHOTOS = 10;
 
 type Language = "zh" | "en";
-type ShellSourceFilter = "all" | "cloud" | "local";
+type ShellSourceFilter = "all" | "cloud" | "pending" | "local";
+
+// W5 keeps the online Android workspace focused on cloud projects and the
+// existing pending-upload queue. Hiding the legacy source tabs does not delete
+// local SAF data, cloud caches, or pending records.
+function w5WorkspaceSources(auth: "checking" | "signed-out" | "signed-in", localEnabled: boolean, cloudReadable: boolean): ShellSourceFilter[] {
+  const current = workspaceSourceOptions(auth, localEnabled, cloudReadable);
+  const visible = current.filter((source) => source !== "all" && source !== "local");
+  return auth === "signed-in" ? [...visible, "pending"] : visible;
+}
 
 type ShellSpaceProfile = {
   username: string | null;
@@ -1068,29 +1078,38 @@ function App() {
     setSafRegrantRunning(true);
     setSafRegrantError("");
     try {
-      await connectLocalSafDirectory();
-      await migrateLegacyLocalOrigin();
-      await loadList();
+      try {
+        await connectLocalSafDirectory();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        setSafRegrantError(message.includes("No LifeSpace data directory was selected")
+          ? copy.safRegrantCanceled
+          : message.includes("Select the original LifeSpace data folder")
+            ? copy.safRegrantWrong : copy.safRegrantFailed);
+        return;
+      }
       setSafRegrantNeeded(false);
-      setMigrationWarning(false);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      setSafRegrantError(message.includes("No LifeSpace data directory was selected")
-        ? copy.safRegrantCanceled
-        : message.includes("Select the original LifeSpace data folder")
-          ? copy.safRegrantWrong : copy.safRegrantFailed);
+      setSafConnectionMissing(false);
+
+      try {
+        await migrateLegacyLocalOrigin();
+        setMigrationWarning(false);
+      } catch {
+        console.warn("Legacy local origin migration failed after SAF connection.");
+        setMigrationWarning(true);
+      }
+
+      try {
+        await loadList();
+      } catch {
+        console.warn("Local list refresh failed after SAF connection.");
+        showToast(copy.readFailed);
+      }
     } finally {
       safConnectRunning.current = false;
       setSafRegrantRunning(false);
     }
-  }, [loadList, copy.safRegrantCanceled, copy.safRegrantWrong, copy.safRegrantFailed]);
-
-  useEffect(() => {
-    if (loading || !firstUseChecked || screen.kind !== "list" ||
-        localSpacePreference === false || sourceFilter === "cloud" ||
-        !safRegrantNeeded || safConnectAttempted.current) return;
-    void connectSaf();
-  }, [loading, firstUseChecked, screen.kind, localSpacePreference, sourceFilter, safRegrantNeeded, connectSaf]);
+  }, [loadList, showToast, copy.safRegrantCanceled, copy.safRegrantWrong, copy.safRegrantFailed, copy.readFailed]);
 
   const loadCloudList = useCallback(async (userId?: string | null) => {
     const requestId = ++cloudListRequestRef.current;
@@ -1307,7 +1326,7 @@ function App() {
         assertLocalOfflineAvailable();
         const savedSaf = await getLocalSafDirectory();
         const needsRegrant = Boolean(savedSaf.uri && !savedSaf.available);
-        setSafRegrantNeeded(isAndroidSafAvailable() && !savedSaf.available);
+        setSafRegrantNeeded(isAndroidSafAvailable() && needsRegrant);
         setSafConnectionMissing(!savedSaf.uri);
         // Do not run legacy handoff while the committed SAF source is inaccessible.
         const migration = needsRegrant ? null : await migrateLegacyLocalOrigin();
@@ -1868,7 +1887,7 @@ function App() {
       ? cachedTaxonomy
       : [];
   const selectedTaxonomy = sourceFilter === "local" ? localTaxonomy
-    : sourceFilter === "cloud" ? currentCloudTaxonomy : [...currentCloudTaxonomy, ...localTaxonomy];
+    : sourceFilter === "cloud" || sourceFilter === "pending" ? currentCloudTaxonomy : [...currentCloudTaxonomy, ...localTaxonomy];
   const visibleSubcategories = selectedTaxonomy.filter((item) => item.kind === "subcategory" && item.category === categoryFilter);
   const visibleGroups = selectedTaxonomy.filter((item) => item.kind === "group" && item.parentId === subcategoryFilter);
   const subcategoryLabel = selectedTaxonomy.find((item) => item.id === subcategoryFilter)?.label;
@@ -1893,7 +1912,7 @@ function App() {
   });
   useEffect(() => {
     if (auth.status === "checking") return;
-    const available = workspaceSourceOptions(auth.status, localSpaceEnabled, cloudReadable);
+    const available = w5WorkspaceSources(auth.status, localSpaceEnabled, cloudReadable);
     if (!available.length || available.includes(sourceFilter)) return;
     setSourceFilter(auth.status === "signed-out" && localSpaceEnabled ? "local" : available[0]);
     setSubcategoryFilter(null);
@@ -2114,6 +2133,18 @@ function App() {
       actionSlot={renderProjectActions(archive, "local")}
     />;
   }
+  async function cancelPendingCreatedProject(item: PendingCloudProject<LocalArchiveSummary, CloudArchiveSummary>) {
+    if (!authenticatedOwnerContext?.userId || syncingArchiveId || !item.creating || item.summaries.length !== 1) return;
+    if (!window.confirm(language === "zh" ? "确认取消尚未上传的项目及其记录与照片？不能恢复。" : "Cancel the never-uploaded project and its records/photos permanently?")) return;
+    setSyncingArchiveId(item.key);
+    try {
+      await cancelNeverUploadedCloudArchive(item.summaries[0].local_archive_id, authenticatedOwnerContext);
+      await loadList(authenticatedOwnerContext);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : (language === "zh" ? "安全条件未通过，已保留原件" : "Unsafe to cancel; local data preserved"));
+    } finally { setSyncingArchiveId(null); }
+  }
+
   function renderPendingProjectCard(item: PendingCloudProject<LocalArchiveSummary, CloudArchiveSummary>) {
     const local = item.local || item.cache;
     const base = local
@@ -2133,10 +2164,16 @@ function App() {
       project={{ ...base, href: undefined, visibilityLabel: badge, visibilityTone: "neutral", latestText: counts }}
       onClick={() => local ? openDetail(local.id) : item.cloud && setScreen({ kind: "cloud-detail", archiveId: item.cloud.id })}
       mobileMode mobileShowCategoryBadge={false}
-      actionSlot={online && authenticatedOwnerContext ? <button type="button" className="secondary-button compact-card-action"
-        disabled={Boolean(syncingArchiveId)} onClick={() => void uploadPendingProject(item)}>
-        {syncingArchiveId === item.key || syncingArchiveId === item.summaries[0]?.local_archive_id ? (language === "zh" ? "上传中…" : "Uploading…") : (language === "zh" ? "上传" : "Upload")}
-      </button> : null}
+      actionSlot={authenticatedOwnerContext ? <div className="action-row">
+        {online ? <button type="button" className="secondary-button compact-card-action"
+          disabled={Boolean(syncingArchiveId)} onClick={() => void uploadPendingProject(item)}>
+          {syncingArchiveId === item.key || syncingArchiveId === item.summaries[0]?.local_archive_id ? (language === "zh" ? "上传中…" : "Uploading…") : item.failed ? (language === "zh" ? "重试" : "Retry") : (language === "zh" ? "上传" : "Upload")}
+        </button> : null}
+        <button type="button" className="secondary-button compact-card-action"
+          disabled={!item.creating || item.summaries.length !== 1 || Boolean(syncingArchiveId)}
+          title={!item.creating ? (language === "zh" ? "远端或修改状态未知，不能安全取消" : "Cannot safely cancel remote edits") : undefined}
+          onClick={() => void cancelPendingCreatedProject(item)}>{language === "zh" ? "取消待上传" : "Cancel pending"}</button>
+      </div> : null}
     />;
   }
   function renderProjectActions(archive: CloudArchiveSummary | LocalArchiveSummary, source: "cloud" | "local" | "cache") {
@@ -2397,13 +2434,15 @@ function App() {
         <ArchiveWorkspaceTemplate<ShellSourceFilter>
           online={online}
           showConnectivityNotice={false}
-          sourceOptions={workspaceSourceOptions(auth.status, localSpaceEnabled, cloudReadable).map((value) => ({
+          sourceOptions={w5WorkspaceSources(auth.status, localSpaceEnabled, cloudReadable).map((value) => ({
             value,
             ...(value === "all"
               ? { label: copy.all, count: workspace.counts.all }
               : value === "cloud"
                 ? { label: copy.cloud, count: cloudSourceCount }
-                : { label: copy.local, count: workspace.counts.local }),
+                : value === "pending"
+                  ? { label: language === "zh" ? "临时空间" : "Temporary", count: workspace.pending.length }
+                  : { label: copy.local, count: workspace.counts.local }),
           }))}
           activeSource={sourceFilter}
           packVisibleSources
@@ -2413,9 +2452,9 @@ function App() {
             setGroupFilter(null);
             setScreen({ kind: "list" });
           }}
-          onCreateArchive={() => openNewProjectEntry()}
+          onCreateArchive={() => { if (sourceFilter !== "pending") openNewProjectEntry(); }}
           showCreateToolbar={false}
-          sourceTrailingSlot={(
+          sourceTrailingSlot={sourceFilter === "pending" ? null : (
             <button type="button" onClick={() => openNewProjectEntry()}>
               +{copy.project}
             </button>
@@ -2465,7 +2504,7 @@ function App() {
           ) : null}
         >
           {auth.status === "signed-in" && sourceFilter !== "local" && authenticatedOwnerContext && filteredPending.length ? (
-            sourceFilter === "cloud" ? <section data-android-cloud-pending="true">
+            sourceFilter === "cloud" || sourceFilter === "pending" ? <section data-android-cloud-pending="true" data-android-temporary-space={sourceFilter === "pending"}>
               <div className="panel pending-upload-summary">
                 <h2 className="workspace-section-label">{language === "zh" ? "待上传" : "Pending uploads"} {workspace.pending.length}</h2>
                 <p>{language === "zh"
@@ -2479,7 +2518,7 @@ function App() {
             </section> : <div className="project-list" data-android-pending-cards="true">{filteredPending.map(renderPendingProjectCard)}</div>
           ) : null}
           {sourceFilter === "cloud" && auth.status !== "checking" && (auth.status !== "signed-in" || !canCreateMembershipContent(membership)) ? renderCloudAccessOptions() : null}
-          {auth.status === "signed-in" && cloudReadable && sourceFilter !== "local" ? (
+          {auth.status === "signed-in" && cloudReadable && sourceFilter !== "local" && sourceFilter !== "pending" ? (
             liveCloudWorkspace ? (
               <>
                 {sourceFilter === "cloud" && filteredPending.length > 0 && filteredCloudArchives.length > 0 ? <h2 className="workspace-section-label">{language === "zh" ? "云端" : "Cloud"}</h2> : null}
@@ -2513,7 +2552,7 @@ function App() {
             )
           ) : null}
 
-          {localSpaceEnabled && sourceFilter !== "cloud" ? (
+          {localSpaceEnabled && sourceFilter !== "cloud" && sourceFilter !== "pending" ? (
             filteredLocalArchives.length ? (
               <div className="project-list">
                 {(sourceFilter === "all" ? activeFilteredLocalArchives : orderedFilteredLocalArchives).map(renderLocalProjectCard)}

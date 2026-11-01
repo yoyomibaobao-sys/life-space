@@ -12,6 +12,10 @@ import {
   updateLocalImageCloudSyncOperation,
   updateLocalRecordCloudSyncOperation,
   type LocalArchive,
+  discardVerifiedPendingArchiveEdit,
+  type VerifiedCloudArchiveForDiscard,
+  discardVerifiedPendingRecordEdit,
+  type VerifiedCloudRecordForDiscard,
   type LocalArchiveDetail,
   type LocalArchiveOwnerContext,
   type LocalImage,
@@ -26,6 +30,131 @@ import {
   type StorageUploadReservation,
 } from "@/lib/storage-usage";
 import { supabase } from "@/lib/supabase";
+
+// User-initiated undo for a *never attempted* project-field overlay. This
+// fetches an authenticated cloud baseline and only changes its local copy.
+export async function discardUnattemptedPendingArchiveEdit(
+  localArchiveId: string, ownerContext: LocalArchiveOwnerContext
+) {
+  if (!isAndroidOnline()) throw Error("请联网核对云端原件后再放弃修改。");
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError || !auth.user || auth.user.id !== ownerContext.userId) {
+    throw Error("当前登录账号不匹配，已保留本机修改。");
+  }
+  const detail = await getLocalArchiveDetail(localArchiveId, ownerContext);
+  const cloudId = cleanText(detail?.archive.source_cloud_archive_id);
+  if (!cloudId) throw Error("云端项目身份不明确，不能放弃修改。");
+  const { data, error } = await supabase.from("archives")
+    .select("id,user_id,title,category,system_name,species_name_snapshot,species_id,source,planting_region,note,archive_summary,cycle_enabled,next_cycle_name,status,ended_at")
+    .eq("id", cloudId).eq("user_id", ownerContext.userId)
+    .maybeSingle();
+  if (error || !data || data.user_id !== ownerContext.userId) {
+    throw Error("不能验证云端原件，已保留待上传修改。");
+  }
+  return discardVerifiedPendingArchiveEdit(localArchiveId, ownerContext,
+    data as VerifiedCloudArchiveForDiscard);
+}
+
+// Deliberate user action only. No remote DELETE, record trash or media mutation.
+// Location and cycle overlays are conservatively rejected inside local DB.
+export async function discardUnattemptedPendingRecordEdit(
+  localArchiveId: string,
+  localRecordId: string,
+  ownerContext: LocalArchiveOwnerContext
+) {
+  if (!isAndroidOnline()) throw Error("请联网核对云端记录后再撤销修改。");
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError || !auth.user || auth.user.id !== ownerContext.userId) {
+    throw Error("当前账号与记录所有者不一致。");
+  }
+  const detail = await getLocalArchiveDetail(localArchiveId, ownerContext);
+  const record = detail?.records.find((row) => row.id === localRecordId);
+  const cloudArchiveId = cleanText(detail?.archive.source_cloud_archive_id);
+  const cloudRecordId = cleanText(record?.sync.cloud_record_id);
+  if (!cloudArchiveId || !isStableCloudOperationId(cloudRecordId)) {
+    throw Error("原云记录身份不明确，已保留修改。");
+  }
+  const { data, error } = await supabase.from("records")
+    .select("id,archive_id,user_id,note,record_time,visibility")
+    .eq("id", cloudRecordId!)
+    .eq("archive_id", cloudArchiveId)
+    .eq("user_id", ownerContext.userId)
+    .is("trashed_at", null)
+    .maybeSingle();
+  if (error || !data || data.user_id !== ownerContext.userId ||
+      data.archive_id !== cloudArchiveId) {
+    throw Error("不能确认远端原记录，已保留本机修改。");
+  }
+  return discardVerifiedPendingRecordEdit(localRecordId, ownerContext,
+    data as VerifiedCloudRecordForDiscard);
+}
+
+// Safe, read-only reconciliation of a write whose remote receipt is unknown.
+// Missing rows or metadata-only media hits NEVER authorize deletion: RLS,
+// replication lag, object storage and reservations can hide a committed write.
+export async function inspectUnknownPendingReceipt(params: {
+  localArchiveId: string;
+  ownerContext: LocalArchiveOwnerContext;
+  type: "archive" | "record" | "image";
+  localItemId?: string;
+}): Promise<{ status: "confirmed" | "unconfirmed" | "conflict"; canDelete: false }> {
+  const blocked = (status: "confirmed" | "unconfirmed" | "conflict") =>
+    ({ status, canDelete: false as const });
+  if (!isAndroidOnline()) return blocked("unconfirmed");
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError || auth.user?.id !== params.ownerContext.userId) return blocked("conflict");
+  const detail = await getLocalArchiveDetail(params.localArchiveId, params.ownerContext);
+  if (!detail || detail.archive.local_owner_user_id !== auth.user.id)
+    return blocked("conflict");
+  const archive = detail.archive;
+  const intendedCloudId = cleanText(archive.source_cloud_archive_id) ||
+    cleanText(archive.sync.cloud_archive_id) ||
+    cleanText(archive.sync.client_operation_id);
+  if (!isStableCloudOperationId(intendedCloudId)) return blocked("unconfirmed");
+  let table: "archives" | "records" | "media";
+  let targetId: string | null = null;
+  let expectedParent: string | null = null;
+  if (params.type === "archive") {
+    table = "archives";
+    targetId = intendedCloudId;
+  } else {
+    const record = detail.records.find((item) =>
+      item.id === params.localItemId ||
+      item.images.some((image) => params.type === "image" && image.id === params.localItemId));
+    if (!record) return blocked("unconfirmed");
+    if (params.type === "record") {
+      table = "records";
+      targetId = cleanText(record.sync.cloud_record_id) ||
+        cleanText(record.sync.client_operation_id);
+      expectedParent = intendedCloudId;
+    } else {
+      table = "media";
+      const image = record.images.find((row) => row.id === params.localItemId);
+      targetId = cleanText(image?.sync.cloud_media_id) ||
+        cleanText(image?.sync.client_operation_id);
+      expectedParent = cleanText(image?.sync.cloud_record_id) ||
+        cleanText(record.sync.cloud_record_id) ||
+        cleanText(record.sync.client_operation_id);
+      if (!isStableCloudOperationId(expectedParent)) return blocked("unconfirmed");
+    }
+  }
+  if (!isStableCloudOperationId(targetId)) return blocked("unconfirmed");
+  const { data, error } = await supabase.from(table)
+    .select(table === "archives" ? "id,user_id" :
+      table === "records" ? "id,user_id,archive_id" : "id,user_id,record_id,storage_path")
+    .eq("id", targetId!)
+    .maybeSingle();
+  if (error || !data) return blocked("unconfirmed");
+  const remote = data as unknown as { id: string; user_id: string; archive_id?: string; record_id?: string };
+  if (remote.id !== targetId || remote.user_id !== auth.user.id ||
+      (table === "records" && remote.archive_id !== expectedParent) ||
+      (table === "media" && remote.record_id !== expectedParent)) {
+    return blocked("conflict");
+  }
+  // For media this only verifies a metadata row; bytes and quota settlement
+  // must still be checked through the existing media pipeline.
+  return blocked("confirmed");
+}
 import {
   isMissingDatabaseColumn,
   withoutCapturedAt,
@@ -90,6 +219,16 @@ type SupabaseError = {
 function cleanText(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed || null;
+}
+
+function assertUploadClaim(
+  row: { sync: { client_operation_id?: string | null; status: string } } | null | undefined,
+  operationId: string
+) {
+  if (!row || row.sync.client_operation_id !== operationId ||
+      row.sync.status !== "uploading") {
+    throw Error("待上传对象已被取消或替换，已阻止旧任务继续写入云端。");
+  }
 }
 
 export function isStableCloudOperationId(value?: string | null) {
@@ -263,7 +402,7 @@ async function syncArchiveUpdate(params: {
   const { archive } = params.detail;
   if (!isPendingCloudSyncStatus(archive.sync.status)) return false;
   const operationId = getOperationId(archive);
-  await updateLocalArchiveCloudSyncOperation(
+  const claimed = await updateLocalArchiveCloudSyncOperation(
     archive.id,
     operationId,
     {
@@ -272,6 +411,7 @@ async function syncArchiveUpdate(params: {
     },
     params.ownerContext
   );
+  assertUploadClaim(claimed, operationId);
 
   try {
     const patch = buildPendingArchivePatch(
@@ -355,11 +495,12 @@ async function syncRecord(params: {
     throw new Error("找不到这条记录对应的云端标识，已停止上传。");
   }
 
-  await updateLocalRecordCloudSyncOperation(record.id, operationId, {
+  const claimed = await updateLocalRecordCloudSyncOperation(record.id, operationId, {
     status: "uploading",
     cloud_archive_id: cloudArchive.id,
     cloud_record_id: cloudRecordId,
   });
+  assertUploadClaim(claimed, operationId);
 
   try {
     const pendingFields = new Set(record.sync.pending_fields || []);
@@ -536,11 +677,12 @@ async function syncImage(params: {
   const { image, cloudArchiveId, cloudRecordId, userId } = params;
   const operationId = getOperationId(image);
   const mediaId = operationId;
-  await updateLocalImageCloudSyncOperation(image.id, operationId, {
+  const claimed = await updateLocalImageCloudSyncOperation(image.id, operationId, {
     status: "uploading",
     cloud_archive_id: cloudArchiveId,
     cloud_record_id: cloudRecordId,
   });
+  assertUploadClaim(claimed, operationId);
 
   try {
     const originalFile = new File(
@@ -759,7 +901,7 @@ async function syncCreateArchive(params: {
     throw new Error("关联指引不能为空。");
   }
 
-  await updateLocalArchiveCloudSyncOperation(
+  const claimed = await updateLocalArchiveCloudSyncOperation(
     archive.id,
     operationId,
     {
@@ -768,6 +910,7 @@ async function syncCreateArchive(params: {
     },
     params.ownerContext
   );
+  assertUploadClaim(claimed, operationId);
 
   try {
     const taxonomy = resolvePendingCloudTaxonomy(archive, await loadCloudProjectTaxonomy(params.userId));
@@ -818,11 +961,16 @@ async function syncCreateArchive(params: {
       }
     }
 
+    if (existing.is_public !== isPublic ||
+        existing.default_record_visibility !== visibility) {
+      throw new Error("云端项目可见性与本次选择不符，已保留本机数据等待核对。");
+    }
     const mapped = await persistLocalCloudArchiveMapping(
       archive.id,
       existing.id,
       operationId,
-      params.ownerContext
+      params.ownerContext,
+      archive
     );
     return { cloudArchiveId: mapped.source_cloud_archive_id || existing.id, taxonomyWarning: taxonomy.warning };
   } catch (error) {

@@ -111,7 +111,7 @@ test("pending UI stays visible offline and both upload paths require a user clic
   const reconnect = source.slice(reconnectStart, reconnectEnd);
   assert.doesNotMatch(reconnect, /syncAllPendingCloudArchives|syncPendingCloudArchive/);
   assert.match(source, /data-android-cloud-pending="true"/);
-  assert.match(source, /sourceFilter === "cloud" \? <section data-android-cloud-pending="true">[\s\S]*待上传/);
+  assert.match(source, /sourceFilter === "cloud" \|\| sourceFilter === "pending"/);
   assert.match(source, /data-android-pending-cards="true"/);
   assert.match(source, /联网后可上传/);
   assert.match(source, /item\.creating[\s\S]*待创建云端/);

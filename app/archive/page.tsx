@@ -54,6 +54,7 @@ import { requestCloudTrash } from "@/lib/cloud-trash";
 import {
   createLocalTaxonomyItem,
   deleteLocalArchive,
+  cancelNeverUploadedCloudArchive,
   deleteLocalTaxonomyItem,
   markLocalArchiveForOwner,
   renameLocalTaxonomyItem,
@@ -61,6 +62,7 @@ import {
   listPendingCloudSyncSummaries,
   listVisibleLocalTaxonomyItems,
   listVisibleLocalArchiveSummaries,
+  listVisibleCloudOfflineArchiveSummaries,
   markUnownedLocalArchivesForOwner,
   type LocalArchiveOwnerContext,
   type LocalArchiveSummary,
@@ -78,7 +80,8 @@ import {
 } from "@/lib/archive-category-settings";
 import { Capacitor } from "@capacitor/core";
 import { LOCAL_ORIGIN_MIGRATED_EVENT } from "@/lib/local-origin-migration";
-import { PENDING_CLOUD_SYNC_UPDATED_EVENT } from "@/lib/pending-cloud-sync";
+import { PENDING_CLOUD_SYNC_UPDATED_EVENT, syncPendingCloudArchive, discardUnattemptedPendingArchiveEdit } from "@/lib/pending-cloud-sync";
+import { buildAndroidCloudWorkspace, type PendingCloudProject } from "@/lib/android-cloud-workspace";
 import {
   refreshCloudOfflineCaches,
   type CloudOfflineCacheArchiveSource,
@@ -165,7 +168,16 @@ export default function ArchivePage() {
   const [spaceProfile, setSpaceProfile] = useState<SpaceProfile | null>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [currentOwnerContext, setCurrentOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
-  const [activeSource, setActiveSource] = useState<ArchiveSourceFilter>("all");
+  const [activeSource, setActiveSource] = useState<ArchiveSourceFilter>("cloud");
+  const [w5UploadingKey, setW5UploadingKey] = useState<string | null>(null);
+  const [w5CloudCaches, setW5CloudCaches] = useState<LocalArchiveSummary[]>([]);
+  const [w5Online, setW5Online] = useState(true);
+  useEffect(() => {
+    if (!isCapacitorAndroid()) return;
+    const update = () => setW5Online(navigator.onLine);
+    update(); window.addEventListener("online", update); window.addEventListener("offline", update);
+    return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
+  }, []);
   const [localArchives, setLocalArchives] = useState<LocalArchiveSummary[]>([]);
   const [pendingCloudSyncSummaries, setPendingCloudSyncSummaries] = useState<
     PendingCloudSyncSummary[]
@@ -214,12 +226,16 @@ export default function ArchivePage() {
   async function loadLocalArchives(ownerContext: LocalArchiveOwnerContext | null = currentOwnerContext) {
     setLocalLoading(true);
     try {
-      const [result, taxonomyItems, pendingSummaries] = await Promise.all([
+      const [result, taxonomyItems, pendingSummaries, cloudCaches] = await Promise.all([
         listVisibleLocalArchiveSummaries(ownerContext),
         listVisibleLocalTaxonomyItems(ownerContext),
         listPendingCloudSyncSummaries(ownerContext),
+        isCapacitorAndroid() && ownerContext?.userId
+          ? listVisibleCloudOfflineArchiveSummaries(ownerContext).catch(() => [])
+          : Promise.resolve([] as LocalArchiveSummary[]),
       ]);
       setLocalArchives(result.archives);
+      setW5CloudCaches(cloudCaches);
       setLocalTaxonomyItems(taxonomyItems);
       setPendingCloudSyncSummaries(pendingSummaries);
       setLocalUnownedCount(result.unownedCount);
@@ -1097,9 +1113,9 @@ export default function ArchivePage() {
           : null;
         const sourceParam = new URLSearchParams(window.location.search).get("source");
 
-        if (sourceParam === "local" || sourceParam === "cloud") {
-          setActiveSource(sourceParam);
-        }
+        setActiveSource(
+          isCapacitorAndroid() && sourceParam === "pending" ? "pending" : "cloud"
+        );
 
         if (!isMounted) return;
         setCurrentOwnerContext(ownerContext);
@@ -1206,6 +1222,15 @@ export default function ArchivePage() {
       ),
     [pendingCloudSyncSummaries]
   );
+  const w5Workspace = useMemo(() => buildAndroidCloudWorkspace({
+    local: localArchives,
+    caches: w5CloudCaches,
+    live: w5Online ? archives : [],
+    pending: currentOwnerContext?.userId ? pendingCloudSyncSummaries.filter((summary) =>
+      [...localArchives, ...w5CloudCaches].some((archive) => archive.id === summary.local_archive_id &&
+        archive.local_owner_user_id === currentOwnerContext.userId)) : [],
+    preferLive: w5Online,
+  }), [localArchives, w5CloudCaches, w5Online, archives, pendingCloudSyncSummaries, currentOwnerContext?.userId]);
   const visibleCategoryCounts = useMemo(() => {
     const counts: Record<ArchiveCategory, number> = {
       plant: 0,
@@ -1302,6 +1327,7 @@ export default function ArchivePage() {
   const filteredLocalArchives = useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase();
     const filtered = localArchives.filter((item) => {
+      if (isCapacitorAndroid() && pendingCloudSyncByArchiveId.has(item.id)) return false;
       if (activeCategory && item.category !== activeCategory) return false;
       if (activeSubTag && item.subcategory !== activeSubTag) return false;
       if (activeGroupTag && item.group_name !== activeGroupTag) return false;
@@ -1342,6 +1368,7 @@ export default function ArchivePage() {
     );
   }, [
     localArchives,
+    pendingCloudSyncByArchiveId,
     activeCategory,
     activeSubTag,
     activeGroupTag,
@@ -1353,8 +1380,8 @@ export default function ArchivePage() {
   const endedArchives = filteredArchives.filter((item) => item.status === "ended");
   const activeLocalArchives = filteredLocalArchives.filter((item) => item.status !== "ended");
   const endedLocalArchives = filteredLocalArchives.filter((item) => item.status === "ended");
-  const showCloudArchives = activeSource !== "local";
-  const showLocalArchives = activeSource !== "cloud";
+  const showCloudArchives = activeSource !== "local" && activeSource !== "pending";
+  const showLocalArchives = false;
   const showCloudEndedList =
     showCloudArchives && Boolean(currentOwnerContext?.userId) && endedArchives.length > 0;
   const showLocalEndedList =
@@ -1416,22 +1443,92 @@ export default function ArchivePage() {
     [localTaxonomyItems]
   );
 
+  async function w5UploadPending(item: PendingCloudProject<LocalArchiveSummary, ArchiveItem>) {
+    if (!currentOwnerContext?.userId || w5UploadingKey) return;
+    const { data } = await supabase.auth.getUser();
+    if (data.user?.id !== currentOwnerContext.userId) {
+      showToast(t.archive_workspace.pending_account_changed); return;
+    }
+    setW5UploadingKey(item.key);
+    try {
+      for (const summary of item.summaries) {
+        const result = await syncPendingCloudArchive({
+          localArchiveId: summary.local_archive_id, ownerContext: currentOwnerContext,
+        });
+        if (!result.success) { showToast(result.error || t.archive.pending_sync_incomplete); break; }
+      }
+      await Promise.all([loadLocalArchives(currentOwnerContext), loadData()]);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : t.archive.pending_sync_incomplete);
+    } finally { setW5UploadingKey(null); }
+  }
+
+  async function w5CancelPending(item: PendingCloudProject<LocalArchiveSummary, ArchiveItem>) {
+    if (!currentOwnerContext?.userId || w5UploadingKey || item.summaries.length !== 1) return;
+    const summary = item.summaries[0];
+    const { data } = await supabase.auth.getUser();
+    if (data.user?.id !== currentOwnerContext.userId) {
+      showToast(t.archive_workspace.pending_cancel_account_changed); return;
+    }
+    const creating = summary.archive_create_pending;
+    const projectEdit = !creating && summary.archive_update_pending &&
+      !summary.record_count && !summary.image_count;
+    if (!creating && !projectEdit) {
+      showToast(t.archive_workspace.pending_cancel_blocked); return;
+    }
+    if (!window.confirm(creating
+      ? t.archive_workspace.pending_cancel_create_confirm
+      : t.archive_workspace.pending_cancel_edit_confirm)) return;
+    setW5UploadingKey(item.key);
+    try {
+      if (creating) await cancelNeverUploadedCloudArchive(summary.local_archive_id, currentOwnerContext);
+      else await discardUnattemptedPendingArchiveEdit(summary.local_archive_id, currentOwnerContext);
+      await loadLocalArchives(currentOwnerContext);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : t.archive_workspace.pending_cancel_failed);
+    } finally { setW5UploadingKey(null); }
+  }
+
+  function renderW5PendingItem(item: PendingCloudProject<LocalArchiveSummary, ArchiveItem>) {
+    const summary = item.summaries[0];
+    const canCancel = item.summaries.length === 1 &&
+      (summary.archive_create_pending ||
+      (summary.archive_update_pending && !summary.record_count && !summary.image_count));
+    return (
+      <section key={item.key} data-w5-pending-item={item.key} style={{ border: "1px solid #dbe0d8", borderRadius: 12, padding: 12, marginBottom: 10 }}>
+        <strong>{item.local?.title || item.cache?.title || item.cloud?.title || summary.title}</strong>
+        <div style={{ fontSize: 13, margin: "5px 0" }}>
+          {item.failed ? t.archive_workspace.pending_retry : item.creating ? t.archive_workspace.pending_create_cloud_project : t.archive_workspace.pending_upload} · {item.recordCount} {t.archive.pending_sync_record_unit} · {item.imageCount} {t.archive.pending_sync_photo_unit}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" onClick={() => router.push("/local/archive/" + summary.local_archive_id)}>{t.archive_workspace.pending_view_edit}</button>
+          <button type="button" disabled={Boolean(w5UploadingKey)} onClick={() => void w5UploadPending(item)}>
+            {item.failed ? t.archive_workspace.pending_retry_action : t.archive_workspace.pending_upload_action}
+          </button>
+          <button type="button" disabled={!canCancel || Boolean(w5UploadingKey)}
+            title={canCancel ? "将再次执行安全检查，危险状态会阻断" : "当前无法安全取消，请保留原件"}
+            onClick={() => void w5CancelPending(item)}>{t.archive_workspace.pending_cancel_action}</button>
+        </div>
+        {!canCancel ? <div style={{ fontSize: 12, marginTop: 5 }}>
+          {t.archive_workspace.pending_cancel_safety_hint}
+        </div> : null}
+      </section>
+    );
+  }
+
   function handleSelectSource(nextSource: ArchiveSourceFilter) {
     updateFilterWithoutJump(() => {
-      setActiveSource(nextSource);
+      setActiveSource(
+        isCapacitorAndroid() && nextSource === "pending" ? "pending" : "cloud"
+      );
       setActiveSubTag(null);
       setActiveGroupTag(null);
     });
   }
 
   function handleCreateFromWorkspace(category: ArchiveCategory) {
-    if (activeSource === "local" || (!currentOwnerContext?.userId && activeSource !== "cloud")) {
-      router.push(`/local/archive/new?category=${category}`);
-      return;
-    }
-
     if (!currentOwnerContext?.userId) {
-      router.push(buildLoginHref("/archive"));
+      router.push(buildLoginHref("/archive/new?category=" + category));
       return;
     }
 
@@ -1768,7 +1865,7 @@ export default function ArchivePage() {
   }
 
   const createDisabled =
-    activeSource !== "local" &&
+    (activeSource !== "local" || isCapacitorAndroid()) &&
     Boolean(currentOwnerContext?.userId) &&
     contentBlocked;
 
@@ -1777,14 +1874,11 @@ export default function ArchivePage() {
     : undefined;
 
   const mobileCreateHref =
-    activeSource === "local" ||
-    (!currentOwnerContext?.userId && activeSource !== "cloud")
-      ? "/local/archive/new"
-      : !currentOwnerContext?.userId
-        ? buildLoginHref("/archive")
-        : contentBlocked
-          ? "/membership"
-          : "/archive/new";
+    !currentOwnerContext?.userId
+      ? buildLoginHref("/archive")
+      : contentBlocked
+        ? "/membership"
+        : "/archive/new";
 
   const workspaceFiltersSlot =
     activeSource === "cloud" ? (
@@ -2012,6 +2106,7 @@ export default function ArchivePage() {
   );
 
   function renderCloudArchiveCard(item: ArchiveItem, ended = false) {
+    const pending = isCapacitorAndroid() ? w5Workspace.pending.find((row) => row.cloud?.id === item.id) : null;
     return (
       <ArchiveCard
         key={item.id}
@@ -2077,6 +2172,10 @@ export default function ArchivePage() {
         onUpdateArchiveCategory={updateArchiveCategory}
         onUpdateArchiveGroupTag={updateArchiveGroupTag}
         onDeleteArchive={deleteArchive}
+        extraStatusPills={pending ? [{ key: "w5-pending", label: pending.failed ? t.archive_workspace.pending_retry : t.archive_workspace.pending_upload, style: { border: "1px solid #eed6a4", background: "#fff4df", color: "#946323" } }] : []}
+        extraRail={pending ? <button type="button" disabled={Boolean(w5UploadingKey)} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void w5UploadPending(pending); }}>
+          {pending.failed ? t.archive_workspace.pending_retry_action : t.archive_workspace.pending_upload_action}
+        </button> : null}
         readOnly={contentBlocked}
       />
     );
@@ -2308,42 +2407,53 @@ export default function ArchivePage() {
 
       <ArchiveWorkspaceTemplate<ArchiveSourceFilter>
         sourceOptions={[
-          {
-            value: "all",
-            label: t.archive_workspace.all,
-            count: archiveCount + localArchives.length,
-          },
-          { value: "cloud", label: t.archive_workspace.cloud_space, count: archiveCount },
-          { value: "local", label: t.archive_workspace.local, count: localArchives.length },
+          { value: "cloud", label: t.archive_workspace.cloud_space, count: isCapacitorAndroid() ? w5Workspace.counts.cloud : archiveCount },
+          ...(isCapacitorAndroid() && currentOwnerContext?.userId ? [{ value: "pending" as const, label: t.archive_workspace.temporary_space, count: w5Workspace.pending.length }] : []),
         ]}
         activeSource={activeSource}
         onSelectSource={handleSelectSource}
-        onCreateArchive={handleCreateFromWorkspace}
+        onCreateArchive={(category) => { if (activeSource !== "pending") handleCreateFromWorkspace(category); }}
         createDisabled={createDisabled}
         createDisabledTitle={createDisabledText}
         createDisabledHref={createDisabled ? "/membership" : undefined}
-        showCreateToolbar={!isMobileViewport}
-        sourceTrailingSlot={isMobileViewport ? (
+        showCreateToolbar={!isMobileViewport && activeSource !== "pending"}
+        sourceTrailingSlot={isMobileViewport && activeSource !== "pending" ? (
           <Link href={mobileCreateHref} style={personalSpaceCreateProjectStyle}>
             +{t.nav.project}
           </Link>
         ) : null}
+        packVisibleSources={isCapacitorAndroid()}
         filtersSlot={workspaceFiltersSlot}
         noticeSlot={workspaceNoticeSlot}
       >
+        {isCapacitorAndroid() && activeSource === "pending" ? (
+          !currentOwnerContext?.userId ? <div style={emptyPanelStyle}>{t.archive_workspace.pending_login_required}</div> :
+          localLoading ? <div style={emptyPanelStyle}>{t.archive_workspace.pending_loading}</div> :
+          localError ? <div style={emptyPanelStyle}>{localError}</div> :
+          w5Workspace.pending.length ? <section data-w5-temporary-space="true">{w5Workspace.pending.map(renderW5PendingItem)}</section> :
+          <div style={emptyPanelStyle}>{t.archive_workspace.pending_empty}</div>
+        ) : null}
+        {isCapacitorAndroid() && (activeSource === "cloud" || activeSource === "all") && currentOwnerContext?.userId ? (
+          <section data-w5-cloud-pending="true">
+            {w5Workspace.pending.filter((item) => !item.cloud).map(renderW5PendingItem)}
+          </section>
+        ) : null}
         {showCloudArchives ? (
           !currentOwnerContext?.userId ? (
             <div style={emptyPanelStyle}>
               {t.archive_workspace.login_cloud_hint}
             </div>
-          ) : activeArchives.length === 0 && endedArchives.length === 0 ? (
+          ) : activeArchives.length === 0 && endedArchives.length === 0 &&
+              !(isCapacitorAndroid() && !w5Online && w5Workspace.normalCache.length) ? (
             <div style={emptyPanelStyle}>
               {archiveCount === 0
                 ? t.archive_workspace.no_cloud_projects
                 : t.archive_workspace.no_cloud_matches}
             </div>
           ) : (
-            activeArchives.map((item) => renderCloudArchiveCard(item, false))
+            isCapacitorAndroid() && !w5Online
+              ? w5Workspace.normalCache.map((item) => renderLocalArchiveCard(item))
+              : activeArchives.map((item) => renderCloudArchiveCard(item, false))
           )
         ) : null}
 
@@ -2872,4 +2982,4 @@ const localProjectRailSyncButtonStyle: CSSProperties = {
   fontWeight: 800,
 };
 
-type ArchiveSourceFilter = "all" | "cloud" | "local";
+type ArchiveSourceFilter = "all" | "cloud" | "pending" | "local";

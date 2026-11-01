@@ -551,7 +551,7 @@ test("a mapped pending create never becomes a cross-account independent local pr
   const a = await local.createLocalArchive({ title: "mapped", category: "system",
     local_owner_user_id: ownerA, sync_destination: "pending-cloud" });
   await local.persistLocalCloudArchiveMapping(a.id, "remote-mapped",
-    a.sync.client_operation_id, { userId: ownerA });
+    a.sync.client_operation_id, { userId: ownerA }, a);
   const entry = (await committed()).source.entries.find((row) => row.archive.id === a.id);
   assert.equal(entry.kind, "pending-cloud-user-data");
   assert.equal(local.isLocalArchiveVisibleToOwner({ ...entry.archive,
@@ -569,7 +569,7 @@ test("pending create and media sync transitions finish in the same account cache
   const before = await local.getLocalArchiveDetail(archive.id, { userId: ownerA });
   const image = before.records[0].images[0];
   await local.persistLocalCloudArchiveMapping(archive.id, "remote-finish",
-    archive.sync.client_operation_id, { userId: ownerA });
+    archive.sync.client_operation_id, { userId: ownerA }, archive);
   await local.updateLocalRecordCloudSyncOperation(record.id, record.sync.client_operation_id,
     { status: "synced", cloud_archive_id: "remote-finish", cloud_record_id: "remote-record" });
   await local.updateLocalImageCloudSyncOperation(image.id, image.sync.client_operation_id,

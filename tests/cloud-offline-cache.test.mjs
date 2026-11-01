@@ -204,7 +204,8 @@ test("pending cloud records upload by explicit action without deleting local ori
   assert.match(offline, /onClick=\{\(\) => void uploadAllPending\(\)\}/);
   assert.match(db, /stripSyncedCloudOfflineCacheRows/);
   assert.match(db, /keepUserCreated/);
-  assert.doesNotMatch(page, /addEventListener\(["']online["']/);
+  assert.match(page, /const update = \(\) => setW5Online\(navigator\.onLine\)/);
+  assert.doesNotMatch(page, /addEventListener\(["\x27]online["\x27],\s*\(\) =>\s*(?:sync|upload)/);
   assert.doesNotMatch(sync, /addEventListener\(["']online["']/);
   assert.match(offline, /pendingUpload/);
 });
@@ -217,7 +218,7 @@ test("offline shell separates true local projects from cloud offline copies", ()
   const view = read("components/archive-ui/localArchiveProjectView.ts");
 
   assert.match(offline, /listVisibleCloudOfflineArchiveSummaries/);
-  assert.match(offline, /type ShellSourceFilter = "all" \| "cloud" \| "local"/);
+  assert.match(offline, /type ShellSourceFilter = "all" \| "cloud" \| "pending" \| "local"/);
   assert.match(offline, /activeFilteredCloudCaches[\s\S]*endedFilteredCloudCaches/);
   assert.match(offline, /orderedFilteredCloudCaches[\s\S]*renderCloudCacheCard/);
   assert.match(offline, /activeFilteredCloudArchives[\s\S]*endedFilteredCloudArchives/);

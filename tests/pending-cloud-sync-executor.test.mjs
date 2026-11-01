@@ -38,7 +38,7 @@ test("Android reconnect prepares pending queue without uploading; web prompt rem
     source("mobile-offline-src/main.tsx"),
   ]);
 
-  assert.match(prompt, /syncAllPendingCloudArchives/);
+  assert.doesNotMatch(prompt, /syncAllPendingCloudArchives/, "mount and reconnect may only scan pending work");
   assert.match(prompt, /pending_sync_now/);
   assert.match(prompt, /pending_sync_later/);
   assert.match(prompt, /deferPendingCloudSyncPrompt/);

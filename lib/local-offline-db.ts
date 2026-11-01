@@ -797,6 +797,7 @@ function queueCloudSyncOperation(
         depends_on_operation_id: null,
         operation_kind: null,
         queued_at: null,
+        attempt_count: 0,
         last_error: null,
         pending_fields: [],
       })
@@ -1067,7 +1068,7 @@ export async function readLegacySafRows() {
 }
 
 /** Explicit, on-demand migration of independent IDB projects. Cloud data stays in IDB. */
-async function migrateLegacyLocalProjectsIfNeeded() {
+async function migrateLegacyLocalProjectsIfNeeded(allowUserInitiatedPicker = false) {
   if (!isAndroidSafAvailable()) return;
   const rows = await readLegacySafRows();
   const archives = rows.archives.filter((row) => !row.saf_local_space_id &&
@@ -1099,11 +1100,13 @@ async function migrateLegacyLocalProjectsIfNeeded() {
   const plan = await planLegacySafMigration({ archives, records, images, taxonomy,
     categoryDepths: depthValues.length ? { local: depthValues[0] } : {} });
   let status = await getLocalSafDirectory();
-  if (!status.available) {
+  // Ordinary reads/migrations never summon the picker. Only an explicit local create
+  // operation may request SAF authorization before the migration begins.
+  if (!status.available && allowUserInitiatedPicker) {
     await chooseAndValidateSafDirectory();
     status = await getLocalSafDirectory();
   }
-  if (!status.available) throw Error("LifeSpace data folder selection was cancelled.");
+  if (!status.available) throw Error("Reconnect your LifeSpace data folder before migrating local projects.");
   const storage = createNativeSafStorage();
   await executeSafMigration(storage, plan, async ({ localSpaceId }) => {
     const db = await openLocalDb();
@@ -1523,6 +1526,7 @@ async function connectedLocalSafState(createIfMissing = false): Promise<SafState
   if (!isAndroidSafAvailable()) return null;
   let status = await getLocalSafDirectory();
   if (!status.available && createIfMissing) {
+    // Only explicit local create/save actions may pass createIfMissing=true.
     await chooseAndValidateSafDirectory();
     status = await getLocalSafDirectory();
   }
@@ -1567,7 +1571,8 @@ async function commitManagedLocalSaf<T>(archiveId: string,
   const legacy = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
   if (legacy && !legacy.saf_local_space_id && resolveLocalArchiveRole(legacy) === "local-project" &&
       classifyLegacySafArchive(legacy) === "local-project") {
-    await migrateLegacyLocalProjectsIfNeeded();
+    // This helper is reached only from an explicit local mutation action.
+    await migrateLegacyLocalProjectsIfNeeded(true);
   }
   const state = await connectedLocalSafState();
   if (!state) {
@@ -2874,6 +2879,11 @@ export async function updateLocalArchiveMigrationState(
     const saved = await commitCloudSaf(cloud.local_owner_user_id, archiveId, (current) => {
       const archive = current.archive;
       if (!isLocalArchiveVisibleToOwner(archive, ownerContext)) throw Error("没有权限修改这个本地项目。");
+      if (updates.migration_visibility !== undefined &&
+          updates.migration_visibility !== archive.migration_visibility &&
+          (archive.sync.status === "uploading" || Boolean(archive.source_cloud_archive_id))) {
+        throw Error("云端公开状态必须在原项目中修改，不能覆盖创建回执。");
+      }
       const next: LocalArchive = { ...archive,
         migration_status: updates.migration_status === undefined ? archive.migration_status || null : updates.migration_status,
         migration_cloud_archive_id: updates.migration_cloud_archive_id === undefined
@@ -2894,6 +2904,11 @@ export async function updateLocalArchiveMigrationState(
   const durable = await commitManagedLocalSaf(archiveId, (content, index) => {
     const entry = content.entries[index];
     const archive = entry.archive;
+    if (updates.migration_visibility !== undefined &&
+        updates.migration_visibility !== archive.migration_visibility &&
+        (archive.sync.status === "uploading" || Boolean(archive.source_cloud_archive_id))) {
+      throw Error("云端公开状态必须在原项目中修改，不能覆盖创建回执。");
+    }
     if (updates.local_cloud_transfer && archive.local_cloud_transfer &&
         (updates.local_cloud_transfer.targetCloudArchiveId !== archive.local_cloud_transfer.targetCloudArchiveId ||
          updates.local_cloud_transfer.localTransferToken !== archive.local_cloud_transfer.localTransferToken ||
@@ -2942,6 +2957,14 @@ export async function updateLocalArchiveMigrationState(
       throw new Error("没有权限修改这个本地项目。");
     }
     await abortIfCloudOfflineCacheWrite(transaction, normalizedArchive, done);
+    if (updates.migration_visibility !== undefined &&
+        updates.migration_visibility !== normalizedArchive.migration_visibility &&
+        (normalizedArchive.sync.status === "uploading" ||
+          Boolean(normalizedArchive.source_cloud_archive_id))) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw Error("云端公开状态必须在原项目中修改，不能覆盖创建回执。");
+    }
 
     const nextArchive: LocalArchive = {
       ...normalizedArchive,
@@ -3051,11 +3074,45 @@ export async function updateLocalArchiveCloudSyncOperation(
   }
 }
 
+const CREATE_ARCHIVE_EDIT_FIELDS = [
+  "title", "category", "system_name", "species_name", "plant_id", "source",
+  "planting_region", "note", "archive_summary", "cycle_enabled",
+  "next_cycle_name", "status", "ended_at",
+] as const;
+
+function preserveEditsAfterCreateAck(
+  current: LocalArchive, submitted: LocalArchive, operationId: string,
+  cloudArchiveId: string, timestamp: string
+): LocalSyncMeta {
+  // Recovered create receipts may be observed twice. Never clear a newer update.
+  if (current.source_cloud_archive_id === cloudArchiveId &&
+      current.sync.operation_kind !== "create-archive") return current.sync;
+  if (current.source_cloud_archive_id && current.source_cloud_archive_id !== cloudArchiveId) {
+    throw Error("云端项目映射不一致，已保留本机原件。");
+  }
+  if (current.sync.client_operation_id !== operationId ||
+      current.sync.operation_kind !== "create-archive") {
+    throw Error("创建回执与当前操作不一致，已保留本机数据。");
+  }
+  if (current.migration_visibility !== submitted.migration_visibility) {
+    throw Error("创建期间可见性发生改变，必须核对云端权限。");
+  }
+  const fields = CREATE_ARCHIVE_EDIT_FIELDS.filter((field) =>
+    JSON.stringify(current[field] ?? null) !== JSON.stringify(submitted[field] ?? null)
+  );
+  const ack = applyCloudSyncOperationUpdate(current.sync, operationId,
+    { status: "synced", cloud_archive_id: cloudArchiveId }, timestamp);
+  return fields.length ? queueCloudSyncOperation(ack, {
+    cloudArchiveId, operationKind: "update-archive", timestamp, pendingFields: fields,
+  }) : ack;
+}
+
 export async function persistLocalCloudArchiveMapping(
   localArchiveId: string,
   cloudArchiveId: string,
   operationId: string,
-  ownerContext?: LocalArchiveOwnerContext | null
+  ownerContext: LocalArchiveOwnerContext | null | undefined,
+  submittedArchive: LocalArchive
 ) {
   const mappedCloudId = normalizeOptionalText(cloudArchiveId);
   if (!mappedCloudId) {
@@ -3071,10 +3128,8 @@ export async function persistLocalCloudArchiveMapping(
       const next = markArchivePendingPrompt({ ...archive, source_cloud_archive_id: mappedCloudId,
         migration_cloud_archive_id: mappedCloudId, migration_status: archive.migration_status || "migrating",
         migration_error: null,
-        sync: applyCloudSyncOperationUpdate({ ...archive.sync,
-          client_operation_id: archive.sync.client_operation_id || operationId,
-          operation_kind: archive.sync.operation_kind || "create-archive" },
-        operationId, { status: "synced", cloud_archive_id: mappedCloudId }, timestamp),
+        sync: preserveEditsAfterCreateAck(archive, submittedArchive,
+          operationId, mappedCloudId, timestamp),
         updated_at: timestamp }, timestamp);
       const records = current.records.map((row) => ({ ...row,
         sync: { ...row.sync, cloud_archive_id: mappedCloudId } }));
@@ -3121,21 +3176,8 @@ export async function persistLocalCloudArchiveMapping(
         migration_cloud_archive_id: mappedCloudId,
         migration_status: normalizedArchive.migration_status || "migrating",
         migration_error: null,
-        sync: applyCloudSyncOperationUpdate(
-          {
-            ...normalizedArchive.sync,
-            client_operation_id:
-              normalizedArchive.sync.client_operation_id || operationId,
-            operation_kind:
-              normalizedArchive.sync.operation_kind || "create-archive",
-          },
-          operationId,
-          {
-            status: "synced",
-            cloud_archive_id: mappedCloudId,
-          },
-          timestamp
-        ),
+        sync: preserveEditsAfterCreateAck(normalizedArchive, submittedArchive,
+          operationId, mappedCloudId, timestamp),
         updated_at: timestamp,
       },
       timestamp
@@ -4117,7 +4159,8 @@ export async function createLocalArchive(input: {
     ? markArchivePendingPrompt(archive, timestamp)
     : archive;
   if (!wantsPendingCloud && isAndroidSafAvailable()) {
-    await migrateLegacyLocalProjectsIfNeeded();
+    // This explicit local-project creation may request SAF authorization.
+    await migrateLegacyLocalProjectsIfNeeded(true);
     const state = await connectedLocalSafState(true);
     if (!state) throw Error("Select a LifeSpace data folder before creating a local project.");
     const oldRow = await getRowById<LocalArchive>(ARCHIVE_STORE, storedArchive.id);
@@ -6225,6 +6268,10 @@ export async function deleteLocalRecord(recordId: string) {
   const record = await getRowById<LocalRecord>(RECORD_STORE, recordId);
   if (!record) return;
   const cloud = await getRowById<LocalArchive>(ARCHIVE_STORE, record.archive_id);
+  if (cloud && archiveParticipatesInPendingCloudSync(normalizeLocalArchive(cloud)) &&
+      isPendingCloudSyncStatus(record.sync.status)) {
+    throw Error("待上传记录须通过安全取消操作处理，不能直接删除或触发云端回收站。");
+  }
   if (cloud && classifyLegacySafArchive(cloud) !== "local-project" && cloud.local_owner_user_id) {
     const saved = await commitCloudSaf(cloud.local_owner_user_id, record.archive_id, (current) => {
       const parent = current.records.find((row) => row.id === recordId);
@@ -6352,10 +6399,321 @@ export async function setLocalProjectTrashed(archiveId: string, trashed: boolean
   } finally { db.close(); }
 }
 
+// Pending cancellation is deliberately separate from cloud trash and ordinary
+// local deletion. It never guesses whether a failed or in-flight write reached
+// the server. These guarded functions only operate on private-IDB originals;
+// SAF-backed originals need an equivalent atomic SAF cancellation contract.
+function assertNeverUploaded(sync: LocalSyncMeta, operation: LocalSyncOperationKind) {
+  if (sync.status !== "pending-cloud-sync" ||
+      sync.operation_kind !== operation ||
+      sync.attempt_count !== 0 ||
+      !sync.client_operation_id ||
+      sync.last_sync_at ||
+      sync.cloud_record_id ||
+      sync.cloud_media_id || sync.cloud_media_url) {
+    throw Error("无法证明尚未上传，已保留本机数据，请先核对远端状态。");
+  }
+}
+
+// The sync layer authenticates and reads this real cloud row before invoking
+// the IDB-only discard operation. No remote delete is ever performed.
+export type VerifiedCloudArchiveForDiscard = {
+  id: string; user_id: string; title: string; category: ArchiveCategory;
+  system_name?: string | null; species_name_snapshot?: string | null;
+  species_id?: string | null; source?: string | null;
+  planting_region?: PlantingRegion | null; note?: string | null;
+  archive_summary?: string | null; cycle_enabled?: boolean | null;
+  next_cycle_name?: string | null; status: "active" | "ended";
+  ended_at?: string | null;
+};
+
+export async function discardVerifiedPendingArchiveEdit(
+  archiveId: string, ownerContext: LocalArchiveOwnerContext,
+  verifiedCloud: VerifiedCloudArchiveForDiscard
+) {
+  const ownerId = getOwnerUserId(ownerContext);
+  if (!ownerId || verifiedCloud.user_id !== ownerId) {
+    throw Error("云端身份与本机账号不一致，不能放弃修改。");
+  }
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    try {
+      const store = transaction.objectStore(ARCHIVE_STORE);
+      const raw = await requestToPromise<LocalArchive | undefined>(store.get(archiveId));
+      if (!raw || raw.local_owner_user_id !== ownerId || raw.saf_local_space_id ||
+          raw.local_role === "saved-local-copy" ||
+          raw.source_cloud_archive_id !== verifiedCloud.id) {
+        throw Error("项目身份或持久化来源无法验证，保留待上传修改。");
+      }
+      const archive = normalizeLocalArchive(raw);
+      const sync = archive.sync;
+      const pending = sync.pending_fields || [];
+      const safeFields = new Set<string>(CREATE_ARCHIVE_EDIT_FIELDS);
+      if (sync.operation_kind !== "update-archive" ||
+          sync.status !== "pending-cloud-sync" ||
+          !sync.client_operation_id || sync.attempt_count !== 0 ||
+          pending.length === 0 || pending.some((field) => !safeFields.has(field))) {
+        throw Error("修改已尝试上传或包含未知字段，须先核对远端结果。");
+      }
+      const cloudFields: Partial<LocalArchive> = {
+        title: verifiedCloud.title,
+        category: verifiedCloud.category, main_category: verifiedCloud.category,
+        system_name: verifiedCloud.system_name || null,
+        species_name: verifiedCloud.species_name_snapshot || null,
+        plant_id: verifiedCloud.species_id || null,
+        source: verifiedCloud.source || null,
+        planting_region: normalizePlantingRegion(verifiedCloud.planting_region),
+        note: verifiedCloud.note || null,
+        archive_summary: verifiedCloud.archive_summary || null,
+        cycle_enabled: Boolean(verifiedCloud.cycle_enabled),
+        next_cycle_name: verifiedCloud.next_cycle_name || null,
+        status: verifiedCloud.status, ended_at: verifiedCloud.ended_at || null,
+      };
+      const now = nowIso();
+      const next = { ...archive, updated_at: now,
+        sync: applyCloudSyncOperationUpdate(sync, sync.client_operation_id,
+          { status: "synced", cloud_archive_id: verifiedCloud.id }, now) };
+      for (const field of pending) {
+        if (field === "category") {
+          next.category = verifiedCloud.category;
+          next.main_category = verifiedCloud.category;
+        } else {
+          (next as unknown as Record<string, unknown>)[field] =
+            (cloudFields as unknown as Record<string, unknown>)[field];
+        }
+      }
+      await requestToPromise(store.put(next));
+      await done;
+      return next;
+    } catch (error) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw error;
+    }
+  } finally { db.close(); }
+}
+
+// Only local, never-attempted record-field overlays may be discarded.
+// The caller must first fetch and authenticate the real cloud row.
+export type VerifiedCloudRecordForDiscard = {
+  id: string;
+  archive_id: string;
+  user_id: string;
+  note: string | null;
+  record_time: string;
+  visibility: "public" | "private";
+};
+
+export async function discardVerifiedPendingRecordEdit(
+  localRecordId: string,
+  ownerContext: LocalArchiveOwnerContext,
+  cloudRow: VerifiedCloudRecordForDiscard
+) {
+  const ownerId = getOwnerUserId(ownerContext);
+  if (!ownerId || cloudRow.user_id !== ownerId ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cloudRow.id)) {
+    throw Error("无法确认云记录身份，已保留本机修改。");
+  }
+  const db = await openLocalDb();
+  try {
+    const tx = db.transaction([ARCHIVE_STORE, RECORD_STORE], "readwrite");
+    const done = transactionDone(tx);
+    try {
+      const records = tx.objectStore(RECORD_STORE);
+      const raw = await requestToPromise<LocalRecord | undefined>(records.get(localRecordId));
+      if (!raw) throw Error("本机记录不存在，无法安全撤销。");
+      const archive = await requestToPromise<LocalArchive | undefined>(
+        tx.objectStore(ARCHIVE_STORE).get(raw.archive_id)
+      );
+      if (!archive || archive.local_owner_user_id !== ownerId ||
+          archive.saf_local_space_id ||
+          archive.source_cloud_archive_id !== cloudRow.archive_id ||
+          raw.sync.cloud_record_id !== cloudRow.id) {
+        throw Error("记录归属或原始数据源不符，已保留本机修改。");
+      }
+      const sync = normalizeLocalSyncMeta(raw.sync);
+      const pending = sync.pending_fields || [];
+      // Location is written through a distinct RPC; cloud cycle IDs can be
+      // remapped. Reject both, rather than silently losing edits.
+      const allowed = new Set(["note", "record_time", "visibility"]);
+      if (sync.status !== "pending-cloud-sync" ||
+          sync.operation_kind !== "update-record" ||
+          !sync.client_operation_id || sync.attempt_count !== 0 ||
+          !pending.length || pending.some((field) => !allowed.has(field))) {
+        throw Error("记录已尝试上传或含未经核验字段，不能安全撤销。");
+      }
+      if (cloudRow.visibility !== "public" && cloudRow.visibility !== "private") {
+        throw Error("云端可见性未核实，不能覆盖本机隐私。");
+      }
+      const now = nowIso();
+      const next: LocalRecord = {
+        ...raw,
+        note: pending.includes("note") ? cloudRow.note || "" : raw.note,
+        record_time: pending.includes("record_time") ? cloudRow.record_time : raw.record_time,
+        source_cloud_visibility: pending.includes("visibility")
+          ? cloudRow.visibility : raw.source_cloud_visibility,
+        updated_at: now,
+        sync: applyCloudSyncOperationUpdate(sync, sync.client_operation_id, {
+          status: "synced", cloud_record_id: cloudRow.id
+        }, now),
+      };
+      await requestToPromise(records.put(next));
+      await done;
+      return next;
+    } catch (error) {
+      tx.abort();
+      await done.catch(() => undefined);
+      throw error;
+    }
+  } finally {
+    db.close();
+  }
+}
+
+export async function cancelNeverUploadedCloudArchive(
+  archiveId: string, ownerContext: LocalArchiveOwnerContext
+) {
+  if (isAndroidSafAvailable()) {
+    throw Error("Android SAF 原件与待上传队列的原子取消尚未验证，已保留本机数据。");
+  }
+  const ownerId = getOwnerUserId(ownerContext);
+  if (!ownerId) throw Error("必须使用当前登录账号才能取消待上传项目。");
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction([ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE], "readwrite");
+    const done = transactionDone(transaction);
+    try {
+      const archives = transaction.objectStore(ARCHIVE_STORE);
+      const recordsStore = transaction.objectStore(RECORD_STORE);
+      const imagesStore = transaction.objectStore(IMAGE_STORE);
+      const [raw, records, images] = await Promise.all([
+        requestToPromise<LocalArchive | undefined>(archives.get(archiveId)),
+        requestToPromise<LocalRecord[]>(recordsStore.getAll()),
+        requestToPromise<LocalImage[]>(imagesStore.getAll()),
+      ]);
+      if (!raw || raw.local_owner_user_id !== ownerId || raw.saf_local_space_id ||
+          raw.source_cloud_archive_id || raw.local_cloud_transfer) {
+        throw Error("项目归属或持久化来源不允许安全取消，已保留原件。");
+      }
+      const archive = normalizeLocalArchive(raw);
+      assertNeverUploaded(archive.sync, "create-archive");
+      const children = records.filter((item) => item.archive_id === archiveId);
+      const photos = images.filter((item) => item.archive_id === archiveId);
+      for (const item of children) {
+        const sync = normalizeLocalSyncMeta(item.sync);
+        if (sync.status === "pending-cloud-sync") assertNeverUploaded(sync, "create-record");
+        else if (sync.status !== "local-only" || sync.attempt_count !== 0 || sync.cloud_record_id) {
+          throw Error("子记录可能已上传，已保留项目及全部照片。");
+        }
+      }
+      for (const photo of photos) {
+        const sync = normalizeLocalSyncMeta(photo.sync);
+        if (sync.status === "pending-cloud-sync") assertNeverUploaded(sync, "upload-image");
+        else if (sync.status !== "local-only" || sync.attempt_count !== 0 ||
+            sync.cloud_media_id || sync.cloud_media_url) {
+          throw Error("照片上传状态尚未确认，已保留项目及全部照片。");
+        }
+      }
+      for (const photo of photos) await requestToPromise(imagesStore.delete(photo.id));
+      for (const item of children) await requestToPromise(recordsStore.delete(item.id));
+      await requestToPromise(archives.delete(archiveId));
+      await done;
+    } catch (error) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw error;
+    }
+  } finally { db.close(); }
+  await refreshLocalUsageHints();
+}
+
+export async function cancelNeverUploadedCloudRecord(
+  recordId: string, ownerContext: LocalArchiveOwnerContext
+) {
+  if (isAndroidSafAvailable()) {
+    throw Error("Android SAF 原件与待上传队列的原子取消尚未验证，已保留本机数据。");
+  }
+  const ownerId = getOwnerUserId(ownerContext);
+  if (!ownerId) throw Error("必须使用当前登录账号才能取消待上传记录。");
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction([ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE], "readwrite");
+    const done = transactionDone(transaction);
+    try {
+      const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+      const recordStore = transaction.objectStore(RECORD_STORE);
+      const imageStore = transaction.objectStore(IMAGE_STORE);
+      const record = await requestToPromise<LocalRecord | undefined>(recordStore.get(recordId));
+      if (!record) throw Error("待上传记录不存在。");
+      const archive = await requestToPromise<LocalArchive | undefined>(archiveStore.get(record.archive_id));
+      if (!archive || archive.local_owner_user_id !== ownerId || archive.saf_local_space_id ||
+          !archiveParticipatesInPendingCloudSync(normalizeLocalArchive(archive))) {
+        throw Error("记录归属或存储来源不允许安全取消。");
+      }
+      assertNeverUploaded(normalizeLocalSyncMeta(record.sync), "create-record");
+      const images = (await requestToPromise<LocalImage[]>(imageStore.getAll()))
+        .filter((image) => image.record_id === recordId);
+      for (const image of images) assertNeverUploaded(normalizeLocalSyncMeta(image.sync), "upload-image");
+      for (const image of images) await requestToPromise(imageStore.delete(image.id));
+      await requestToPromise(recordStore.delete(recordId));
+      await done;
+    } catch (error) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw error;
+    }
+  } finally { db.close(); }
+  await refreshLocalUsageHints();
+}
+
+export async function cancelNeverUploadedCloudImage(
+  imageId: string, ownerContext: LocalArchiveOwnerContext
+) {
+  if (isAndroidSafAvailable()) {
+    throw Error("Android SAF 原件与待上传队列的原子取消尚未验证，已保留本机数据。");
+  }
+  const ownerId = getOwnerUserId(ownerContext);
+  if (!ownerId) throw Error("必须使用当前登录账号才能取消待上传照片。");
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction([ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE], "readwrite");
+    const done = transactionDone(transaction);
+    try {
+      const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+      const recordStore = transaction.objectStore(RECORD_STORE);
+      const imageStore = transaction.objectStore(IMAGE_STORE);
+      const image = await requestToPromise<LocalImage | undefined>(imageStore.get(imageId));
+      if (!image) throw Error("待上传照片不存在。");
+      const [archive, record] = await Promise.all([
+        requestToPromise<LocalArchive | undefined>(archiveStore.get(image.archive_id)),
+        requestToPromise<LocalRecord | undefined>(recordStore.get(image.record_id)),
+      ]);
+      if (!archive || !record || record.archive_id !== image.archive_id ||
+          archive.local_owner_user_id !== ownerId || archive.saf_local_space_id ||
+          !archiveParticipatesInPendingCloudSync(normalizeLocalArchive(archive))) {
+        throw Error("照片归属或持久化来源不允许安全取消。");
+      }
+      assertNeverUploaded(normalizeLocalSyncMeta(image.sync), "upload-image");
+      await requestToPromise(imageStore.delete(imageId));
+      await done;
+    } catch (error) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw error;
+    }
+  } finally { db.close(); }
+  await refreshLocalUsageHints();
+}
+
 export async function deleteLocalArchive(archiveId: string) {
   await ensureLocalSafReadable();
   const existing = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
   if (existing) {
+    if (archiveParticipatesInPendingCloudSync(normalizeLocalArchive(existing))) {
+      throw Error("云端待上传项目须通过安全取消操作处理，不能直接删除。");
+    }
     assertWritableUserArchive(
       normalizeLocalArchive(existing),
       "云项目离线缓存只读，不能删除。"

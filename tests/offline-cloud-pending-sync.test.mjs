@@ -564,12 +564,14 @@ test("offline pending cloud projects keep one local identity and persist mapping
     created.sync.client_operation_id,
     created.sync.client_operation_id,
     owner,
+    created,
   );
   const remapped = await dbModule.persistLocalCloudArchiveMapping(
     created.id,
     created.sync.client_operation_id,
     created.sync.client_operation_id,
     owner,
+    created,
   );
   const after = await dbModule.getLocalArchiveDetail(created.id, owner);
   assert.equal(mapped.source_cloud_archive_id, created.sync.client_operation_id);
@@ -670,4 +672,251 @@ test("logout keeps pending user-created work and hides it from another owner", a
     restored.some((item) => item.local_archive_id === "cloud-cache-project"),
     true,
   );
+});
+
+test("F01: a new title edited during the first create survives the old receipt as a new pending update", async () => {
+  await fixture();
+  const initial = await dbModule.createLocalArchive({
+    title: "before-upload", category: "system", system_name: "堆肥",
+    local_owner_user_id: owner.userId, local_owner_email: owner.email,
+    sync_destination: "pending-cloud", migration_visibility: "private",
+  });
+  const originalId = initial.sync.client_operation_id;
+  await dbModule.updateLocalArchiveCloudSyncOperation(
+    initial.id, originalId, { status: "uploading", cloud_archive_id: originalId }, owner);
+  await dbModule.updateLocalArchiveFields(initial.id, { title: "edited-during-create" }, owner);
+  const mapped = await dbModule.persistLocalCloudArchiveMapping(
+    initial.id, originalId, originalId, owner, initial);
+  assert.equal(mapped.id, initial.id);
+  assert.equal(mapped.title, "edited-during-create");
+  assert.equal(mapped.source_cloud_archive_id, originalId);
+  assert.equal(mapped.sync.status, "pending-cloud-sync");
+  assert.equal(mapped.sync.operation_kind, "update-archive");
+  assert.deepEqual(mapped.sync.pending_fields, ["title"]);
+  assert.notEqual(mapped.sync.client_operation_id, originalId);
+  const oldReply = await dbModule.updateLocalArchiveCloudSyncOperation(
+    initial.id, originalId, { status: "synced", cloud_archive_id: originalId }, owner);
+  assert.equal(oldReply.sync.client_operation_id, mapped.sync.client_operation_id);
+  const again = await dbModule.persistLocalCloudArchiveMapping(
+    initial.id, originalId, originalId, owner, initial);
+  assert.equal(again.sync.client_operation_id, mapped.sync.client_operation_id);
+  const summaries = await dbModule.listPendingCloudSyncSummaries(owner);
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0].archive_update_pending, true);
+});
+
+test("F01: a failed or late create receipt retains the same target ID and never changes chosen privacy", async () => {
+  await fixture();
+  const initial = await dbModule.createLocalArchive({
+    title: "private-first", category: "system", system_name: "堆肥",
+    local_owner_user_id: owner.userId, local_owner_email: owner.email,
+    sync_destination: "pending-cloud", migration_visibility: "private",
+  });
+  const id = initial.sync.client_operation_id;
+  await dbModule.updateLocalArchiveCloudSyncOperation(
+    initial.id, id, { status: "uploading", cloud_archive_id: id }, owner);
+  await assert.rejects(() => dbModule.updateLocalArchiveMigrationState(
+    initial.id, { migration_visibility: "public" }, owner));
+  await dbModule.updateLocalArchiveCloudSyncOperation(
+    initial.id, id, { status: "failed", last_error: "no response" }, owner);
+  const retry = await dbModule.getLocalArchiveDetail(initial.id, owner);
+  assert.equal(retry.archive.sync.client_operation_id, id);
+  assert.equal(retry.archive.migration_visibility, "private");
+  const result = await dbModule.persistLocalCloudArchiveMapping(
+    initial.id, id, id, owner, initial);
+  assert.equal(result.source_cloud_archive_id, id);
+  assert.equal(result.migration_visibility, "private");
+});
+
+test("P0: never-attempted pending cloud project cancel cascades only its own records and image blobs", async () => {
+  await fixture();
+  const pending = await dbModule.createLocalArchive({
+    title: "cancel-me", category: "system", system_name: "堆肥",
+    local_owner_user_id: owner.userId, local_owner_email: owner.email,
+    sync_destination: "pending-cloud",
+  });
+  const record = await dbModule.createLocalRecord({
+    archive_id: pending.id, note: "new record", image_files: [photo("only-this.gif")],
+  });
+  await assert.rejects(() => dbModule.deleteLocalArchive(pending.id),
+    /安全取消/);
+  await dbModule.cancelNeverUploadedCloudArchive(pending.id, owner);
+  assert.equal(await dbModule.getLocalArchiveDetail(pending.id, owner), null);
+  assert.equal((await dbModule.listPendingCloudSyncSummaries(owner)).some(
+    (row) => row.local_archive_id === pending.id), false);
+  assert.equal((await dbModule.getLocalArchiveDetail("cloud-local-copy", owner)).records.length, 1);
+  assert.equal(record.sync.status, "pending-cloud-sync");
+});
+
+test("P0: record and one-image cancellation preserves parent, other image and existing cloud history", async () => {
+  await fixture();
+  const created = await dbModule.createLocalRecord({
+    archive_id: "cloud-local-copy", note: "new", image_files: [photo("one.gif"), photo("two.gif")],
+  });
+  let detail = await dbModule.getLocalArchiveDetail("cloud-local-copy", owner);
+  const newRecord = detail.records.find((r) => r.id === created.id);
+  assert.equal(newRecord.images.length, 2);
+  await assert.rejects(() => dbModule.deleteLocalRecord(created.id),
+    /安全取消/);
+  await dbModule.cancelNeverUploadedCloudImage(newRecord.images[0].id, owner);
+  detail = await dbModule.getLocalArchiveDetail("cloud-local-copy", owner);
+  assert.equal(detail.records.find((r) => r.id === created.id).images.length, 1);
+  await dbModule.cancelNeverUploadedCloudRecord(created.id, owner);
+  detail = await dbModule.getLocalArchiveDetail("cloud-local-copy", owner);
+  assert.equal(detail.records.find((r) => r.id === created.id), undefined);
+  assert.equal(detail.records.some((r) => r.id === "imported-record"), true);
+});
+
+test("P0: wrong owner, unknown receipt and SAF originals are never canceled", async () => {
+  await fixture();
+  const pending = await dbModule.createLocalArchive({
+    title: "protected", category: "system", system_name: "堆肥",
+    local_owner_user_id: owner.userId, sync_destination: "pending-cloud",
+  });
+  const wrong = { userId: "different-account" };
+  await assert.rejects(() => dbModule.cancelNeverUploadedCloudArchive(pending.id, wrong));
+  await dbModule.updateLocalArchiveCloudSyncOperation(
+    pending.id, pending.sync.client_operation_id,
+    { status: "uploading", cloud_archive_id: pending.sync.client_operation_id }, owner);
+  await dbModule.updateLocalArchiveCloudSyncOperation(
+    pending.id, pending.sync.client_operation_id,
+    { status: "failed", last_error: "receipt unknown" }, owner);
+  await assert.rejects(() => dbModule.cancelNeverUploadedCloudArchive(pending.id, owner));
+  assert.ok(await dbModule.getLocalArchiveDetail(pending.id, owner));
+  const other = await dbModule.createLocalArchive({
+    title: "SAF protected", category: "system", system_name: "堆肥",
+    local_owner_user_id: owner.userId, sync_destination: "pending-cloud",
+  });
+  const db = await request(indexedDB.open("life-space-local-offline", 6));
+  const tx = db.transaction("archives", "readwrite");
+  const done = finished(tx);
+  const store = tx.objectStore("archives");
+  const stored = await request(store.get(other.id));
+  stored.saf_local_space_id = "existing-saf-space";
+  store.put(stored);
+  await done; db.close();
+  await assert.rejects(() => dbModule.cancelNeverUploadedCloudArchive(other.id, owner));
+  assert.ok(await dbModule.getLocalArchiveDetail(other.id, owner));
+});
+
+test("P0: a verified cloud project baseline discards only a never-attempted local field overlay", async () => {
+  await fixture();
+  const initial = await dbModule.createLocalArchive({
+    title: "original-cloud-title", category: "system", system_name: "堆肥",
+    local_owner_user_id: owner.userId, sync_destination: "pending-cloud",
+  });
+  const id = initial.sync.client_operation_id;
+  await dbModule.updateLocalArchiveCloudSyncOperation(
+    initial.id, id, { status: "uploading", cloud_archive_id: id }, owner);
+  await dbModule.updateLocalArchiveFields(initial.id, { title: "new-local-title" }, owner);
+  const mapped = await dbModule.persistLocalCloudArchiveMapping(initial.id, id, id, owner, initial);
+  assert.equal(mapped.sync.attempt_count, 0, "the newly queued edit has not been uploaded");
+  const verified = {
+    id, user_id: owner.userId, title: "original-cloud-title", category: "system",
+    system_name: "堆肥", status: "active",
+  };
+  await assert.rejects(() => dbModule.discardVerifiedPendingArchiveEdit(
+    initial.id, { userId: "another-owner" }, verified));
+  const discarded = await dbModule.discardVerifiedPendingArchiveEdit(
+    initial.id, owner, verified);
+  assert.equal(discarded.title, "original-cloud-title");
+  assert.equal(discarded.source_cloud_archive_id, id);
+  assert.equal(discarded.sync.status, "synced");
+  assert.deepEqual(discarded.sync.pending_fields, []);
+  assert.equal((await dbModule.listPendingCloudSyncSummaries(owner)).length, 0);
+});
+
+test("P0: cloud edit already attempted or with unknown receipt never discards its overlay", async () => {
+  await fixture();
+  const initial = await dbModule.createLocalArchive({
+    title: "original", category: "system", system_name: "堆肥",
+    local_owner_user_id: owner.userId, sync_destination: "pending-cloud",
+  });
+  const id = initial.sync.client_operation_id;
+  await dbModule.updateLocalArchiveCloudSyncOperation(
+    initial.id, id, { status: "uploading", cloud_archive_id: id }, owner);
+  await dbModule.updateLocalArchiveFields(initial.id, { title: "important-local-edit" }, owner);
+  const mapped = await dbModule.persistLocalCloudArchiveMapping(initial.id, id, id, owner, initial);
+  await dbModule.updateLocalArchiveCloudSyncOperation(
+    initial.id, mapped.sync.client_operation_id,
+    { status: "uploading", cloud_archive_id: id }, owner);
+  await dbModule.updateLocalArchiveCloudSyncOperation(
+    initial.id, mapped.sync.client_operation_id,
+    { status: "failed", last_error: "unknown receipt" }, owner);
+  const verified = { id, user_id: owner.userId, title: "original", category: "system",
+    system_name: "堆肥", status: "active" };
+  await assert.rejects(() => dbModule.discardVerifiedPendingArchiveEdit(
+    initial.id, owner, verified));
+  const kept = await dbModule.getLocalArchiveDetail(initial.id, owner);
+  assert.equal(kept.archive.title, "important-local-edit");
+  assert.equal(kept.archive.sync.status, "failed");
+});
+
+test("W5 P0: authenticated cloud-record baseline only discards never-attempted note edits", async () => {
+  await fixture();
+  const before = await dbModule.getLocalArchiveDetail("cloud-local-copy", owner);
+  assert.equal(before.records[0].images.length, 1);
+  const pending = await dbModule.updateLocalRecordFields("imported-record", { note: "未上传的本机修改" });
+  assert.equal(pending.sync.operation_kind, "update-record");
+  const remote = {
+    id: cloudRecordId, archive_id: cloudArchiveId, user_id: owner.userId,
+    note: "云端已有记录", record_time: timestamp, visibility: "private"
+  };
+  await assert.rejects(() => dbModule.discardVerifiedPendingRecordEdit(
+    "imported-record", { userId: "another-owner" }, remote
+  ));
+  const result = await dbModule.discardVerifiedPendingRecordEdit("imported-record", owner, remote);
+  assert.equal(result.note, "云端已有记录");
+  assert.equal(result.sync.status, "synced");
+  assert.deepEqual(result.sync.pending_fields, []);
+  const after = await dbModule.getLocalArchiveDetail("cloud-local-copy", owner);
+  assert.equal(after.records[0].images.length, 1);
+  assert.equal(after.records[0].images[0].sync.cloud_media_id, cloudMediaId);
+});
+
+test("W5 P0: attempted/unknown record receipts and location-specific RPC edits cannot be discarded", async () => {
+  await fixture();
+  const cloud = {
+    id: cloudRecordId, archive_id: cloudArchiveId, user_id: owner.userId,
+    note: "云端已有记录", record_time: timestamp, visibility: "private"
+  };
+  const pending = await dbModule.updateLocalRecordFields("imported-record", {
+    note: "不得丢失", location: { label: "需要独立核对的位置", source: "manual" }
+  });
+  await assert.rejects(() => dbModule.discardVerifiedPendingRecordEdit(
+    "imported-record", owner, cloud
+  ), /未经核验字段/);
+  await dbModule.updateLocalRecordCloudSyncOperation(
+    "imported-record", pending.sync.client_operation_id, {
+      status: "uploading", cloud_record_id: cloudRecordId
+    }
+  );
+  await dbModule.updateLocalRecordCloudSyncOperation(
+    "imported-record", pending.sync.client_operation_id, {
+      status: "failed", last_error: "unknown response"
+    }
+  );
+  await assert.rejects(() => dbModule.discardVerifiedPendingRecordEdit(
+    "imported-record", owner, cloud
+  ));
+  const kept = await dbModule.getLocalArchiveDetail("cloud-local-copy", owner);
+  assert.equal(kept.records[0].note, "不得丢失");
+});
+
+test("W5 P0: SAF-marked mirrors cannot be canceled via IDB path", async () => {
+  await fixture();
+  const newArchive = await dbModule.createLocalArchive({
+    title: "original-saf", category: "system", system_name: "堆肥",
+    local_owner_user_id: owner.userId, sync_destination: "pending-cloud",
+  });
+  const db = await request(indexedDB.open("life-space-local-offline", 6));
+  const tx = db.transaction("archives", "readwrite");
+  const done = finished(tx);
+  const row = await request(tx.objectStore("archives").get(newArchive.id));
+  row.saf_local_space_id = "saf-persisted";
+  tx.objectStore("archives").put(row);
+  await done; db.close();
+  await assert.rejects(() => dbModule.cancelNeverUploadedCloudArchive(newArchive.id, owner));
+  const saved = await dbModule.getLocalArchiveDetail(newArchive.id, owner);
+  assert.equal(saved.archive.saf_local_space_id, "saf-persisted");
 });
