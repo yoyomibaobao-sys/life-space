@@ -14,6 +14,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(LocalSafPlugin.class);
         registerPlugin(CloudExportPlugin.class);
         registerPlugin(ImageActionsPlugin.class);
+        registerPlugin(RecordGalleryPlugin.class);
         registerPlugin(InstallHistoryPlugin.class);
         registerPlugin(NativeSharePlugin.class);
         super.onCreate(savedInstanceState);

@@ -55,6 +55,7 @@ import {
 } from "@/lib/local-owner-context";
 import { migrateLegacyLocalOrigin } from "@/lib/local-origin-migration";
 import { getLocalSafDirectory, isAndroidSafAvailable } from "@/lib/local-saf-native";
+import { isAndroidRecordGallery, pickAndroidRecordPhotos } from "@/lib/android-record-gallery";
 import { retireBundledLegacyServiceWorkers } from "@/lib/android-service-worker";
 import { normalizeLocalImageBlob } from "@/lib/local-image-blob";
 import {
@@ -719,6 +720,16 @@ function App() {
   }
   async function acceptQuickAddFiles(list: FileList | null, source: QuickAddSource) {
     await acceptQuickAddImageFiles(Array.from(list || []), source);
+  }
+  async function openQuickAddAlbum() {
+    if (!isAndroidRecordGallery()) { quickGallery.current?.click(); return; }
+    try {
+      const { files, truncated } = await pickAndroidRecordPhotos();
+      if (truncated) showToast(copy.photoLimit);
+      await acceptQuickAddImageFiles(files, "gallery");
+    } catch {
+      showToast(language === "zh" ? "无法读取图库照片。" : "Unable to read gallery photos.");
+    }
   }
   function skipQuickAddPhotos() {
     setQuickAddDraft({ files: [], capturedAt: [], source: "camera", note: "" });
@@ -2603,7 +2614,7 @@ function App() {
         <AndroidQuickCamera
           language={language}
           onCapture={(file) => acceptQuickAddImageFiles([file], "camera")}
-          onAlbum={() => quickGallery.current?.click()}
+          onAlbum={() => void openQuickAddAlbum()}
           onSkip={skipQuickAddPhotos}
           onCancel={() => { setQuickAddDraft(null); goList(); }}
         />
@@ -4085,7 +4096,7 @@ function RecordForm({ copy, archive, language, record, initialFiles = [], initia
   const camera = useRef<HTMLInputElement>(null);
   const album = useRef<HTMLInputElement>(null);
   const periods = getArchiveCycleTerminology(archive.category, language);
-  function addFiles(incoming: FileList | null) {
+  function addFiles(incoming: FileList | File[] | null) {
     const images = Array.from(incoming || []).filter((file) => file.type.startsWith("image/"));
     if (files.length + images.length > MAX_PHOTOS) { setError(copy.photoLimit); return; }
     setError(""); setFiles((previous) => [...previous, ...images]);
@@ -4168,7 +4179,13 @@ function RecordForm({ copy, archive, language, record, initialFiles = [], initia
         {files.length ? <div className="photo-grid">{files.map((file, index) => <div className="photo-preview" key={`${file.name}-${file.lastModified}-${index}`}><FilePreview file={file} /><button type="button" disabled={busy} aria-label={copy.removePhoto} onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}>×</button></div>)}</div> : null}
         <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
         <input ref={album} type="file" accept="image/*" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
-        <div className="submit-row"><button className="secondary-button" type="button" disabled={busy} onClick={() => camera.current?.click()}>{copy.camera}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => album.current?.click()}>{copy.album}</button></div>
+        <div className="submit-row"><button className="secondary-button" type="button" disabled={busy} onClick={() => camera.current?.click()}>{copy.camera}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => {
+          if (!isAndroidRecordGallery()) { album.current?.click(); return; }
+          void pickAndroidRecordPhotos().then(({ files: selected, truncated }) => {
+            addFiles(selected);
+            if (truncated) setError(copy.photoLimit);
+          }).catch(() => setError(language === "zh" ? "无法读取图库照片。" : "Unable to read gallery photos."));
+        }}>{copy.album}</button></div>
         <small>{language === "zh" ? "每次最多添加 10 张照片；保存时自动压缩至长边不超过 1800px。" : "Add up to 10 photos; saved photos use a long edge of no more than 1800px."}</small>
       </div>
       {!record && files.length > 1 ? <label style={{ display: "flex", alignItems: "center", gap: 8 }}><input type="checkbox" checked={splitByDate} onChange={(e) => setSplitByDate(e.target.checked)} disabled={busy} /><span>{language === "zh" ? "按日期分开生成多条记录" : "Create separate records by date"}</span></label> : null}
