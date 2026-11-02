@@ -11,8 +11,13 @@ export function isCloudOfflineCacheArchive(archive: LocalArchive) {
   return archive.local_role === "cloud-offline-cache";
 }
 
-export function canEditLocalArchiveFields(archive: LocalArchive) {
-  return archive.local_role !== "cloud-offline-cache";
+export function canEditLocalArchiveFields(
+  archive: LocalArchive, ownerContext?: LocalArchiveOwnerContext | null,
+) {
+  if (archive.local_role !== "cloud-offline-cache") return true;
+  return Boolean(ownerContext?.userId && archive.local_owner_user_id === ownerContext.userId &&
+    archive.status === "active" && archive.sync.status !== "uploading" &&
+    archive.source_cloud_archive_id);
 }
 
 export function canAddLocalArchiveRecord(archive: LocalArchive) {

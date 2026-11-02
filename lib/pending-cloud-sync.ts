@@ -434,6 +434,26 @@ async function syncArchiveUpdate(params: {
       }
     }
 
+    // Update only existing, explicitly modified cloud cycles; never INSERT.
+    const cycleIds = [...new Set((archive.sync.pending_fields || [])
+      .filter((field) => field.startsWith("cycle:")).map((field) => field.slice(6)))];
+    for (const cloudCycleId of cycleIds) {
+      if (!isStableCloudOperationId(cloudCycleId)) throw Error("期次云端身份无效，修改仍留在本机。");
+      const cycle = (archive.cycles || []).find((item) => item.source_cloud_cycle_id === cloudCycleId);
+      if (!cycle || cycle.id !== "cloud_cache_cycle_" + cloudCycleId) {
+        throw Error("期次云端来源不一致，修改仍留在本机。");
+      }
+      const { data, error } = await supabase.from("archive_cycles")
+        .update({ display_name: cycle.display_name || null, status: cycle.status,
+          started_at: cycle.started_at, ended_at: cycle.status === "ended" ? cycle.ended_at : null })
+        .eq("id", cloudCycleId)
+        .eq("archive_id", params.cloudArchiveId)
+        .select("id").maybeSingle();
+      if (error || data?.id !== cloudCycleId) {
+        throw Error("期次更新回执未确认，保留本机pending供核账及重试。");
+      }
+    }
+
     await updateLocalArchiveCloudSyncOperation(
       archive.id,
       operationId,
@@ -1096,7 +1116,10 @@ async function syncPendingCloudArchiveUnlocked(params: {
           params.localArchiveId,
           params.ownerContext
         )) || mapped;
-    } else if (cloudArchiveId && (detail.archive.cycles || []).length) {
+    } else if (cloudArchiveId && detail.archive.local_role !== "cloud-offline-cache" &&
+               (detail.archive.cycles || []).length) {
+      // A cached cloud project must never replay the full cycle snapshot as
+      // unrequested remote writes. Its existing cycle identities are immutable.
       await ensureCloudCycles({
         archiveId: cloudArchiveId,
         cycles: detail.archive.cycles || [],
@@ -1148,8 +1171,10 @@ async function syncPendingCloudArchiveUnlocked(params: {
 
     if (
       isPendingCloudSyncStatus(detail.archive.sync.status) &&
-      detail.archive.sync.operation_kind !== "create-archive" &&
-      detail.archive.local_role !== "cloud-offline-cache"
+      detail.archive.sync.operation_kind === "update-archive" &&
+      (detail.archive.local_role !== "cloud-offline-cache" ||
+        (detail.archive.local_owner_user_id === userId &&
+         detail.archive.source_cloud_archive_id === cloudArchiveId))
     ) {
       try {
         archiveUpdated = await syncArchiveUpdate({

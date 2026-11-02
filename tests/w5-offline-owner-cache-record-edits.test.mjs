@@ -72,7 +72,7 @@ test("owner detail passes authenticated Owner to edit writer; synced cached dele
   assert.match(view,/canEditLocalArchiveRecord\(archive, source, ownerContext\)/);
   assert.match(view,/\}, ownerContext\);/);
   assert.match(view,/onRecordDeleted=\{editable && !isCloudCache \?/);
-  assert.match(view,/canEditArchive = canEditLocalArchiveFields\(archive\)/);
+  assert.match(view,/canEditArchive = canEditLocalArchiveFields\(archive, ownerContext\)/);
   assert.match(adapter,/archive\.local_owner_user_id !== ownerContext\.userId/);
   assert.match(adapter,/record\.sync\?\.status === "synced"/);
 });

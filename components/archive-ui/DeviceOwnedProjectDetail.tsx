@@ -92,7 +92,7 @@ export default function DeviceOwnedProjectDetail({
       ? `/plant/${encodeURIComponent(archive.plant_slug)}`
       : null;
   const isCloudCache = isCloudOfflineCacheArchive(archive);
-  const canEditArchive = canEditLocalArchiveFields(archive);
+  const canEditArchive = canEditLocalArchiveFields(archive, ownerContext);
   const canAddRecord = canAddLocalArchiveRecord(archive);
   const cycleEnabled = Boolean(archive.cycle_enabled);
   const [activeDetailTab, setActiveDetailTab] = useState<ArchiveProjectDetailTabId>("records");
@@ -214,7 +214,7 @@ export default function DeviceOwnedProjectDetail({
         canAddRecord,
         canManageCycle: canEditArchive && cycleEnabled,
         canSaveToLocal: false,
-        canDeleteArchive: canEditArchive,
+        canDeleteArchive: canEditArchive && !isCloudCache,
         canToggleVisibility: false,
       }}
       isMobileViewport
@@ -235,7 +235,7 @@ export default function DeviceOwnedProjectDetail({
       statusBadge={isCloudCache ? workspaceCopy.cloud_cache_copy : archiveCopy.local_project}
       statusNotice={
         <>
-          {isCloudCache ? (
+          {isCloudCache && !canEditArchive ? (
             <div style={archiveProjectDetailReadOnlyNoticeStyle}>
               <span>{archiveCopy.cloud_read_only_notice}</span>
             </div>
@@ -267,12 +267,13 @@ export default function DeviceOwnedProjectDetail({
       onHeaderBack={onBack}
       onToggleArchiveVisibility={() => undefined}
       onToggleArchiveStatus={() => {
+        if (isCloudCache) return;
         void change(() => updateLocalArchiveFields(archive.id, {
           status: archive.status === "ended" ? "active" : "ended",
           ended_at: archive.status === "ended" ? null : new Date().toISOString(),
         }, ownerContext));
       }}
-      onDeleteArchive={() => setDeleteArchiveOpen(true)}
+      onDeleteArchive={() => { if (!isCloudCache) setDeleteArchiveOpen(true); }}
       onSaveTitle={async (nextTitle) => {
         await updateLocalArchiveFields(archive.id, { title: nextTitle }, ownerContext);
         await onChanged();
@@ -331,6 +332,7 @@ export default function DeviceOwnedProjectDetail({
             onChangeGroup={(value) => { void change(() => updateLocalArchiveFields(archive.id,
               { group_name: value || null }, ownerContext)); }}
             onToggleEnded={() => {
+              if (isCloudCache) return;
               void change(() => updateLocalArchiveFields(archive.id, {
                 status: archive.status === "ended" ? "active" : "ended",
                 ended_at: archive.status === "ended" ? null : new Date().toISOString(),
@@ -350,7 +352,7 @@ export default function DeviceOwnedProjectDetail({
         </>
       }
       timelineBusy={busy}
-      onStartCycle={canEditArchive && cycleEnabled
+      onStartCycle={canEditArchive && cycleEnabled && !isCloudCache
         ? (startedAt) => change(() => createLocalArchiveCycle(archive.id, startedAt, ownerContext))
         : undefined}
       onEndCycle={canEditArchive && cycleEnabled
@@ -367,7 +369,7 @@ export default function DeviceOwnedProjectDetail({
       onRenameCycle={canEditArchive && cycleEnabled
         ? (cycle, displayName) => change(() => updateLocalArchiveCycleName(archive.id, cycle.id, displayName, ownerContext))
         : undefined}
-      onDeleteCycle={canEditArchive && cycleEnabled
+      onDeleteCycle={canEditArchive && cycleEnabled && !isCloudCache
         ? async (cycle) => {
             await deleteLocalArchiveCycle(archive.id, cycle.id, ownerContext);
             await onChanged();

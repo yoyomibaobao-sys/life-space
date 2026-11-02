@@ -36,7 +36,7 @@ test("cloud cache refresh does not delete local-project or saved-local-copy", ()
   );
 
   assert.match(replace, /resolveLocalArchiveRole\(archive\) === "cloud-offline-cache"/);
-  assert.match(replace, /archiveStore\.put\(archive\)/);
+  assert.match(replace, /archiveStore\.put\(mergedCacheArchive\)/);
   assert.doesNotMatch(replace, /local_role === "local-project"/);
   assert.doesNotMatch(replace, /local_role === "saved-local-copy"/);
   assert.doesNotMatch(replace, /archiveStore\.clear\(/);
@@ -61,10 +61,12 @@ test("cloud cache protects project fields and deletion; mapped Owner records use
   assert.match(db, /function abortIfCloudOfflineCacheWrite/);
   assert.match(db, /filter\(isUserLocalArchive\)/);
 
+  const archiveEdit = sliceExport("updateLocalArchiveFields", "updateLocalArchiveMigrationState");
+  assert.match(archiveEdit, /assertWritableCachedCloudArchive\(normalizedArchive, ownerContext, updates\)/);
+  const archiveAck = sliceExport("updateLocalArchiveCloudSyncOperation", "persistLocalCloudArchiveMapping");
+  assert.match(archiveAck, /assertWritableCachedCloudArchive\(normalizedArchive, ownerContext, undefined, true\)/);
   const rejectWrite = [
-    ["updateLocalArchiveFields", "updateLocalArchiveMigrationState"],
     ["updateLocalArchiveMigrationState", "updateLocalArchiveCloudSyncOperation"],
-    ["updateLocalArchiveCloudSyncOperation", "persistLocalCloudArchiveMapping"],
     ["markLocalArchiveForOwner", "createLocalArchive"],
     ["deleteLocalArchive", "mergeLocalOriginBaseSnapshot"],
   ];
@@ -115,7 +117,7 @@ test("cloud cache protects project fields and deletion; mapped Owner records use
   assert.doesNotMatch(replace, /abortIfCloudOfflineCacheWrite/);
   assert.doesNotMatch(prune, /abortIfCloudOfflineCacheWrite/);
   assert.doesNotMatch(clear, /abortIfCloudOfflineCacheWrite/);
-  assert.match(replace, /archiveStore\.put\(archive\)/);
+  assert.match(replace, /archiveStore\.put\(mergedCacheArchive\)/);
 });
 
 test("explicit logout clears owner cloud cache and ambient sign-out does not", () => {

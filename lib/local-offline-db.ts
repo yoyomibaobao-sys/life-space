@@ -469,6 +469,52 @@ function assertWritableUserArchive(archive: LocalArchive, message: string) {
   }
 }
 
+function assertWritableCachedCloudArchive(
+  archive: LocalArchive, ownerContext?: LocalArchiveOwnerContext | null,
+  changes?: { status?: "active" | "ended"; ended_at?: string | null },
+  allowInFlightReceipt = false,
+) {
+  if (resolveLocalArchiveRole(archive) !== "cloud-offline-cache") return;
+  if (!ownerContext?.userId || archive.local_owner_user_id !== ownerContext.userId ||
+      archive.status !== "active" || !normalizeOptionalText(archive.source_cloud_archive_id) ||
+      (archive.sync.cloud_archive_id && archive.sync.cloud_archive_id !== archive.source_cloud_archive_id)) {
+    throw Error("云项目缓存缺少可信Owner或云端映射，不能编辑。");
+  }
+  // Keep the previous operation and all its fields intact while a remote
+  // response is unknown; editing during an in-flight write could replace its
+  // operation ID and accidentally discard still-unacknowledged fields.
+  if (!allowInFlightReceipt && archive.sync.status === "uploading") {
+    throw Error("云端提交结果尚未确认，请保留待上传修改并先核账。");
+  }
+  // Ending/restoring a cloud project uses separate server RPCs; never let a
+  // generic offline PATCH bypass those business transitions.
+  if (changes?.status !== undefined || changes?.ended_at !== undefined) {
+    throw Error("项目结束状态需联网使用原云端受控操作修改。");
+  }
+}
+
+function stageCachedCloudCycleEdit(
+  archive: LocalArchive, cycleId: string, cycles: LocalArchiveCycle[],
+  ownerContext: LocalArchiveOwnerContext | null | undefined, timestamp: string,
+): LocalArchive {
+  const next: LocalArchive = { ...archive, cycles, updated_at: timestamp };
+  if (resolveLocalArchiveRole(archive) !== "cloud-offline-cache") return next;
+  assertWritableCachedCloudArchive(archive, ownerContext);
+  const target = (archive.cycles || []).find((item) => item.id === cycleId);
+  const cloudCycleId = normalizeOptionalText(target?.source_cloud_cycle_id);
+  if (!cloudCycleId || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(cloudCycleId) ||
+      !cycles.some((item) => item.id === cycleId && item.source_cloud_cycle_id === cloudCycleId)) {
+    throw Error("期次云端身份不明确，不能离线修改或新建。");
+  }
+  const pending = markArchivePendingPrompt(next, timestamp);
+  pending.sync = queueCloudSyncOperation(pending.sync, {
+    cloudArchiveId: archive.source_cloud_archive_id,
+    operationKind: "update-archive", timestamp,
+    pendingFields: [`cycle:${cloudCycleId}`],
+  });
+  return pending;
+}
+
 function assertWritableCachedCloudRecord(
   archive: LocalArchive, record: LocalRecord,
   ownerContext?: LocalArchiveOwnerContext | null,
@@ -2765,7 +2811,7 @@ export async function updateLocalArchiveFields(
       throw new Error("没有权限修改这个本地项目。");
     }
     try {
-      assertWritableUserArchive(normalizedArchive, "云项目离线缓存只读，不能修改。");
+      assertWritableCachedCloudArchive(normalizedArchive, ownerContext, updates);
     } catch (error) {
       transaction.abort();
       await done.catch(() => undefined);
@@ -3050,10 +3096,10 @@ export async function updateLocalArchiveCloudSyncOperation(
   const cloud = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
   if (cloud && classifyLegacySafArchive(cloud) !== "local-project" && cloud.local_owner_user_id) {
     const saved = await commitCloudSaf(cloud.local_owner_user_id, archiveId, (current) => {
-      if (!isLocalArchiveVisibleToOwner(current.archive, ownerContext) ||
-          current.archive.local_role === "cloud-offline-cache") {
+      if (!isLocalArchiveVisibleToOwner(current.archive, ownerContext)) {
         throw Error("没有权限修改这个本地项目。");
       }
+      assertWritableCachedCloudArchive(current.archive, ownerContext, undefined, true);
       const timestamp = nowIso();
       const next = { ...current.archive, sync: applyCloudSyncOperationUpdate(
         current.archive.sync, operationId, update, timestamp), updated_at: timestamp };
@@ -3084,7 +3130,12 @@ export async function updateLocalArchiveCloudSyncOperation(
       await done.catch(() => undefined);
       throw new Error("没有权限修改这个本地项目。");
     }
-    await abortIfCloudOfflineCacheWrite(transaction, normalizedArchive, done);
+    try { assertWritableCachedCloudArchive(normalizedArchive, ownerContext, undefined, true); }
+    catch (error) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw error;
+    }
 
     const nextArchive: LocalArchive = {
       ...normalizedArchive,
@@ -5148,6 +5199,29 @@ async function replaceCloudOfflineCacheUnlocked(input: {
     }),
   };
 
+  // Refresh must not overwrite an unacknowledged edit to an existing cloud
+  // cycle. All cycle IDs remain the original cached source UUIDs.
+  const pendingCycleIds = new Set(
+    previous && isPendingCloudSyncStatus(previous.sync.status)
+      ? (previous.sync.pending_fields || []).filter((field) => field.startsWith("cycle:")).map((field) => field.slice(6))
+      : [],
+  );
+  if (pendingCycleIds.size && previous) {
+    const currentCloudCycleIds = new Set(cycles.map((cycle) => cycle.source_cloud_cycle_id));
+    archive.cycles = [
+      ...cycles.map((cycle) =>
+        pendingCycleIds.has(cycle.source_cloud_cycle_id || "")
+          ? previous.cycles?.find((old) => old.source_cloud_cycle_id === cycle.source_cloud_cycle_id) || cycle
+          : cycle
+      ),
+      // A missing remote cycle must not erase the only local unacknowledged
+      // edit. It remains pending until an explicit owner-reviewed resolution.
+      ...(previous.cycles || []).filter((old) =>
+        pendingCycleIds.has(old.source_cloud_cycle_id || "") &&
+        !currentCloudCycleIds.has(old.source_cloud_cycle_id)),
+    ];
+  }
+
   const pendingImageParents = new Set(allImages.filter((image) =>
     image.archive_id === archiveId &&
     isPendingCloudSyncStatus(normalizeLocalSyncMeta(image.sync).status)).map((image) => image.record_id));
@@ -5234,9 +5308,20 @@ async function replaceCloudOfflineCacheUnlocked(input: {
     for (const image of pendingImages) {
       await requestToPromise(imageStore.put(image));
     }
-    await requestToPromise(archiveStore.put(archive));
+    const pendingFieldsForCache = previous && isPendingCloudSyncStatus(previous.sync.status)
+      ? [...new Set(previous.sync.pending_fields || [])] : [];
+    const mergedCacheArchive: LocalArchive = pendingFieldsForCache.length && previous
+      ? { ...archive, ...Object.fromEntries(pendingFieldsForCache.filter((field) =>
+          field !== "cycles" && Object.hasOwn(previous, field)).map((field) =>
+          [field, (previous as unknown as Record<string, unknown>)[field]])),
+          sync: previous.sync,
+          pending_sync_prompt_mode: previous.pending_sync_prompt_mode,
+          pending_sync_first_detected_at: previous.pending_sync_first_detected_at,
+          pending_sync_deferred_at: previous.pending_sync_deferred_at }
+      : archive;
+    await requestToPromise(archiveStore.put(mergedCacheArchive));
     await done;
-    return archive;
+    return mergedCacheArchive;
   } finally {
     db.close();
   }
@@ -5593,7 +5678,7 @@ export async function endLocalArchiveCycle(
       throw new Error("没有权限修改这个本地项目。");
     }
     try {
-      assertWritableUserArchive(normalizedArchive, "云端期次离线时只读");
+      if (resolveLocalArchiveRole(normalizedArchive) === "cloud-offline-cache") { assertWritableCachedCloudArchive(normalizedArchive, ownerContext); } else assertWritableUserArchive(normalizedArchive, "云端期次离线时只读");
     } catch (error) {
       transaction.abort();
       await done.catch(() => undefined);
@@ -5601,11 +5686,7 @@ export async function endLocalArchiveCycle(
     }
 
     const cycles = normalizedArchive.cycles || [];
-    if (normalizedArchive.local_role === "cloud-offline-cache") {
-      transaction.abort();
-      await done.catch(() => undefined);
-      throw new Error("云端期次离线时只读，请联网后修改。");
-    }
+
     const target = cycles.find((cycle) => cycle.id === cycleId);
     if (!target || target.status !== "active") {
       transaction.abort();
@@ -5637,11 +5718,9 @@ export async function endLocalArchiveCycle(
     );
 
     await requestToPromise(
-      store.put({
-        ...normalizedArchive,
-        cycles: nextCycles,
-        updated_at: timestamp,
-      } satisfies LocalArchive)
+      store.put(stageCachedCloudCycleEdit(
+        normalizedArchive, cycleId, nextCycles, ownerContext, timestamp
+      ))
     );
     await done;
     return nextCycles.find((cycle) => cycle.id === cycleId) || null;
@@ -5695,7 +5774,7 @@ export async function updateLocalArchiveCycleDates(
       throw new Error("没有权限修改这个本地项目。");
     }
     try {
-      assertWritableUserArchive(normalizedArchive, "云端期次离线时只读");
+      if (resolveLocalArchiveRole(normalizedArchive) === "cloud-offline-cache") { assertWritableCachedCloudArchive(normalizedArchive, ownerContext); } else assertWritableUserArchive(normalizedArchive, "云端期次离线时只读");
     } catch (error) {
       transaction.abort();
       await done.catch(() => undefined);
@@ -5741,11 +5820,9 @@ export async function updateLocalArchiveCycleDates(
     );
 
     await requestToPromise(
-      store.put({
-        ...normalizedArchive,
-        cycles: nextCycles,
-        updated_at: timestamp,
-      } satisfies LocalArchive)
+      store.put(stageCachedCloudCycleEdit(
+        normalizedArchive, cycleId, nextCycles, ownerContext, timestamp
+      ))
     );
     await done;
     return nextCycles.find((cycle) => cycle.id === cycleId) || null;
@@ -5792,7 +5869,7 @@ export async function updateLocalArchiveCycleName(
       throw new Error("没有权限修改这个本地项目。");
     }
     try {
-      assertWritableUserArchive(normalizedArchive, "云端期次离线时只读");
+      if (resolveLocalArchiveRole(normalizedArchive) === "cloud-offline-cache") { assertWritableCachedCloudArchive(normalizedArchive, ownerContext); } else assertWritableUserArchive(normalizedArchive, "云端期次离线时只读");
     } catch (error) {
       transaction.abort();
       await done.catch(() => undefined);
@@ -5815,11 +5892,9 @@ export async function updateLocalArchiveCycleName(
     );
 
     await requestToPromise(
-      store.put({
-        ...normalizedArchive,
-        cycles: nextCycles,
-        updated_at: timestamp,
-      } satisfies LocalArchive)
+      store.put(stageCachedCloudCycleEdit(
+        normalizedArchive, cycleId, nextCycles, ownerContext, timestamp
+      ))
     );
     await done;
     return nextCycles.find((cycle) => cycle.id === cycleId) || null;
