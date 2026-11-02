@@ -469,6 +469,23 @@ function assertWritableUserArchive(archive: LocalArchive, message: string) {
   }
 }
 
+function assertWritableCachedCloudRecord(
+  archive: LocalArchive, record: LocalRecord,
+  ownerContext?: LocalArchiveOwnerContext | null,
+) {
+  if (resolveLocalArchiveRole(archive) !== "cloud-offline-cache") return;
+  const ownerId = getOwnerUserId(ownerContext);
+  if (!ownerId || archive.local_owner_user_id !== ownerId ||
+      archive.status !== "active" || !normalizeOptionalText(archive.source_cloud_archive_id)) {
+    throw Error("云端缓存没有已验证的本人Owner或云项目映射，不能离线编辑。");
+  }
+  const syncedWithId = record.sync?.status === "synced" &&
+    Boolean(normalizeOptionalText(record.sync.cloud_record_id));
+  if (!syncedWithId && !isPendingCloudSyncStatus(record.sync?.status)) {
+    throw Error("云端记录缺少合法同步身份，不能离线编辑。");
+  }
+}
+
 async function abortIfCloudOfflineCacheWrite(
   transaction: IDBTransaction,
   archive: LocalArchive,
@@ -3303,7 +3320,7 @@ export async function updateLocalRecordFields(recordId: string, updates: {
   note?: string | null; record_time?: string | null; cycle_id?: string | null;
   visibility?: "public" | "private" | null;
   location?: RecordLocation | null; image_files?: File[]; image_captured_at?: Array<string | null>;
-}) {
+}, ownerContext?: LocalArchiveOwnerContext | null) {
   await ensureLocalSafReadable();
   const files = updates.image_files || [];
   if (files.length > 10) throw new Error("每次最多添加10张照片。");
@@ -3321,9 +3338,7 @@ export async function updateLocalRecordFields(recordId: string, updates: {
         const archive = current.archive;
         const cycleId = updates.cycle_id === undefined ? record.cycle_id || null
           : normalizeOptionalText(updates.cycle_id);
-        if (archive.local_role === "cloud-offline-cache" && !isPendingCloudSyncStatus(record.sync.status)) {
-          throw Error("云端已有记录离线时只读，请联网后修改。");
-        }
+        assertWritableCachedCloudRecord(archive, record, ownerContext);
         if (cycleId && !archive.cycles?.some((cycle) => cycle.id === cycleId)) {
           throw Error("选择的期次不属于这个本地项目。");
         }
@@ -3426,12 +3441,7 @@ export async function updateLocalRecordFields(recordId: string, updates: {
     if (!archive) throw new Error("本地项目不存在。");
     const normalizedArchive = normalizeLocalArchive(archive);
     const nextCycleId = updates.cycle_id === undefined ? record.cycle_id || null : normalizeOptionalText(updates.cycle_id);
-    if (
-      resolveLocalArchiveRole(normalizedArchive) === "cloud-offline-cache" &&
-      record.sync?.status !== "pending-cloud-sync"
-    ) {
-      throw new Error("云端已有记录离线时只读，请联网后修改。");
-    }
+    assertWritableCachedCloudRecord(normalizedArchive, record, ownerContext);
     if (updates.cycle_id !== undefined && nextCycleId && !normalizedArchive.cycles?.some((cycle) => cycle.id === nextCycleId)) throw new Error("选择的期次不属于这个本地项目。");
     const timestamp = nowIso();
     const nextRecord: LocalRecord = {

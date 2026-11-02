@@ -44,7 +44,7 @@ test("cloud cache refresh does not delete local-project or saved-local-copy", ()
   assert.match(db, /resolveLocalArchiveRole\(archive\) !== "cloud-offline-cache"/);
 });
 
-test("cloud offline cache is read-only for existing cloud content", () => {
+test("cloud cache protects project fields and deletion; mapped Owner records use guarded pending edits", () => {
   const db = read("lib/local-offline-db.ts");
   const sliceExport = (name, nextName) => {
     const start = db.indexOf(`export async function ${name}`);
@@ -86,8 +86,9 @@ test("cloud offline cache is read-only for existing cloud content", () => {
   );
 
   const updateRecord = sliceExport("updateLocalRecordFields", "updateLocalRecordSyncMeta");
-  assert.match(updateRecord, /云端已有记录离线时只读，请联网后修改。/);
-  assert.match(updateRecord, /record\.sync\?\.status !== "pending-cloud-sync"/);
+  assert.match(updateRecord, /assertWritableCachedCloudRecord\(archive, record, ownerContext\)/);
+  assert.match(updateRecord, /assertWritableCachedCloudRecord\(normalizedArchive, record, ownerContext\)/);
+  assert.match(updateRecord, /operationKind: "update-record"/);
 
   const deleteRecord = sliceExport("deleteLocalRecord", "deleteLocalArchive");
   assert.match(deleteRecord, /云端已有记录离线时只读，不能删除。/);
@@ -229,6 +230,6 @@ test("offline shell separates true local projects from cloud offline copies", ()
   assert.match(view, /cloud_cache_copy/);
   assert.match(offline, /cloudCacheReadOnly/);
   assert.match(adapters, /isPendingCloudSyncStatus\(record\.sync\?\.status\)/);
-  assert.match(deviceDetail, /canEditLocalArchiveRecord\(archive, source\)/);
+  assert.match(deviceDetail, /canEditLocalArchiveRecord\(archive, source, ownerContext\)/);
   assert.match(deviceDetail, /mode=\{editable \? "owner" : "viewer"\}/);
 });

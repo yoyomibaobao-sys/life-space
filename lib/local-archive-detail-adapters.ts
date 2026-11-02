@@ -3,6 +3,7 @@ import type { MediaItem } from "@/lib/domain-types";
 import {
   isPendingCloudSyncStatus,
   type LocalArchive,
+  type LocalArchiveOwnerContext,
   type LocalRecordWithImages,
 } from "@/lib/local-offline-db";
 
@@ -21,9 +22,15 @@ export function canAddLocalArchiveRecord(archive: LocalArchive) {
 export function canEditLocalArchiveRecord(
   archive: LocalArchive,
   record: LocalRecordWithImages,
+  ownerContext?: LocalArchiveOwnerContext | null,
 ) {
   if (archive.local_role !== "cloud-offline-cache") return true;
-  return isPendingCloudSyncStatus(record.sync?.status);
+  if (!ownerContext?.userId || archive.local_owner_user_id !== ownerContext.userId ||
+      archive.status !== "active" || !archive.source_cloud_archive_id) return false;
+  // A synced, owner-verified record retains its real cloud ID and can enter the
+  // existing update-record pending path. Never edit an unmapped cache snapshot.
+  return isPendingCloudSyncStatus(record.sync?.status) ||
+    (record.sync?.status === "synced" && Boolean(record.sync.cloud_record_id));
 }
 
 export function localArchiveToDetailArchive(

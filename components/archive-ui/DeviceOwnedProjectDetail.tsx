@@ -377,7 +377,7 @@ export default function DeviceOwnedProjectDetail({
       emptyRecordsText={recordCopy.no_local_records}
       renderRecord={(record, index) => {
         const source = detail.records.find((item) => item.id === record.id);
-        const editable = source ? canEditLocalArchiveRecord(archive, source) : false;
+        const editable = source ? canEditLocalArchiveRecord(archive, source, ownerContext) : false;
         return (
           <ArchiveRecordCard
             key={record.id}
@@ -402,17 +402,17 @@ export default function DeviceOwnedProjectDetail({
                 location: patch.location,
                 note: typeof patch.note === "string" ? patch.note : undefined,
                 record_time: typeof patch.record_time === "string" ? patch.record_time : undefined,
-              });
+              }, ownerContext);
               await onChanged();
             } : undefined}
             onNoteSaved={async () => undefined}
-            onRecordDeleted={editable ? (recordId) => {
+            onRecordDeleted={editable && !isCloudCache ? (recordId) => {
               const target = detail.records.find((item) => item.id === recordId);
               if (target) setRecordToDelete(target);
             } : undefined}
             cycleOptions={cycleOptions}
             onCycleChange={editable ? async (recordId, cycleId) => {
-              await updateLocalRecordFields(recordId, { cycle_id: cycleId });
+              await updateLocalRecordFields(recordId, { cycle_id: cycleId }, ownerContext);
               await onChanged();
             } : undefined}
           />
