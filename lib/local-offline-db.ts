@@ -3,7 +3,7 @@ import { loadDefaultRecordLocation, normalizeRecordLocation, type RecordLocation
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import { isLocalDateBefore, toLocalDateEndIso } from "@/lib/archive-cycle-dates";
 import { standardizeRecordPhotoFile } from "@/lib/image-compression";
-import { normalizeLocalImageBlob } from "@/lib/local-image-blob";
+import { localImageBlobForIndexedDb, normalizeLocalImageBlob } from "@/lib/local-image-blob";
 import { commitSafContent, readSafCommitted, type SafContent, type SafState } from "@/lib/local-saf-repository";
 import { chooseAndValidateSafDirectory, regrantSavedSafDirectory } from "@/lib/local-saf-directory";
 import { createNativeSafStorage, getLocalSafDirectory, isAndroidSafAvailable } from "@/lib/local-saf-native";
@@ -900,9 +900,22 @@ function markArchivePendingPrompt(archive: LocalArchive, timestamp: string) {
   } satisfies LocalArchive;
 }
 
+function restoreIndexedDbImages<T>(result: T): T {
+  const restore = (value: unknown): unknown => {
+    if (!value || typeof value !== "object" ||
+        !("blob" in value) || !("record_id" in value) ||
+        !("archive_id" in value) || !("mime_type" in value)) return value;
+    const image = value as LocalImage;
+    if (image.blob instanceof Blob) return image;
+    const blob = normalizeLocalImageBlob(image.blob, image.mime_type);
+    return blob ? { ...image, blob } : image;
+  };
+  return (Array.isArray(result) ? result.map(restore) : restore(result)) as T;
+}
+
 function requestToPromise<T>(request: IDBRequest<T>) {
   return new Promise<T>((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => resolve(restoreIndexedDbImages(request.result));
     request.onerror = () => reject(request.error || new Error("IndexedDB 操作失败"));
   });
 }
@@ -6162,6 +6175,12 @@ export async function createLocalRecord(input: {
     return record;
   });
   if (durable) { await refreshOptionalSafUsageHints(); return durable.value; }
+  // The Android WebView may be unable to create persistent Blob backing files
+  // while offline. Keep the same image metadata, IDs and pending ordering, but
+  // store byte-backed objects instead of Blob handles in this IDB fallback.
+  const storedImageBlobs = await Promise.all(
+    images.map((image) => localImageBlobForIndexedDb(image.blob))
+  );
   const db = await openLocalDb();
 
   try {
@@ -6242,19 +6261,25 @@ export async function createLocalRecord(input: {
       );
     }
 
-    await requestToPromise(recordStore.add(record));
-    for (const image of images) {
-      await requestToPromise(imageStore.add(image));
-    }
+    try {
+      await requestToPromise(recordStore.add(record));
+      for (const [index, image] of images.entries()) {
+        await requestToPromise(imageStore.add({ ...image, blob: storedImageBlobs[index] }));
+      }
 
-    const nextArchive = archiveParticipatesInPendingCloudSync(normalizedArchive)
-      ? markArchivePendingPrompt(
-          { ...normalizedArchive, updated_at: timestamp },
-          timestamp,
-        )
-      : { ...normalizedArchive, updated_at: timestamp };
-    await requestToPromise(archiveStore.put(nextArchive));
-    await done;
+      const nextArchive = archiveParticipatesInPendingCloudSync(normalizedArchive)
+        ? markArchivePendingPrompt(
+            { ...normalizedArchive, updated_at: timestamp }, timestamp,
+          )
+        : { ...normalizedArchive, updated_at: timestamp };
+      await requestToPromise(archiveStore.put(nextArchive));
+      await done;
+    } catch (error) {
+      // A synchronous add() exception must not leave a record without its media.
+      try { transaction.abort(); } catch { /* transaction may already be aborted */ }
+      await done.catch(() => undefined);
+      throw error;
+    }
     await refreshLocalUsageHints();
 
     return record;

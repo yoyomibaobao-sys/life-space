@@ -1,3 +1,15 @@
+/** IndexedDB on some Android WebViews fails to persist native Blob backing files
+ * with `Failed to write blobs (IOError)`. Persist an ordinary structured-clone
+ * ArrayBuffer for new offline images and reconstruct Blobs only after reading.
+ * Read bytes BEFORE starting an IndexedDB transaction, so it cannot go idle.
+ */
+export async function localImageBlobForIndexedDb(blob: Blob): Promise<{ data: ArrayBuffer; type: string }> {
+  if (!(blob instanceof Blob) || blob.size <= 0) throw Error("图片数据不存在，无法离线保存。");
+  const data = await blob.arrayBuffer();
+  if (data.byteLength !== blob.size || !data.byteLength) throw Error("离线图片读取不完整。");
+  return { data, type: blob.type || "image/jpeg" };
+}
+
 /** Only decoded image bytes are allowed to reach URL.createObjectURL. */
 export function normalizeLocalImageBlob(
   value: unknown,

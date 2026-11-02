@@ -114,8 +114,38 @@ public final class LocalSafPlugin extends Plugin {
 
     @PluginMethod
     public void discardDirectory(PluginCall call) {
-        candidateTree = null;
-        call.resolve();
+        Uri discarded = candidateTree;
+        if (discarded == null) {
+            call.resolve();
+            return;
+        }
+        // Never release the active saved directory. Choosing the same tree again
+        // creates a candidate, but its permission also protects legitimate data.
+        String saved = getContext().getSharedPreferences(PREFS, 0).getString(KEY, null);
+        if (discarded.toString().equals(saved)) {
+            candidateTree = null;
+            call.resolve();
+            return;
+        }
+        ContentResolver resolver = getContext().getContentResolver();
+        try {
+            // Release only the exact discarded candidate, not every persisted URI.
+            // Clearing the JS/native connection alone leaves a system grant behind.
+            for (UriPermission permission : resolver.getPersistedUriPermissions()) {
+                if (!discarded.equals(permission.getUri())) continue;
+                int flags = 0;
+                if (permission.isReadPermission()) flags |= Intent.FLAG_GRANT_READ_URI_PERMISSION;
+                if (permission.isWritePermission()) flags |= Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
+                if (flags != 0) resolver.releasePersistableUriPermission(discarded, flags);
+                break;
+            }
+            candidateTree = null;
+            call.resolve();
+        } catch (SecurityException error) {
+            // Keep the candidate until the release succeeds; do not silently
+            // report a disconnected directory while retaining its permission.
+            call.reject("Could not release the discarded data directory permission.", error);
+        }
     }
 
     @PluginMethod
