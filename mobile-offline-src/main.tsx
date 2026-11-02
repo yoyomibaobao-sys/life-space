@@ -3124,7 +3124,8 @@ function App() {
       /> : null}
       {screen.kind === "trash" ? <AndroidLocalTrash ownerContext={ownerContext}
         online={online} onBack={returnToProfile} onRequireLogin={() => openCloudLogin("trash")}
-        onLocalChanged={() => loadList()} /> : null}
+        onLocalChanged={() => loadList()}
+        onCloudRestored={() => loadCloudList(cloudUserId)} /> : null}
       {screen.kind === "membership-payment" ? <div data-android-membership-payment="true">
         <MobilePageHeaderView title={language === "zh" ? "开通云会员" : "Cloud Membership"} titleText={language === "zh" ? "开通云会员" : "Cloud Membership"}
           showBack ariaLabel={language === "zh" ? "返回" : "Back"} onBack={returnToProfile} />
@@ -3418,9 +3419,9 @@ function AndroidRecentBrowse({ online, onBack, onOpen }: { online: boolean; onBa
   </section>;
 }
 
-function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin, onLocalChanged }: {
+function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin, onLocalChanged, onCloudRestored }: {
   ownerContext: LocalArchiveOwnerContext | null; online: boolean; onBack: () => void; onRequireLogin: () => void;
-  onLocalChanged: () => Promise<void>;
+  onLocalChanged: () => Promise<void>; onCloudRestored: () => Promise<void>;
 }) {
   const { language } = useLanguage();
   const [items, setItems] = useState<Awaited<ReturnType<typeof listLocalArchiveCycleTrash>>>([]);
@@ -3555,6 +3556,9 @@ function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin, onLoc
                 }
                 await onLocalChanged();
               } else {
+                // Only a confirmed cloud restore refreshes the existing owner-scoped
+                // cloud workspace list; no cache purge or repeat restore request.
+                await onCloudRestored();
                 await refreshTrash();
               }
             })
