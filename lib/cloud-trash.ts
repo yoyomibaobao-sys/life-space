@@ -39,6 +39,57 @@ export type EmptyCloudTrashResult = CloudTrashMutationResult & {
   morePending: boolean;
 };
 
+// R10 QA Android cannot send its isolated Supabase session to the production
+// /api/trash origin. Reuse the already-installed, authenticated Owner-checking
+// RPCs on QA only; production-native and web continue using the existing API.
+function usesIsolatedQaNativeTrash() {
+  if (!Capacitor.isNativePlatform()) return false;
+  try {
+    return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || "").hostname ===
+      "mablwxlipcgbmbnfdbkc.supabase.co";
+  } catch {
+    return false;
+  }
+}
+
+function rpcSucceeded(data: unknown) {
+  const value = Array.isArray(data) ? data[0] : data;
+  return Boolean(value && typeof value === "object" &&
+    (value as { ok?: unknown }).ok === true);
+}
+
+type NativeTrashRow = {
+  trash_entry_id?: unknown; target_type?: unknown; target_id?: unknown;
+  deleted_at?: unknown; status?: unknown; display_title?: unknown;
+  parent_title?: unknown; child_record_count?: unknown;
+  child_media_count?: unknown; can_retry?: unknown;
+};
+
+function mapNativeTrashRows(data: unknown): CloudTrashItem[] {
+  if (!Array.isArray(data)) return [];
+  return (data as NativeTrashRow[]).flatMap((row) => {
+    if (!row || !["archive", "cycle", "record", "media"].includes(String(row.target_type)) ||
+        typeof row.trash_entry_id !== "string" ||
+        typeof row.target_id !== "string" ||
+        typeof row.deleted_at !== "string" ||
+        !["active", "purging", "failed"].includes(String(row.status))) return [];
+    const type = row.target_type as CloudTrashItemType;
+    return [{
+      trashEntryId: row.trash_entry_id, type,
+      id: row.target_id, deletedAt: row.deleted_at,
+      status: row.status as CloudTrashItemStatus,
+      title: typeof row.display_title === "string" && row.display_title.trim()
+        ? row.display_title.trim() : type === "archive" ? "未命名项目" : "云端内容",
+      parentTitle: typeof row.parent_title === "string" && row.parent_title.trim()
+        ? row.parent_title.trim() : null,
+      recordCount: Math.max(0, Number(row.child_record_count) || 0),
+      mediaCount: Math.max(0, Number(row.child_media_count) || 0),
+      canRetry: row.can_retry === true,
+      previewUrl: null, // QA Owner RPC does not expose the server-only preview signer.
+    }];
+  });
+}
+
 async function getAuthHeaders(includeJson = false) {
   const sessionResult = await supabase.auth.getSession();
   const accessToken = sessionResult.data.session?.access_token;
@@ -72,6 +123,10 @@ async function cloudTrashFetch(path: string, init: RequestInit) {
 
 export async function requestCloudTrash(kind: CloudTrashKind, id: string) {
   try {
+    if (kind === "archives" && usesIsolatedQaNativeTrash()) {
+      const { data, error } = await supabase.rpc("move_archive_to_trash", { p_archive_id: id });
+      return !error && rpcSucceeded(data);
+    }
     const response = await cloudTrashFetch(`/api/${kind}/${encodeURIComponent(id)}`, {
       method: "DELETE",
       headers: await getAuthHeaders(),
@@ -92,6 +147,14 @@ export async function requestCloudTrash(kind: CloudTrashKind, id: string) {
 
 export async function fetchCloudTrash(signal?: AbortSignal) {
   try {
+    if (usesIsolatedQaNativeTrash()) {
+      if (signal?.aborted) return { ok: false, items: [] } as CloudTrashListResult;
+      const { data, error } = await supabase.rpc("list_my_trash_entries");
+      if (error || !Array.isArray(data) || signal?.aborted) {
+        return { ok: false, items: [] } as CloudTrashListResult;
+      }
+      return { ok: true, items: mapNativeTrashRows(data) };
+    }
     const response = await cloudTrashFetch("/api/trash", {
       method: "GET",
       headers: await getAuthHeaders(),
@@ -118,6 +181,17 @@ export async function restoreCloudTrashItem(
   id: string,
 ) {
   try {
+    if (usesIsolatedQaNativeTrash()) {
+      const names: Record<CloudTrashItemType, [string, string]> = {
+        archive: ["restore_archive_from_trash", "p_archive_id"],
+        cycle: ["restore_archive_cycle_from_trash", "p_cycle_id"],
+        record: ["restore_record_from_trash", "p_record_id"],
+        media: ["restore_media_from_trash", "p_media_id"],
+      };
+      const [rpcName, key] = names[type];
+      const { data, error } = await supabase.rpc(rpcName, { [key]: id });
+      return !error && rpcSucceeded(data);
+    }
     const response = await cloudTrashFetch("/api/trash/restore", {
       method: "POST",
       headers: await getAuthHeaders(true),

@@ -109,7 +109,7 @@ import DiscoverSearchPage from "@/app/discover/search/page";
 import PlantPage from "@/app/plant/page";
 import { PlantDetailContent } from "@/app/plant/[id]/page";
 import { PlantInterestsContent } from "@/app/archive/interests/page";
-import { emptyCloudTrash, fetchCloudTrash, restoreCloudTrashItem, type CloudTrashItem } from "@/lib/cloud-trash";
+import { emptyCloudTrash, fetchCloudTrash, requestCloudTrash, restoreCloudTrashItem, type CloudTrashItem } from "@/lib/cloud-trash";
 import AndroidMarketDetailController from "@/components/market/AndroidMarketDetailController";
 import ReadonlyPublicProjectDetail from "@/components/archive-ui/ReadonlyPublicProjectDetail";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
@@ -2214,7 +2214,27 @@ function App() {
           await updateLocalArchiveFields(archive.id, fields, ownerContext);
         } else return;
         await refresh();
-      } catch (error) { showToast(error instanceof Error ? error.message : String(error)); }
+      } catch (error) {
+        const detail = error && typeof error === "object" && "message" in error &&
+          typeof error.message === "string" ? error.message : null;
+        showToast(detail || (language === "zh" ? "云项目更新失败，请检查权限或网络。" : "Cloud project update failed; check permissions or connection."));
+      }
+    };
+    const moveCloudToTrash = async () => {
+      if (!online || !cloudUserId || authenticatedOwnerContext?.userId !== cloudUserId) {
+        showToast(language === "zh" ? "请联网并登录云端账号后再操作。" : "Connect and sign in before moving a cloud project.");
+        return;
+      }
+      try {
+        if (!await requestCloudTrash("archives", archive.id)) {
+          showToast(language === "zh" ? "移入云回收站失败，请检查账号权限或网络。" : "Could not move cloud project to trash; check account permissions or connection.");
+          return;
+        }
+        await refresh();
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : null;
+        showToast(detail || (language === "zh" ? "移入云回收站失败，请稍后重试。" : "Cloud trash operation failed; try again later."));
+      }
     };
     return <MobileArchiveActions
       category={category} subTagId={subId} groupTagId={groupId}
@@ -2256,7 +2276,7 @@ function App() {
       } : source === "cloud" ? () => {
         setTrashMoveConfirm({
           message: language === "zh" ? "将这个云项目移入回收站？" : "Move this cloud project to trash?",
-          action: () => { void mutate({ trashed_at: new Date().toISOString() }); },
+          action: () => { void moveCloudToTrash(); },
         });
       } : undefined}
       extraActions={source === "local" && local && canOfferLocalCloudTransfer(local) ? [{
