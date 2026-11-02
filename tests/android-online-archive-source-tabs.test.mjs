@@ -9,9 +9,9 @@ const cloudCreatePage = fs.readFileSync(new URL("../app/archive/new/page.tsx", i
 const legacyLocalCreatePage = fs.readFileSync(new URL("../app/local/archive/new/page.tsx", import.meta.url), "utf8");
 
 test("installed Android runtime hides all/local source tabs but preserves cloud and pending", () => {
-  assert.match(androidShell, /function w5WorkspaceSources\([\s\S]*?const visible = current\.filter\(\(source\) => source !== "all" && source !== "local"\);/);
-  assert.match(androidShell, /return auth === "signed-in" \? \[\.\.\.visible, "pending"\] : visible;/);
-  assert.match(androidShell, /sourceOptions=\{w5WorkspaceSources\(auth\.status, localSpaceEnabled, cloudReadable\)\.map/);
+  assert.match(androidShell, /function w5WorkspaceSources\(/);
+  assert.match(androidShell, /auth === "checking" \? \[\] : auth === "signed-in" \? \["cloud", "pending"\] : \["cloud"\]/);
+  assert.match(androidShell, /sourceOptions=\{w5WorkspaceSources\(auth\.status\)\.map/);
   assert.match(androidShell, /writeLocalSpaceVisibilityPreference\(visible\)/);
 });
 
@@ -32,7 +32,7 @@ test("online website defaults to cloud and ignores legacy all/local source URL p
 test("online website project creation is cloud-only and legacy local-create URLs redirect safely", () => {
   assert.equal(page.includes("/local/archive/new"), false);
   assert.doesNotMatch(page, /const mobileCreateHref[\s\S]*?\/local\/archive\/new/);
-  assert.doesNotMatch(cloudCreatePage, /localCreateHref|localHref=/);
+  assert.doesNotMatch(cloudCreatePage, /localCreateHref|localHref=|\/local\/archive\/new/);
   assert.match(legacyLocalCreatePage, /router\.replace\("\/archive\/new" \+ window\.location\.search\)/);
 });
 

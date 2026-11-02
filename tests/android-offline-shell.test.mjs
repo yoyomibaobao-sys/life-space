@@ -75,7 +75,8 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /label: copy\.all/);
   assert.match(source, /label: copy\.cloud/);
   assert.match(source, /<ArchiveWorkspaceTemplate/);
-  assert.match(source, /workspaceSourceOptions\(auth\.status, localSpaceEnabled, cloudReadable\)/);
+  assert.match(source, /w5WorkspaceSources\(auth\.status\)/);
+  assert.match(source, /auth === "signed-in" \? \["cloud", "pending"\] : \["cloud"\]/);
   assert.match(source, /activeSource=\{sourceFilter\}/);
   assert.match(source, /<ArchiveTaxonomyPanel/);
   assert.match(sharedTaxonomy, /archiveCategoryOptions\.map/);
@@ -173,16 +174,16 @@ test("signed RC local data migrates on-device before the old origin is retired",
   assert.match(bridge, /waitForAck\(nonce, "image-ack", seq\)/);
 });
 
-test("new local projects inherit the signed-in account only on this device", () => {
-  const newLocalProject = read("app/local/archive/new/page.tsx");
+test("online legacy local-create URL redirects to cloud creation without deleting protected local-owner data", () => {
+  const legacyUrl = read("app/local/archive/new/page.tsx");
   const ownerSync = read("components/LocalOwnerContextSync.tsx");
-  const zh = read("lib/i18n/zh.ts");
+  const localDb = read("lib/local-offline-db.ts");
 
-  assert.match(newLocalProject, /supabase\.auth\.getSession\(\)/);
-  assert.match(newLocalProject, /local_owner_user_id: currentUser\?\.id \|\| null/);
+  assert.match(legacyUrl, /router\.replace\("\/archive\/new" \+ window\.location\.search\)/);
+  assert.doesNotMatch(legacyUrl, /createLocalArchive\(/);
   assert.match(ownerSync, /rememberLocalOwnerContext/);
   assert.match(ownerSync, /preparePendingCloudSyncQueue/);
-  assert.match(zh, /这不会上传云端/);
+  assert.match(localDb, /export async function createLocalArchive/);
 });
 
 test("explicit Android sign-out hides account-bound offline cache state", () => {
