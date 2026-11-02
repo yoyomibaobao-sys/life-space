@@ -17,7 +17,7 @@ export function AndroidRegistration({ online, onBack, onLogin, onLocalUse, onCon
   online: boolean;
   onBack: () => void;
   onLogin: () => void;
-  onLocalUse: () => void;
+  onLocalUse?: () => void;
   onConfirmEmail: (email: string) => void;
   onSignedIn: (userId: string) => void;
 }) {
@@ -101,7 +101,7 @@ export function AndroidRegistration({ online, onBack, onLogin, onLocalUse, onCon
         </form>
         <div className="action-row" style={{ marginTop: 12 }}>
           <button type="button" className="secondary-button" onClick={onLogin}>{t.auth.existing_account_login}</button>
-          <button type="button" className="secondary-button" onClick={onLocalUse}>{t.auth.local_first}</button>
+          {onLocalUse ? <button type="button" className="secondary-button" onClick={onLocalUse}>{t.auth.local_first}</button> : null}
         </div>
       </section>
     </div>

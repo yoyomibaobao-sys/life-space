@@ -149,7 +149,7 @@ import { syncLocalArchiveToCloud, type LocalToCloudVisibility } from "@/lib/loca
 import { canAddLocalArchiveRecord } from "@/lib/local-archive-detail-adapters";
 import { readCloudTaxonomySnapshot } from "@/lib/cloud-taxonomy-snapshot";
 import { createLiveCloudArchive } from "@/lib/android-live-cloud-create";
-import { canReadAndroidCloudWorkspace, chooseProjectSources, projectCreationDestinations, workspaceSourceOptions, type CreationDestination, type QuickAddDraft, type QuickAddSource } from "@/lib/android-creation-capabilities";
+import { canReadAndroidCloudWorkspace, chooseProjectSources, projectCreationDestinations, type CreationDestination, type QuickAddDraft, type QuickAddSource } from "@/lib/android-creation-capabilities";
 import { formatStorage } from "@/lib/user-profile-shared";
 import {
   canCreateMembershipContent,
@@ -227,10 +227,9 @@ type ShellSourceFilter = "all" | "cloud" | "pending" | "local";
 // W5 keeps the online Android workspace focused on cloud projects and the
 // existing pending-upload queue. Hiding the legacy source tabs does not delete
 // local SAF data, cloud caches, or pending records.
-function w5WorkspaceSources(auth: "checking" | "signed-out" | "signed-in", localEnabled: boolean, cloudReadable: boolean): ShellSourceFilter[] {
-  const current = workspaceSourceOptions(auth, localEnabled, cloudReadable);
-  const visible = current.filter((source) => source !== "all" && source !== "local");
-  return auth === "signed-in" ? [...visible, "pending"] : visible;
+function w5WorkspaceSources(auth: "checking" | "signed-out" | "signed-in"): ShellSourceFilter[] {
+  // W5 online Android never exposes the S6 independent local-space source, even to guests.
+  return auth === "checking" ? [] : auth === "signed-in" ? ["cloud", "pending"] : ["cloud"];
 }
 
 type ShellSpaceProfile = {
@@ -1933,9 +1932,9 @@ function App() {
   });
   useEffect(() => {
     if (auth.status === "checking") return;
-    const available = w5WorkspaceSources(auth.status, localSpaceEnabled, cloudReadable);
+    const available = w5WorkspaceSources(auth.status);
     if (!available.length || available.includes(sourceFilter)) return;
-    setSourceFilter(auth.status === "signed-out" && localSpaceEnabled ? "local" : available[0]);
+    setSourceFilter(available[0]);
     setSubcategoryFilter(null);
     setGroupFilter(null);
   }, [auth.status, localSpaceEnabled, cloudReadable, sourceFilter]);
@@ -1946,11 +1945,12 @@ function App() {
   function openNewProjectEntry() {
     if (auth.status === "checking") return;
     const signedIn = auth.status === "signed-in";
-    if (!signedIn && !localSpaceEnabled) {
-      showToast(copy.localSpaceOff);
+    if (!signedIn) {
+      openCloudLogin("list-cloud");
       return;
     }
-    const destinations = projectCreationDestinations(online, signedIn, localSpaceEnabled);
+    const destinations = projectCreationDestinations(online, signedIn, false)
+      .filter((destination) => destination !== "local-only");
     if (destinations.length === 1 && destinations[0] !== "login") {
       setScreen({ kind: "new-project", destination: destinations[0] });
       return;
@@ -2399,7 +2399,7 @@ function App() {
         onBack={screen.kind === "about" ? returnToProfile : undefined}
         onRegister={screen.kind === "welcome" ? () => { markAndroidWelcomeCompleted(); setScreen({ kind: "register" }); } : auth.status === "signed-out" ? () => setScreen({ kind: "register" }) : undefined}
         onLogin={screen.kind === "welcome" ? () => { markAndroidWelcomeCompleted(); openCloudLogin("profile"); } : auth.status === "signed-out" ? () => openCloudLogin("profile") : undefined}
-        onLocalUse={screen.kind === "welcome" ? () => { markAndroidWelcomeCompleted(); setScreen({ kind: "list" }, true); } : undefined}
+        onLocalUse={undefined}
         onBrowseHome={screen.kind === "about" ? () => setScreen({ kind: "activity" }) : undefined}
       /> : null}
       {screen.kind === "list" ? (
@@ -2408,7 +2408,7 @@ function App() {
           username={
             hasAuthenticatedIdentity
               ? spaceProfile?.username || auth.email || (language === "zh" ? "我的空间" : "My space")
-              : language === "zh" ? "本机空间" : "Device space"
+              : language === "zh" ? "我的空间" : "My space"
           }
           membershipLabel={membershipLabel}
           storageUsagePercent={hasAuthenticatedIdentity ? storageUsagePercent : null}
@@ -2455,7 +2455,7 @@ function App() {
         <ArchiveWorkspaceTemplate<ShellSourceFilter>
           online={online}
           showConnectivityNotice={false}
-          sourceOptions={w5WorkspaceSources(auth.status, localSpaceEnabled, cloudReadable).map((value) => ({
+          sourceOptions={w5WorkspaceSources(auth.status).map((value) => ({
             value,
             ...(value === "all"
               ? { label: copy.all, count: workspace.counts.all }
@@ -3205,7 +3205,7 @@ function App() {
       {screen.kind === "register" ? <AndroidRegistration online={online}
         onBack={() => goBackInShell({ kind: "list" })}
         onLogin={() => openCloudLogin("profile")}
-        onLocalUse={() => { markAndroidWelcomeCompleted(); setScreen({ kind: "list" }, true); }}
+        onLocalUse={undefined}
         onConfirmEmail={(email) => setScreen({ kind: "check-email", email })}
         onSignedIn={(userId) => { void loadShellIdentity(userId); setScreen({ kind: "list" }, true); }} /> : null}
       {screen.kind === "check-email" ? <AndroidRegistrationEmail email={screen.email} online={online}

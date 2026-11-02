@@ -1,3 +1,4 @@
+import { App } from "@capacitor/app";
 import {
   finalizeLocalOriginMigration,
   mergeLocalOriginBaseSnapshot,
@@ -23,7 +24,7 @@ const CHANNEL = "lifespace-local-origin-migration-v1";
 const MIGRATION_TIMEOUT_MS = 90_000;
 
 type MigrationResult = {
-  status: "migrated" | "already-migrated" | "not-android";
+  status: "migrated" | "already-migrated" | "not-android" | "not-applicable";
   archiveCount: number;
   recordCount: number;
   imageCount: number;
@@ -82,6 +83,20 @@ export async function migrateLegacyLocalOrigin(): Promise<MigrationResult> {
   if (typeof window === "undefined" || !isAndroidShell()) {
     return {
       status: "not-android",
+      archiveCount: 0,
+      recordCount: 0,
+      imageCount: 0,
+    };
+  }
+
+  // Only the original application ID can own the historical production WebView data.
+  // An independent QA package has an isolated data sandbox. Do not attempt a
+  // cross-app legacy import and do not mark any existing source as migrated.
+  // The original app retains its full migration and explicit SAF recovery paths.
+  const { id } = await App.getInfo();
+  if (id !== "com.youshi.cultivation") {
+    return {
+      status: "not-applicable",
       archiveCount: 0,
       recordCount: 0,
       imageCount: 0,

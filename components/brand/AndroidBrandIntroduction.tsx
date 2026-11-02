@@ -42,10 +42,10 @@ export default function AndroidBrandIntroduction({ language, onLanguageChange, o
         {onRegister ? <button type="button" className="primary-button" onClick={onRegister}>{zh ? "注册账号" : "Create account"}</button> : null}
         {onLogin ? <button type="button" className="secondary-button" onClick={onLogin}>{zh ? "登录" : "Sign in"}</button> : null}
         <button type="button" className="secondary-button" onClick={onBrowseHome}>{zh ? "浏览首页" : "Browse home"}</button>
-      </div> : onRegister && onLogin && onLocalUse ? <div style={actionsStyle}>
+      </div> : onRegister && onLogin ? <div style={actionsStyle}>
         <button type="button" className="primary-button" onClick={onRegister}>{zh ? "注册账号" : "Create account"}</button>
         <button type="button" className="secondary-button" onClick={onLogin}>{zh ? "已有账号，登录" : "Already have an account? Sign in"}</button>
-        <button type="button" className="secondary-button" onClick={onLocalUse}>{zh ? "暂不注册，免费使用本地空间" : "Use local space free without registering"}</button>
+        {onLocalUse ? <button type="button" className="secondary-button" onClick={onLocalUse}>{zh ? "暂不注册，免费使用本地空间" : "Use local space free without registering"}</button> : null}
       </div> : null}
     </div>
   </section>;
