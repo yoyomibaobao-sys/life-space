@@ -38,8 +38,21 @@ import {
   saveQuickCaptureAsFirstCloudRecord,
 } from "@/lib/cloud-quick-capture-record";
 
-const DEFAULT_ARCHIVE_IS_PUBLIC = true;
 const DEFAULT_RECORD_VISIBILITY = "public";
+
+// R07: Free may create private cloud projects; public creation requires an
+// active, unexpired paid Plus segment. This is a UI guard, not an RLS grant.
+function canCreatePublicCloudProject(membership: MyMembership | null, userId?: string | null, at = Date.now()) {
+  if (!membership || !["basic", "large", "seller"].includes(membership.plan) ||
+      membership.status !== "active" || membership.can_create_content !== true ||
+      !membership.paid_until || !Number.isFinite(Date.parse(membership.paid_until)) ||
+      Date.parse(membership.paid_until) <= at) return false;
+  return !userId || membership.user_id === userId;
+}
+
+function resolveCloudProjectVisibility(manualChoice: boolean | null, plusAllowed: boolean) {
+  return manualChoice ?? plusAllowed;
+}
 
 export default function NewArchivePage() {
   const { t } = useLanguage();
@@ -107,7 +120,9 @@ function NewArchiveContent() {
 
   const [source, setSource] = useState("");
   const [note, setNote] = useState("");
-  const [archiveIsPublic, setArchiveIsPublic] = useState(DEFAULT_ARCHIVE_IS_PUBLIC);
+  // null means no manual choice: Free defaults private; active Plus defaults public.
+  // An explicit choice persists across asynchronous membership refreshes.
+  const [visibilityChoice, setVisibilityChoice] = useState<boolean | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [membership, setMembership] = useState<MyMembership | null>(null);
@@ -176,6 +191,12 @@ function NewArchiveContent() {
 
   const contentBlocked =
     !membershipLoading && !canCreateMembershipContent(membership);
+  const plusPublicAllowed = !membershipLoading && canCreatePublicCloudProject(membership);
+  const archiveIsPublic = resolveCloudProjectVisibility(visibilityChoice, plusPublicAllowed);
+  const publicNeedsPlus = !membershipLoading && archiveIsPublic && !plusPublicAllowed;
+  const plusPublicNotice = language === "en"
+    ? "Public projects require an active Plus membership. Choose Only me or renew Plus."
+    : "公开项目需要有效Plus会员。请选择「仅自己可见」或续费Plus。";
 
   const guideSearch = category === "plant" ? speciesSearch : systemSearch;
   const systemOptions = filterSystemNameCandidates(systemCandidates, guideSearch, category);
@@ -205,7 +226,7 @@ function NewArchiveContent() {
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    if (loading) return;
+    if (loading || membershipLoading) return;
 
     if (!canCreateMembershipContent(membership)) {
       showToast(getCreateContentBlockedText(membership, language));
@@ -249,6 +270,26 @@ function NewArchiveContent() {
       return;
     }
 
+    // Refresh owner and membership at submit time: expiry, refund and account
+    // switch must not permit a stale Plus selection to reach create_project.
+    const { data: freshData, error: membershipError } = await supabase.rpc("get_my_membership");
+    const freshMembership = normalizeMembershipRpcResult(freshData);
+    const { data: currentAuth } = await supabase.auth.getUser();
+    if (membershipError || !freshMembership || freshMembership.user_id !== user.id ||
+        currentAuth.user?.id !== user.id || !canCreateMembershipContent(freshMembership)) {
+      setLoading(false);
+      showToast(language === "en" ? "Account or membership status changed. Please reopen this form." : "账号或会员状态已变化，请重新打开创建页面。");
+      return;
+    }
+    // Refresh the displayed default after a legitimate refund/expiry response.
+    // visibilityChoice remains untouched, so a manual preference is preserved.
+    setMembership(freshMembership);
+    if (archiveIsPublic && !canCreatePublicCloudProject(freshMembership, user.id)) {
+      setLoading(false);
+      showToast(language === "en" ? "Public projects require an active Plus membership." : "公开项目需要有效Plus会员。");
+      return;
+    }
+
     let archiveId = createdArchiveId;
     const recordVisibility = archiveIsPublic ? DEFAULT_RECORD_VISIBILITY : "private";
     if (!archiveId) {
@@ -288,7 +329,7 @@ function NewArchiveContent() {
       .eq("id", archiveId)
       .eq("user_id", user.id)
       .maybeSingle();
-    if (readError || !savedArchive || savedArchive.is_public !== archiveIsPublic || savedArchive.default_record_visibility !== recordVisibility) {
+    if (readError || !savedArchive || savedArchive.user_id !== user.id || savedArchive.is_public !== archiveIsPublic || savedArchive.default_record_visibility !== recordVisibility) {
       setLoading(false);
       showToast(language === "en"
         ? "Project created, but its visibility could not be confirmed. Check My Space before retrying."
@@ -442,20 +483,21 @@ function NewArchiveContent() {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 18 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <input type="radio" name="cloud-project-visibility" value="public"
-                checked={archiveIsPublic} disabled={Boolean(createdArchiveId)}
-                onChange={() => setArchiveIsPublic(true)} />
-              {copy.public_discover}
+                checked={archiveIsPublic} disabled={Boolean(createdArchiveId) || membershipLoading}
+                onChange={() => setVisibilityChoice(true)} />
+              {copy.public_discover} {!plusPublicAllowed ? (language === "en" ? "(Plus only)" : "（Plus专属）") : null}
             </label>
             <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <input type="radio" name="cloud-project-visibility" value="private"
-                checked={!archiveIsPublic} disabled={Boolean(createdArchiveId)}
-                onChange={() => setArchiveIsPublic(false)} />
+                checked={!archiveIsPublic} disabled={Boolean(createdArchiveId) || membershipLoading}
+                onChange={() => setVisibilityChoice(false)} />
               {copy.private_only}
             </label>
           </div>
+          {publicNeedsPlus ? <p role="alert" style={{ color: "#9b3c23", fontSize: 13 }}>{plusPublicNotice}</p> : null}
         </fieldset>
       }
-      notice={archiveIsPublic ? copy.cloud_notice : (
+      notice={publicNeedsPlus ? plusPublicNotice : archiveIsPublic ? copy.cloud_notice : (
         language === "en"
           ? "Only you can view this cloud project and its future records; you can change visibility later."
           : "此云端项目及今后新增记录仅自己可见；创建后仍可修改公开方式。"
@@ -463,7 +505,7 @@ function NewArchiveContent() {
       submitText={copy.create_project}
       loadingText={copy.creating}
       submitting={loading}
-      disabled={membershipLoading || contentBlocked}
+      disabled={membershipLoading || contentBlocked || publicNeedsPlus}
       disabledNotice={
         contentBlocked ? (
           <>
