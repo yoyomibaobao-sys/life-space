@@ -150,7 +150,8 @@ test("upgrading a v1 full guide cache and reopening its offline detail renders o
     assert.equal(guides.getOfflineGuideOverview(plant, "zh"), "公开基础植物概要");
     assert.equal(plant.plantCoreParameters, undefined);
     assert.equal(localStorage.getItem("lifespace:guide-directory:v1"), null);
-    assert.doesNotMatch(localStorage.getItem("lifespace:guide-directory:v2"), /会员完整实操概要|会员专属步骤|会员专属比例|sun_score/);
+    assert.equal(localStorage.getItem("lifespace:guide-directory:v2"), null);
+    assert.doesNotMatch(localStorage.getItem("lifespace:guide-directory:v3") || "", /会员完整实操概要|会员专属步骤|会员专属比例|sun_score/);
   } finally {
     globalThis.localStorage = previousStorage;
   }

@@ -255,7 +255,12 @@ export function canCreateMembershipMarketPost(membership?: MyMembership | null) 
 }
 
 export function canAccessMembershipGuidance(membership?: MyMembership | null) {
-  return membership?.status === "active" || membership?.status === "trialing";
+  // Paid Plus is currently represented by plan=basic and a server-issued
+  // paid_until. Never infer guide privileges from trial, write rights, or
+  // an old cached membership with no current paid term.
+  if (membership?.plan !== "basic" || membership.status !== "active" || !membership.paid_until) return false;
+  const until = Date.parse(membership.paid_until);
+  return Number.isFinite(until) && until > Date.now();
 }
 
 export function getCreateContentBlockedText(

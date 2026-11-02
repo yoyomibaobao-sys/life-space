@@ -12,6 +12,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatCardDate } from "@/lib/date-time";
 import { hydrateExperienceCardListItems } from "@/lib/experience-cards";
+import { guideAssociationPreview } from "@/lib/guide-association-limits";
 import type { ExperienceCardListItem, ExperienceCardRow } from "@/lib/experience-card-types";
 import { getEnvironmentDetailItems, getEnvironmentTags } from "@/lib/plant-env";
 import { getPlantGrowthTypeLabel } from "@/lib/plant-shared";
@@ -1220,9 +1221,10 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
   const [careGuide, setCareGuide] = useState<PlantCareGuideRow | null>(null);
   const [relatedArchives, setRelatedArchives] = useState<PlantRelatedArchiveItem[]>([]);
   const [ownArchives, setOwnArchives] = useState<PlantRelatedArchiveItem[]>([]);
-  const [relatedExperienceCards, setRelatedExperienceCards] = useState<
-    PlantExperienceCardItem[]
-  >([]);
+  const [relatedExperienceCards, setRelatedExperienceCards] = useState<PlantExperienceCardItem[]>([]);
+  const [freeRelatedRecords, setFreeRelatedRecords] = useState<Array<{ id: string; archive_id: string; note: string | null }>>([]);
+  const [moreFreeCards, setMoreFreeCards] = useState(false);
+  const [moreFreeRecords, setMoreFreeRecords] = useState(false);
   const [activeTab, setActiveTab] = useState<PlantDetailTab>("guide");
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -1246,6 +1248,17 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
     }
     if (offline) {
       setHasCloudAccess(false);
+      setCurrentUserId(null);
+      setParameters(null);
+      setGrowthCycle(null);
+      setCareGuide(null);
+      setRelatedArchives([]);
+      setOwnArchives([]);
+      setRelatedExperienceCards([]);
+      setFreeRelatedRecords([]);
+      setMoreFreeCards(false);
+      setMoreFreeRecords(false);
+      if (!cachedPlant) { setPlant(null); setBasicOverview(null); setLoading(false); }
       return;
     }
     async function load() {
@@ -1260,6 +1273,9 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
       setRelatedArchives([]);
       setOwnArchives([]);
       setRelatedExperienceCards([]);
+      setFreeRelatedRecords([]);
+      setMoreFreeCards(false);
+      setMoreFreeRecords(false);
 
       const plantSelect =
         "id, common_name, scientific_name, family, slug, category, sub_category, growth_type, entry_type, is_active, sort_order";
@@ -1319,16 +1335,25 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
       const membership = membershipResult.error
         ? null
         : normalizeMembershipRpcResult(membershipResult.data);
-      const canReadFullGuide = canAccessMembershipGuidance(membership);
+      const claimedPlus = canAccessMembershipGuidance(membership);
+      // No direct SELECT against complete plant tables. Keep the client closed
+      // until the audited server-side Plus RPC exists and authenticates this user.
+      const plusResult = claimedPlus
+        ? await Promise.resolve(supabase.rpc("get_plus_plant_guide", {
+            p_species_id: resolvedPlantId, p_language: language,
+          })).catch(() => ({ data: null, error: true }))
+        : { data: null, error: null };
+      const plusDetail = !plusResult.error && plusResult.data && typeof plusResult.data === "object"
+        ? plusResult.data as {
+            parameters?: PlantParametersRow | null;
+            growth_cycle?: PlantGrowthCycleRow | null;
+            care_guide?: PlantCareGuideRow | null;
+          }
+        : null;
+      const canReadFullGuide = claimedPlus && Boolean(plusDetail);
       setHasCloudAccess(canReadFullGuide);
 
-      const [
-        { data: i18nData },
-        { data: aliasData },
-        { data: parameterData },
-        { data: growthCycleData },
-        { data: careGuideData },
-      ] = await Promise.all([
+      const [{ data: i18nData }, { data: aliasData }] = await Promise.all([
         catalogAvailable ? Promise.resolve({ data: catalogRow?.translations || [] }) : supabase
           .from("plant_species_i18n")
           .select("plant_id, language_code, common_name, family")
@@ -1339,21 +1364,10 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
           .select("species_id, alias_name, relation_type")
           .eq("species_id", resolvedPlantId)
           .order("alias_name", { ascending: true }),
-        canReadFullGuide
-          ? supabase.from("plant_parameters").select("*").eq("species_id", resolvedPlantId).maybeSingle()
-          : Promise.resolve({ data: [] as PlantParametersRow[] }),
-        canReadFullGuide
-          ? supabase.from("plant_growth_cycle").select("*").eq("species_id", resolvedPlantId).maybeSingle()
-          : Promise.resolve({ data: null }),
-        canReadFullGuide
-          ? supabase
-              .from("plant_care_guides")
-              .select("*")
-              .eq("plant_id", resolvedPlantId)
-              .eq("language_code", "zh")
-              .maybeSingle()
-          : Promise.resolve({ data: null }),
       ]);
+      const parameterData = plusDetail?.parameters || null;
+      const growthCycleData = plusDetail?.growth_cycle || null;
+      const careGuideData = plusDetail?.care_guide || null;
       const i18nRows = (i18nData || []) as PlantSpeciesI18nRow[];
       const aliasRows = (aliasData || []) as PlantAliasSearchRow[];
 
@@ -1460,9 +1474,52 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
           setRelatedExperienceCards([]);
         }
       } else {
+        // Public guide aggregation only: Free/guest gets at most two of each
+        // published type, independent of other public discovery entry points.
+        const { data: publicMatches } = await supabase.from("archives")
+          .select("id")
+          .eq("is_public", true)
+          .is("trashed_at", null)
+          .or(archiveMatchFilter)
+          .order("last_record_time", { ascending: false, nullsFirst: false })
+          .limit(RELATED_ARCHIVE_LIMIT);
+        const ids = (publicMatches || []).map((row) => row.id);
+        if (ids.length) {
+          const [{ data: recordRows }, { data: cardRows }] = await Promise.all([
+            supabase.from("records")
+              .select("id, archive_id, note")
+              .in("archive_id", ids).eq("visibility", "public")
+              .order("record_time", { ascending: false, nullsFirst: false })
+              .limit(3),
+            supabase.from("experience_cards").select("id")
+              .in("archive_id", ids).eq("status", "published")
+              .order("published_at", { ascending: false, nullsFirst: false })
+              .limit(12),
+          ]);
+          const candidateCards = (cardRows || []) as Array<{ id: string }>;
+          const verified = await Promise.all(candidateCards.map(async (card) => {
+            const { data, error } = await supabase.rpc("is_experience_card_public", { p_card_id: card.id });
+            return !error && Boolean(Array.isArray(data) ? data[0] : data);
+          }));
+          const cardPreview = guideAssociationPreview(candidateCards.filter((_card, index) => verified[index]).map((card) => card.id), false);
+          const { data: verifiedCardRows } = cardPreview.items.length
+            ? await supabase.from("experience_cards").select("*").in("id", cardPreview.items)
+            : { data: [] as ExperienceCardRow[] };
+          const verifiedMap = new Map(((verifiedCardRows || []) as ExperienceCardRow[]).map((card) => [card.id, card]));
+          const publicCards = cardPreview.items.map((id) => verifiedMap.get(id)).filter((card): card is ExperienceCardRow => Boolean(card));
+          const recordPreview = guideAssociationPreview((recordRows || []) as Array<{ id: string; archive_id: string; note: string | null }>, false);
+          setRelatedExperienceCards(await hydrateExperienceCardListItems(publicCards, language));
+          setFreeRelatedRecords(recordPreview.items);
+          setMoreFreeCards(cardPreview.hasMore);
+          setMoreFreeRecords(recordPreview.hasMore);
+        } else {
+          setRelatedExperienceCards([]);
+          setFreeRelatedRecords([]);
+          setMoreFreeCards(false);
+          setMoreFreeRecords(false);
+        }
         setRelatedArchives([]);
         setOwnArchives([]);
-        setRelatedExperienceCards([]);
       }
 
       if (user) {
@@ -2086,8 +2143,11 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
             currentUserId={currentUserId}
             copy={copy}
           />
-        ) : (
-          <PlantTabAccessNotice label={copy.related_experience_cards} copy={copy} />
+        ) : offline ? <PlantTabAccessNotice label={copy.related_experience_cards} copy={copy} /> : (
+          <>
+            <PlantExperienceCardsSection cards={relatedExperienceCards} currentUserId={null} copy={copy} />
+            {moreFreeCards ? <PlantTabAccessNotice label={copy.related_experience_cards} copy={copy} /> : null}
+          </>
         )
       ) : null}
 
@@ -2100,8 +2160,16 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
             isLoggedIn={isSignedIn}
             copy={copy}
           />
-        ) : (
-          <PlantTabAccessNotice label={copy.related_growing_records} copy={copy} />
+        ) : offline ? <PlantTabAccessNotice label={copy.related_growing_records} copy={copy} /> : (
+          <section className={styles.sectionCard}>
+            <h2>{copy.related_growing_records}</h2>
+            {freeRelatedRecords.length ? freeRelatedRecords.map((record) => (
+              <Link key={record.id} href={`/archive/${record.archive_id}?mode=viewer`}>
+                {record.note?.trim() || (language === "zh" ? "查看公开种植记录" : "View public growing record")}
+              </Link>
+            )) : <p>{copy.public_records_empty}</p>}
+            {moreFreeRecords ? <PlantTabAccessNotice label={copy.related_growing_records} copy={copy} /> : null}
+          </section>
         )
       ) : null}
 

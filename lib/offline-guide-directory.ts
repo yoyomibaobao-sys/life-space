@@ -2,8 +2,8 @@ import { getDefaultSystemNames, type ArchiveCategory } from "@/lib/archive-categ
 import type { PlantParameterLite } from "@/lib/plant-env";
 import type { SystemNameCandidate } from "@/lib/system-name-candidates";
 
-const KEY = "lifespace:guide-directory:v2";
-const LEGACY_KEY = "lifespace:guide-directory:v1";
+const KEY = "lifespace:guide-directory:v3";
+const LEGACY_KEYS = ["lifespace:guide-directory:v2", "lifespace:guide-directory:v1"];
 const MAX_DIRECTORY_ROWS = 15_000;
 const PUBLIC_SOURCES = new Set(["builtin", "plant_species", "public_guide"]);
 const CATEGORIES = new Set<ArchiveCategory>([
@@ -94,6 +94,9 @@ function clean(rows: unknown, legacy = false): OfflineGuideDirectoryEntry[] {
     const nameEn = cleanText(row.nameEn, 160);
     // The old plant-species overview came from the basic care summary. Other
     // old overviews came from the member-capable client generator.
+    // Old public-guide summaries could be member-generated; drop them.
+    // The historical plant_species source only carried public BASIC plant
+    // overviews, which remain usable offline after the v3 migration.
     const keepOverview = !legacy || row.source === "plant_species";
     const overviewZh = keepOverview ? cleanText(row.overviewZh, 2_000) : undefined;
     const overviewEn = keepOverview ? cleanText(row.overviewEn, 2_000) : undefined;
@@ -154,15 +157,15 @@ export function loadOfflineGuideDirectory(): OfflineGuideDirectoryEntry[] {
       const current = localStorage.getItem(KEY);
       if (current !== null) {
         cached = clean(JSON.parse(current));
-        localStorage.removeItem?.(LEGACY_KEY);
+        LEGACY_KEYS.forEach((key) => localStorage.removeItem?.(key));
       } else {
-        const previous = localStorage.getItem(LEGACY_KEY);
-        if (previous !== null) {
-          // Old members cached full parameters and generated overviews. Carry
-          // names and lookup keys forward, then refresh basic summaries online.
+        const previous = LEGACY_KEYS.map((key) => localStorage.getItem(key)).find((value) => value !== null);
+        if (previous !== undefined) {
+          // Preserve known public names/IDs only. v1/v2 member text and
+          // parameters never cross into offline v3, regardless of login.
           cached = clean(JSON.parse(previous), true);
           localStorage.setItem(KEY, JSON.stringify(cached));
-          localStorage.removeItem?.(LEGACY_KEY);
+          LEGACY_KEYS.forEach((key) => localStorage.removeItem?.(key));
         }
       }
     }
