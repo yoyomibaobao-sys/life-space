@@ -29,7 +29,6 @@ import {
   listLocalProjectTrash,
   setLocalProjectTrashed,
   restoreLocalArchiveCycle,
-  purgeLocalArchiveCycleTrash,
   listVisibleLocalTaxonomyItems,
   createLocalTaxonomyItem,
   renameLocalTaxonomyItem,
@@ -300,14 +299,6 @@ function readLocalSpaceVisibilityPreference(): boolean | null {
     // Display preference is optional; project data remains untouched.
   }
   return null;
-}
-
-function writeLocalSpaceVisibilityPreference(visible: boolean) {
-  try {
-    window.localStorage.setItem(LOCAL_SPACE_VISIBILITY_KEY, visible ? "shown" : "hidden");
-  } catch {
-    // A storage failure must never affect local project data.
-  }
 }
 
 type CloudArchiveSummary = {
@@ -631,7 +622,7 @@ function OfflineProjectCategorySettings({
   onBack: () => void;
 }) {
   const [activeSpace, setActiveSpace] = useState<ArchiveCategorySpace>(
-    () => online && cloudUserId === ownerUserId ? "cloud" : "local",
+    () => "cloud",
   );
   const [localDepths, setLocalDepths] = useState<ArchiveCategoryDepths>(() =>
     getLocalArchiveCategoryDepths(ownerUserId),
@@ -893,7 +884,6 @@ function App() {
   const [archives, setArchives] = useState<LocalArchiveSummary[]>([]);
   const [cloudCaches, setCloudCaches] = useState<LocalArchiveSummary[]>([]);
   const [sourceFilter, setSourceFilter] = useState<ShellSourceFilter>("all");
-  const [localSpacePreference, setLocalSpacePreference] = useState<boolean | null>(() => readLocalSpaceVisibilityPreference());
   const [unownedCount, setUnownedCount] = useState(0);
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [detailStatus, setDetailStatus] = useState<"idle" | "loading" | "ready" | "not-found" | "forbidden" | "error">("idle");
@@ -1438,6 +1428,15 @@ function App() {
       ...archives,
       ...(authenticatedOwnerContext ? cloudCaches : []),
     ].find((row) => row.id === archiveId);
+    // Historical independent local archives remain stored but are not edited
+    // by the online App; edits could request a new SAF directory permission.
+    if (item && (item.local_role === "local-project" ||
+        (item.local_only && !item.source_cloud_archive_id &&
+          item.sync?.operation_kind !== "create-archive"))) {
+      showToast(language === "zh" ? "独立本地空间暂不在在线版开放，原资料仍保留。" :
+        "Independent local space is deferred; existing data is preserved.");
+      return;
+    }
     if (item) saveRecentArchiveBrowse({ id: item.id, title: item.title,
       systemName: item.system_name || item.species_name, category: item.category, userId: item.local_owner_user_id });
     setScreen({ kind: "detail", archiveId }, ["edit-project", "new-project", "new-record", "edit-record", "cloud-login"].includes(screen.kind));
@@ -1916,7 +1915,9 @@ function App() {
     pending: authenticatedOwnerContext ? pendingSync : [],
     preferLive: liveCloudWorkspace,
   });
-  const localSpaceEnabled = localSpacePreference ?? true;
+  // W5 online Android never enables the S6 independent local-space UI.
+  // Preserve the saved preference and all underlying local/SAF data untouched.
+  const localSpaceEnabled = false;
   const cloudReadable = canReadAndroidCloudWorkspace({
     auth: auth.status,
     userId: cloudUserId,
@@ -1931,10 +1932,6 @@ function App() {
     setSubcategoryFilter(null);
     setGroupFilter(null);
   }, [auth.status, localSpaceEnabled, cloudReadable, sourceFilter]);
-  function updateLocalSpaceVisibility(visible: boolean) {
-    setLocalSpacePreference(visible);
-    writeLocalSpaceVisibilityPreference(visible);
-  }
   function openNewProjectEntry() {
     if (auth.status === "checking") return;
     const signedIn = auth.status === "signed-in";
@@ -2607,7 +2604,16 @@ function App() {
       ) : null}
 
       {screen.kind === "new-project" ? (
-        (screen.destination === "live-cloud" || screen.destination === "pending-cloud") &&
+        (!screen.destination || screen.destination === "local-only") ? (
+          <div data-android-shell-page="s6-local-create-deferred" className="panel">
+            <p>{language === "zh"
+              ? "独立本地项目已延期至S6，原有本地资料仍被保留。请从云空间新建项目。"
+              : "Independent local projects are deferred to S6. Existing local data is preserved; create new projects in Cloud Space."}</p>
+            <button type="button" onClick={() => auth.status === "signed-in"
+              ? setScreen({ kind: "new-project", destination: online ? "live-cloud" : "pending-cloud" })
+              : openCloudLogin("list-cloud")}>{copy.newProject}</button>
+          </div>
+        ) : (screen.destination === "live-cloud" || screen.destination === "pending-cloud") &&
         !canCreateMembershipContent(membership) ? (
           <div data-android-shell-page="cloud-create-access">
             <MobilePageHeaderView
@@ -2622,8 +2628,8 @@ function App() {
         ) : <ProjectForm
           language={language}
           copy={copy}
-          owner={screen.destination === "local-only" ? owner : authenticatedOwnerContext as StoredLocalOwnerContext | null}
-          destination={screen.destination || "local-only"}
+          owner={authenticatedOwnerContext as StoredLocalOwnerContext | null}
+          destination={screen.destination}
           cloudTaxonomy={online ? cloudTaxonomy : cachedTaxonomy}
           cloudDepths={cloudDepths}
           guide={screen.guide}
@@ -3068,8 +3074,6 @@ function App() {
               onLogout={auth.status === "signed-in" ? () => void logoutFromProfile() : undefined}
               onLogin={online && auth.status === "signed-out" ? () => openCloudLogin("profile") : undefined}
               onProfileSaved={() => cloudUserId ? void loadShellIdentity(cloudUserId) : undefined}
-              localSpaceVisible={localSpaceEnabled}
-              onLocalSpaceVisibilityChange={updateLocalSpaceVisibility}
             />
           </MobileShellErrorBoundary>
         </div>
@@ -3161,7 +3165,9 @@ function App() {
           offlineGuide={findOfflineGuideEntry(directory, screen.id)}
           onBack={() => goBackInShell({ kind: "guides" })} />
       ) : null}
-      {screen.kind === "guide-detail" ? <GuideDetailView id={screen.guideId || screen.guideKey} offline={!online} offlineGuide={activeGuide} offlineSignedIn={auth.status === "signed-in"} onBack={() => goBackInShell({ kind: "guides" })} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
+      {screen.kind === "guide-detail" ? <GuideDetailView id={screen.guideId || screen.guideKey} offline={!online} offlineGuide={activeGuide} offlineSignedIn={auth.status === "signed-in"} onBack={() => goBackInShell({ kind: "guides" })} onCreate={(guide) => auth.status === "signed-in"
+        ? setScreen({ kind: "new-project", guide, destination: online ? "live-cloud" : "pending-cloud" })
+        : openCloudLogin("list-cloud")} /> : null}
       {screen.kind === "cloud-login" ? <CloudLogin copy={copy} online={online} onBack={() => goBackInShell({ kind: "list" })}
         onRegister={() => setScreen({ kind: "register" })}         onSuccess={(userId) => {
         const destination = screen;
@@ -3405,10 +3411,10 @@ function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin, onLoc
   const [working, setWorking] = useState(false);
 
   async function refreshTrash() {
-    const [cycles, archives] = await Promise.all([
-      listLocalArchiveCycleTrash(ownerContext),
-      listLocalProjectTrash(ownerContext),
-    ]);
+    // Online W5 trash manages cloud content only. Historical local trash is
+    // retained unchanged for S6; never request its SAF tree or delete it here.
+    const cycles: Awaited<ReturnType<typeof listLocalArchiveCycleTrash>> = [];
+    const archives: Awaited<ReturnType<typeof listLocalProjectTrash>> = [];
     setItems(cycles);
     setProjects(archives);
     if (online) {
@@ -3423,8 +3429,8 @@ function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin, onLoc
   useEffect(() => {
     let active = true;
     void Promise.all([
-      listLocalArchiveCycleTrash(ownerContext),
-      listLocalProjectTrash(ownerContext),
+      Promise.resolve([] as Awaited<ReturnType<typeof listLocalArchiveCycleTrash>>),
+      Promise.resolve([] as Awaited<ReturnType<typeof listLocalProjectTrash>>),
       online ? fetchCloudTrash() : Promise.resolve({ ok: true, items: [] as CloudTrashItem[] }),
     ]).then(([cycles, archives, cloud]) => {
       if (!active) return;
@@ -3484,12 +3490,8 @@ function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin, onLoc
     try {
       const cloudResult = await emptyCloudTrash();
       if (!cloudResult.ok) throw new Error(language === "zh" ? "云端回收站清空失败。" : "Could not clear cloud trash.");
-      for (const item of items) {
-        await purgeLocalArchiveCycleTrash(item.archive_id, item.trash.id, ownerContext);
-      }
-      for (const project of projects) {
-        await deleteLocalArchive(project.id);
-      }
+      // This action must never purge historical independent local projects
+      // or SAF cycles as a side effect of emptying the online cloud trash.
       await refreshTrash();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));

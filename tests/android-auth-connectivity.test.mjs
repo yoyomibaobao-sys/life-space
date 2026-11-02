@@ -470,7 +470,9 @@ test("remembered owner cannot identify a signed-out Android user in My Space", a
   const shell = read("mobile-offline-src/main.tsx");
   assert.match(shell, /const hasAuthenticatedIdentity = auth\.status === "signed-in" && Boolean\(authenticatedOwnerContext\)/);
   assert.match(shell, /signedIn: hasAuthenticatedIdentity, membership: hasAuthenticatedIdentity \? membership : null/);
-  assert.match(shell, /hasAuthenticatedIdentity[\s\S]*spaceProfile\?\.username \|\| auth\.email[\s\S]*"本机空间"/);
+  // W5 online My Space no longer advertises an independent device space.
+  assert.match(shell, /hasAuthenticatedIdentity[\s\S]*spaceProfile\?\.username \|\| auth\.email[\s\S]*"我的空间"/);
+  assert.doesNotMatch(shell, /"本机空间"/);
   assert.doesNotMatch(shell, /username=\{[\s\S]{0,90}owner\?\.email/);
   const membership = await loadModule("lib/membership.ts");
   assert.equal(membership.getUserTypeLabel({ signedIn: false, membership: { plan: "admin" } }, "zh"), "游客");

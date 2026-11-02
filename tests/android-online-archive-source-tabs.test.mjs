@@ -12,7 +12,8 @@ test("installed Android runtime hides all/local source tabs but preserves cloud 
   assert.match(androidShell, /function w5WorkspaceSources\(/);
   assert.match(androidShell, /auth === "checking" \? \[\] : auth === "signed-in" \? \["cloud", "pending"\] : \["cloud"\]/);
   assert.match(androidShell, /sourceOptions=\{w5WorkspaceSources\(auth\.status\)\.map/);
-  assert.match(androidShell, /writeLocalSpaceVisibilityPreference\(visible\)/);
+  assert.match(androidShell, /const localSpaceEnabled = false;/);
+  assert.doesNotMatch(androidShell, /onLocalSpaceVisibilityChange=\{updateLocalSpaceVisibility\}/);
 });
 
 test("online website exposes only cloud while signed-in Android may also expose temporary space", () => {

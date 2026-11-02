@@ -86,21 +86,17 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.doesNotMatch(generated, /<link[^>]+stylesheet/i);
 });
 
-test("local space starts enabled, stays on this device, and hides local entries without deleting data", () => {
+test("online Android hides standalone local controls but preserves existing local data", () => {
   const source = read("mobile-offline-src/main.tsx");
   const profile = read("components/profile/AndroidProfileController.tsx");
-  const security = read("components/profile/AndroidProfileInfoPage.tsx");
   assert.match(source, /LOCAL_SPACE_VISIBILITY_KEY = "lifespace_android_show_local_space_v1"/);
-  assert.match(source, /localSpaceEnabled = localSpacePreference \?\? true/);
-  assert.doesNotMatch(source, /hasLocalSpaceContent/);
-  assert.match(source, /writeLocalSpaceVisibilityPreference\(visible\)/);
-  assert.match(source, /localSpaceVisible=\{localSpaceEnabled\}/);
-  assert.match(source, /onLocalSpaceVisibilityChange=\{updateLocalSpaceVisibility\}/);
-  assert.match(source, /packVisibleSources/);
-  assert.match(profile, /启用本地空间/);
-  assert.match(profile, /Enable local space/);
-  assert.match(security, /关闭“启用本地空间”只隐藏本地项目及相关操作入口，不删除本地资料。/);
-  assert.doesNotMatch(profile, /显示本地空间|Show local space/);
+  assert.match(source, /const localSpaceEnabled = false;/);
+  assert.match(source, /listVisibleLocalArchiveSummaries/);
+  assert.match(source, /createNativeSafStorage|connectLocalSafDirectory/);
+  assert.doesNotMatch(source, /onLocalSpaceVisibilityChange=\{updateLocalSpaceVisibility\}/);
+  assert.match(source, /data-android-shell-page="s6-local-create-deferred"/);
+  assert.match(source, /w5WorkspaceSources\(auth\.status\)/);
+  assert.match(profile, /onLocalSpaceVisibilityChange \?/);
 });
 
 test("offline shell safely recovers one local owner when browser session state is unavailable", () => {
