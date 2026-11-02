@@ -40,9 +40,10 @@ test("system cancellation, candidate validation and existing inline recovery gui
   assert.match(callback, /candidateTree = uri/);
   assert.doesNotMatch(callback, /getSharedPreferences|createDocument/);
   const shell = fs.readFileSync("mobile-offline-src/main.tsx", "utf8");
-  assert.match(shell, /safConnectionMissing \? copy\.safConnectWarning : copy\.safRegrantWarning/);
   assert.match(shell, /safConnectRunning\.current\) return/);
-  assert.match(shell, /onClick=\{\(\) => void connectSaf\(\)\}/);
-  assert.equal((shell.match(/void connectSaf\(\)/g) || []).length, 1, "SAF recovery must be user-initiated, never an automatic startup effect");
+  assert.doesNotMatch(shell, /onClick=\{\(\) => void connectSaf\(\)\}/);
+  assert.doesNotMatch(shell, /await getLocalSafDirectory\(\)/);
+  const initialize = shell.slice(shell.indexOf("async function initialize()"), shell.indexOf("// Initialization must run once"));
+  assert.doesNotMatch(initialize, /await migrateLegacyLocalOrigin\(\)/);
   assert.match(shell, /copy\.safRegrantCanceled/);
 });

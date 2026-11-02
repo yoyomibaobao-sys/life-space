@@ -1337,12 +1337,11 @@ function App() {
     async function initialize() {
       try {
         assertLocalOfflineAvailable();
-        const savedSaf = await getLocalSafDirectory();
-        const needsRegrant = Boolean(savedSaf.uri && !savedSaf.available);
-        setSafRegrantNeeded(isAndroidSafAvailable() && needsRegrant);
-        setSafConnectionMissing(!savedSaf.uri);
-        // Do not run legacy handoff while the committed SAF source is inaccessible.
-        const migration = needsRegrant ? null : await migrateLegacyLocalOrigin();
+        // Online Android uses internal cloud caches/pending only. Do not inspect,
+        // regrant or migrate an independent historical SAF tree on startup.
+        // The protected SAF plugin and legacy data remain untouched for S6.
+        setSafRegrantNeeded(false);
+        setSafConnectionMissing(false);
         if (cancelled) return;
         let nextOwner = loadRememberedLocalOwnerContext();
         if (!nextOwner && !wasLocalOwnerExplicitlySignedOut()) {
@@ -1367,18 +1366,12 @@ function App() {
         );
         void retireBundledLegacyServiceWorkers().catch((error) =>
           console.warn("bundled service worker retirement", error));
-        if (
-          migration?.status === "migrated" &&
-          migration.archiveCount + migration.recordCount + migration.imageCount > 0
-        ) {
-          showToast(copy.migrated);
-        }
       } catch (error) {
         console.warn("offline initialization", error);
         if (cancelled) return;
-        const savedSaf = await getLocalSafDirectory().catch(() => null);
-        if (savedSaf?.uri && !savedSaf.available) setSafRegrantNeeded(true);
-        else setMigrationWarning(true);
+        // Do not offer SAF recovery inside the online application, including
+        // on initialization failures unrelated to external storage.
+        setMigrationWarning(true);
         try {
           await loadList();
         } catch {
@@ -2436,15 +2429,8 @@ function App() {
         />
       ) : null}
 
-      {safRegrantNeeded && (!safConnectionMissing || (screen.kind === "list" && localSpacePreference !== false && sourceFilter !== "cloud")) ? (
-        <section className="notice warning" role="status">
-          <p>{safConnectionMissing ? copy.safConnectWarning : copy.safRegrantWarning}</p>
-          {safRegrantError ? <p>{safRegrantError}</p> : null}
-          <button type="button" disabled={safRegrantRunning} onClick={() => void connectSaf()}>
-            {safRegrantRunning ? copy.safRegranting : safConnectionMissing ? copy.safConnectAction : copy.safRegrantAction}
-          </button>
-        </section>
-      ) : null}
+      {/* Online Android has no independent SAF folder connection action.
+          Keep the native plugin and legacy recovery implementation for S6. */}
       {migrationWarning ? (
         <section className="notice warning"><p>{copy.migrationWarning}</p></section>
       ) : null}
