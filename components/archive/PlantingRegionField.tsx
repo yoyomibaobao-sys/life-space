@@ -34,10 +34,10 @@ export default function PlantingRegionField({ value, onChange, language, require
           <datalist id={`${id}-regions`}>{getRegionOptions(draft.country_code, language).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</datalist>
         </label>
         <label style={{ ...labelStyle, gridColumn: "1 / -1" }}>{en ? "City / district" : "城市／区县"}
-          <input required={required} value={draft.city_name} maxLength={80} onChange={(event) => onChange({ ...draft, city_name: event.target.value })} style={inputStyle} placeholder={en ? "Where this project is grown" : "填写项目实际种植的城市或区县"} />
+          <input value={draft.city_name} maxLength={80} onChange={(event) => onChange({ ...draft, city_name: event.target.value })} style={inputStyle} placeholder={en ? "Where this project is grown" : "填写项目实际种植的城市或区县"} />
         </label>
       </div>
-      <p style={{ margin: "8px 0 0", fontSize: 12, color: "#71806b", lineHeight: 1.6 }}>{en ? "Public projects show only this broad region. Leave out street addresses and house numbers." : "项目公开时显示此地区，请填写到城市或区县，不填写街道、门牌。"}</p>
+      <p style={{ margin: "8px 0 0", fontSize: 12, color: "#71806b", lineHeight: 1.6 }}>{en ? "Choose a country and fill in at least one locality (province/state or city/district). No street addresses." : "选择国家／地区后，省／州或城市／区县至少填写一项，不填写街道、门牌。"}</p>
     </fieldset>
   );
 }

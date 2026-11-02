@@ -23,7 +23,10 @@ export function normalizePlantingRegion(value: unknown): PlantingRegion | null {
     if (text.length > 80 || /[\u0000-\u001f\u007f]/.test(text)) return null;
     result[key] = text;
   }
-  if (!/^([A-Z]{2}|OTHER)$/.test(result.country_code) || !result.city_name) return null;
+  // Country plus any one locality level is sufficient; a province alone is
+  // a valid coarse planting region, and users need not invent a city.
+  if (!/^([A-Z]{2}|OTHER)$/.test(result.country_code) ||
+      !(result.region_name || result.city_name)) return null;
   if (result.country_code === "OTHER" && !result.country_name) return null;
   return result;
 }

@@ -46,14 +46,15 @@ const mock={
 vm.runInNewContext(compiled,mock);
 const {guard,stage}=mock.__rules;
 
-test("Owner-mapped active cloud archive can edit fields but cannot end or restore offline",()=>{
-  assert.doesNotThrow(()=>guard(archive(),owner));
+test("historical cloud archive is offline read-only, but authenticated sync receipts remain valid",()=>{
+  assert.throws(()=>guard(archive(),owner));
+  assert.doesNotThrow(()=>guard(archive(),owner,undefined,true));
   assert.throws(()=>guard(archive(),owner,{status:"ended"}));
   assert.throws(()=>guard(archive(),owner,{ended_at:null}));
   assert.match(view,/canEditLocalArchiveFields\(archive, ownerContext\)/);
   assert.match(view,/canDeleteArchive: canEditArchive && !isCloudCache/);
   assert.match(view,/if \(isCloudCache\) return;/);
-  assert.match(adapter,/archive\.local_owner_user_id === ownerContext\.userId/);
+  assert.match(adapter,/if \(archive\.local_role !== "cloud-offline-cache"\) return true;[\s\S]*?return false;/);
 });
 
 test("Archive cache rejects wrong owner, ended, missing mapping and inconsistent sync mapping",()=>{
@@ -66,16 +67,10 @@ test("Archive cache rejects wrong owner, ended, missing mapping and inconsistent
   assert.doesNotThrow(()=>guard(uploading,owner,undefined,true));
 });
 
-test("existing valid cloud cycle stages same identity and existing archive update-archive operation",()=>{
+test("new offline mutations of already synced cloud cycles are refused before persistence",()=>{
   const input=archive();
   const changed=input.cycles.map(c=>({...c,display_name:"Changed"}));
-  const result=stage(input,changed[0].id,changed,owner,"2026-11-02T13:00:00Z");
-  assert.equal(result.cycles[0].id,input.cycles[0].id);
-  assert.equal(result.cycles[0].source_cloud_cycle_id,cycleCloud);
-  assert.equal(result.cycles[0].display_name,"Changed");
-  assert.equal(result.sync.status,"pending-cloud-sync");
-  assert.equal(result.sync.operation_kind,"update-archive");
-  assert.ok(result.sync.pending_fields.includes("cycle:"+cycleCloud));
+  assert.throws(()=>stage(input,changed[0].id,changed,owner,"2026-11-02T13:00:00Z"));
   assert.equal(input.cycles[0].display_name,"Original");
 });
 

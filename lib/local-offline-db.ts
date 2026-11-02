@@ -480,6 +480,11 @@ function assertWritableCachedCloudArchive(
       (archive.sync.cloud_archive_id && archive.sync.cloud_archive_id !== archive.source_cloud_archive_id)) {
     throw Error("云项目缓存缺少可信Owner或云端映射，不能编辑。");
   }
+  // Historical cloud cache is read-only. Existing pending operations may
+  // still receive their original authenticated receipts without data loss.
+  if (!allowInFlightReceipt) {
+    throw Error("已同步云项目离线只读；只有待上传新项目可以编辑。");
+  }
   // Keep the previous operation and all its fields intact while a remote
   // response is unknown; editing during an in-flight write could replace its
   // operation ID and accidentally discard still-unacknowledged fields.
@@ -525,9 +530,7 @@ function assertWritableCachedCloudRecord(
       archive.status !== "active" || !normalizeOptionalText(archive.source_cloud_archive_id)) {
     throw Error("云端缓存没有已验证的本人Owner或云项目映射，不能离线编辑。");
   }
-  const syncedWithId = record.sync?.status === "synced" &&
-    Boolean(normalizeOptionalText(record.sync.cloud_record_id));
-  if (!syncedWithId && !isPendingCloudSyncStatus(record.sync?.status)) {
+  if (!isPendingCloudSyncStatus(record.sync?.status)) {
     throw Error("云端记录缺少合法同步身份，不能离线编辑。");
   }
 }

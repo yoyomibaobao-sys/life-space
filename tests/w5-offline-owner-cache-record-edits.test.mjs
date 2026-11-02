@@ -39,8 +39,8 @@ const realm={
 vm.runInNewContext(compiled,realm);
 const guard=realm.__guard;
 
-test("valid owner-mapped, active synced record can be edited into pending queue",()=>{
-  assert.doesNotThrow(()=>guard(archive(),synced(),{userId:owner}));
+test("historical synced cloud records stay read-only; pre-existing pending remains editable",()=>{
+  assert.throws(()=>guard(archive(),synced(),{userId:owner}));
   assert.doesNotThrow(()=>guard(archive(),pending(),{userId:owner}));
   assert.match(db,/nextRecord\.sync = queueCloudSyncOperation\(nextRecord\.sync, \{[\s\S]*?operationKind: "update-record"/);
   assert.match(sync,/await syncRecord\(\{ record, cloudArchive, userId, cycleMap \}\)/);
@@ -74,7 +74,7 @@ test("owner detail passes authenticated Owner to edit writer; synced cached dele
   assert.match(view,/onRecordDeleted=\{editable && !isCloudCache \?/);
   assert.match(view,/canEditArchive = canEditLocalArchiveFields\(archive, ownerContext\)/);
   assert.match(adapter,/archive\.local_owner_user_id !== ownerContext\.userId/);
-  assert.match(adapter,/record\.sync\?\.status === "synced"/);
+  assert.doesNotMatch(adapter,/record\.sync\?\.status === "synced"/);
 });
 
 test("cache refresh preserves queued record edits and auto-sync stays disabled",()=>{
@@ -99,7 +99,8 @@ test("adapter real compiled function rejects unknown owner and unmapped record",
   const ctx={};
   vm.runInNewContext(b.outputFiles[0].text,ctx);
   const can=ctx.__cacheAdapter.canEditLocalArchiveRecord;
-  assert.equal(can(archive(),synced(),{userId:owner}),true);
+  assert.equal(can(archive(),synced(),{userId:owner}),false);
+  assert.equal(can(archive(),pending(),{userId:owner}),true);
   assert.equal(can(archive(),synced(),{userId:other}),false);
   assert.equal(can(archive(),synced({cloud_record_id:null}),{userId:owner}),false);
   assert.equal(can(archive({status:"ended"}),synced(),{userId:owner}),false);

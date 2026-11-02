@@ -15,9 +15,9 @@ export function canEditLocalArchiveFields(
   archive: LocalArchive, ownerContext?: LocalArchiveOwnerContext | null,
 ) {
   if (archive.local_role !== "cloud-offline-cache") return true;
-  return Boolean(ownerContext?.userId && archive.local_owner_user_id === ownerContext.userId &&
-    archive.status === "active" && archive.sync.status !== "uploading" &&
-    archive.source_cloud_archive_id);
+  // Synced cloud project metadata is read-only while offline. Existing
+  // pending cloud creations are a different local role and remain editable.
+  return false;
 }
 
 export function canAddLocalArchiveRecord(archive: LocalArchive) {
@@ -32,10 +32,9 @@ export function canEditLocalArchiveRecord(
   if (archive.local_role !== "cloud-offline-cache") return true;
   if (!ownerContext?.userId || archive.local_owner_user_id !== ownerContext.userId ||
       archive.status !== "active" || !archive.source_cloud_archive_id) return false;
-  // A synced, owner-verified record retains its real cloud ID and can enter the
-  // existing update-record pending path. Never edit an unmapped cache snapshot.
-  return isPendingCloudSyncStatus(record.sync?.status) ||
-    (record.sync?.status === "synced" && Boolean(record.sync.cloud_record_id));
+  // Preserve already-legitimate pending record edits, but never make a
+  // previously synced historical cloud record editable offline.
+  return isPendingCloudSyncStatus(record.sync?.status);
 }
 
 export function localArchiveToDetailArchive(

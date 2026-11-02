@@ -1947,6 +1947,9 @@ function App() {
     }
     setScreen({ kind: "project-destination" });
   }
+  // Old links can omit a destination; the online App must never create local-only.
+  const newProjectDestination: CreationDestination | null = screen.kind === "new-project"
+    ? (screen.destination === "pending-cloud" || !online ? "pending-cloud" : "live-cloud") : null;
   const filteredLocalArchives = workspace.localOnly.filter((archive) => filterCategory(archive) &&
     (!subcategoryFilter || archive.subcategory === subcategoryLabel) &&
     (!groupFilter || archive.group_name === groupLabel));
@@ -2624,7 +2627,7 @@ function App() {
       ) : null}
 
       {screen.kind === "new-project" ? (
-        (!screen.destination || screen.destination === "local-only") ? (
+        auth.status !== "signed-in" ? (
           <div data-android-shell-page="s6-local-create-deferred" className="panel">
             <p>{language === "zh"
               ? "独立本地项目已延期至S6，原有本地资料仍被保留。请从云空间新建项目。"
@@ -2633,7 +2636,7 @@ function App() {
               ? setScreen({ kind: "new-project", destination: online ? "live-cloud" : "pending-cloud" })
               : openCloudLogin("list-cloud")}>{copy.newProject}</button>
           </div>
-        ) : (screen.destination === "live-cloud" || screen.destination === "pending-cloud") &&
+        ) : (newProjectDestination === "live-cloud" || newProjectDestination === "pending-cloud") &&
         !canCreateMembershipContent(membership) ? (
           <div data-android-shell-page="cloud-create-access">
             <MobilePageHeaderView
@@ -2649,7 +2652,7 @@ function App() {
           language={language}
           copy={copy}
           owner={authenticatedOwnerContext as StoredLocalOwnerContext | null}
-          destination={screen.destination}
+          destination={newProjectDestination || "pending-cloud"}
           cloudTaxonomy={online ? cloudTaxonomy : cachedTaxonomy}
           cloudDepths={cloudDepths}
           guide={screen.guide}
@@ -3618,9 +3621,9 @@ function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onB
   else if (connectivity.status === "offline" && !imageFullscreenOpen) presentationOnline.current = false;
   // A failed resume probe must not unmount an open record image. Writes stay
   // behind isAndroidOnline(); closing the image applies the cache view.
-  const showLiveCloud = imageFullscreenOpen || connectivity.status === "checking"
-    ? presentationOnline.current
-    : online;
+  const showLiveCloud = imageFullscreenOpen ? presentationOnline.current
+    : !online || connectivity.status === "offline" ? false
+    : connectivity.status === "checking" ? presentationOnline.current : true;
   const [cached, setCached] = useState<LocalArchiveDetail | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const lastAddRecordRequest = useRef(addRecordRequest);
@@ -3928,7 +3931,12 @@ function ProjectForm({
   const subTag = taxonomy.find((entry) => entry.kind === "subcategory" && entry.category === category && entry.id === subTagId);
   const groupTag = taxonomy.find((entry) => entry.kind === "group" && entry.category === category && entry.parentId === subTag?.id && entry.id === groupTagId);
   const [systemName, setSystemName] = useState(archive?.system_name || archive?.species_name || guide?.label || "");
-  const [directory] = useState(loadOfflineGuideDirectory);
+  const [directory, setDirectory] = useState(loadOfflineGuideDirectory);
+  useEffect(() => {
+    const refresh = () => setDirectory(loadOfflineGuideDirectory());
+    window.addEventListener("lifespace-guide-directory-updated", refresh);
+    return () => window.removeEventListener("lifespace-guide-directory-updated", refresh);
+  }, []);
   const [selectedGuide, setSelectedGuide] = useState<SystemNameCandidate | undefined>(guide);
   const [source, setSource] = useState(archive?.source || "");
   const [plantingRegion, setPlantingRegion] = useState<PlantingRegion | null>(archive ? archive.planting_region || null : loadDefaultPlantingRegion(owner?.userId));
@@ -3942,8 +3950,12 @@ function ProjectForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!title.trim() || !systemName.trim()) {
-      setError(copy.requiredProject);
+    if (!title.trim()) {
+      setError(language === "zh" ? "请填写项目名称。" : "Project name is required.");
+      return;
+    }
+    if (!systemName.trim()) {
+      setError(language === "zh" ? "请选择或填写关联指引。" : "Choose or enter an associated guide.");
       return;
     }
     if (destination === "live-cloud" && !liveTaxonomyReady) {
@@ -3952,7 +3964,7 @@ function ProjectForm({
     const normalizedRegion = normalizePlantingRegion(plantingRegion);
     const hasRegionDraft = plantingRegion && Object.values(plantingRegion).some((value) => value.trim());
     if (category === "plant" && (!archive || archive.planting_region || hasRegionDraft) && !normalizedRegion) {
-      setError(language === "en" ? "Enter the planting country and city / district." : "请填写项目实际种植的国家及城市／区县。");
+      setError(language === "en" ? "Choose a country and enter a province/state or city/district." : "请选择国家／地区，并填写省／州或城市／区县至少一级。");
       return;
     }
     setBusy(true);
@@ -4034,7 +4046,7 @@ function ProjectForm({
         onBack={onCancel}
       />
       <section className="panel project-form-panel">
-        <form className="form project-form-compact" onSubmit={submit}>
+        <form className="form project-form-compact" onSubmit={submit} noValidate>
           <div className="field"><label>{copy.title} *</label><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} /></div>
           <div className="field">
             <label>{copy.category} *</label>
@@ -4059,7 +4071,7 @@ function ProjectForm({
                 <option key={entry.id} value={entry.id}>{entry.label}</option>)}
             </select></div> : null}
           <div className="field"><label>{copy.systemName} *</label><input value={systemName} onChange={(event) => { setSystemName(event.target.value); setSelectedGuide(undefined); }} maxLength={160} placeholder={copy.guideSearch} /><small>{copy.guideHint}</small>
-            {systemName.trim() ? <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && candidate.label.toLowerCase().includes(systemName.toLowerCase())).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div> : null}
+            {directory.some((candidate) => candidate.category === category) ? <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && (!systemName.trim() || candidate.label.toLowerCase().includes(systemName.trim().toLowerCase()))).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div> : null}
           </div>
           {category === "plant" ? <PlantingRegionField value={plantingRegion} onChange={setPlantingRegion} language={language} required={!archive} /> : null}
           {!archive && destination === "pending-cloud" && !cloudTaxonomy.length ? <small>联网后可设置云端分组；项目仍可保存为未分组。</small> : null}
