@@ -86,8 +86,8 @@ test("ordinary/plant guide Free rows are scoped to already public archives; offl
  assert.match(ordinary,/\.eq\("visibility", "public"\)/);
  assert.match(ordinary,/\.eq\("status", "published"\)/);
  assert.match(ordinary,/guideAssociationPreview\(publicRecords, fullAccess\)/);
- assert.match(plant,/guideAssociationPreview\(candidateCards\.filter/);
- assert.match(plant,/guideAssociationPreview\(\(recordRows \|\| \[\]\)/);
+ assert.match(plant,/guideAssociationPreview\(cards\.items, canReadFullGuide\)/);
+ assert.match(plant,/guideAssociationPreview\(records\.items, canReadFullGuide\)/);
  assert.match(ordinary,/if \(offline\) \{/);
  assert.match(ordinary,/setRelatedRecords\(\[\]\)/);
  assert.match(offline,/const KEY = "lifespace:guide-directory:v3"/);

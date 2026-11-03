@@ -23,6 +23,7 @@ import type {
 } from "@/lib/experience-card-types";
 import { hydrateExperienceCardListItems } from "@/lib/experience-cards";
 import { guideAssociationPreview } from "@/lib/guide-association-limits";
+import { GUIDE_FREE_TARGET, scanGuidePages } from "@/lib/guide-association-pages";
 import { canAccessMembershipGuidance, normalizeMembershipRpcResult } from "@/lib/membership";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
@@ -234,56 +235,60 @@ async function loadRelatedGuideContent(
     "cover_thumb_path",
     "created_at",
   ].join(", ");
-  const { data: publicArchiveData } = await supabase
-      .from("archives")
-      .select(archiveSelect)
-      .eq("category", entry.category)
-      .eq("system_name", entry.name)
-      .eq("is_public", true)
-      .order("last_record_time", { ascending: false, nullsFirst: false })
-      .is("trashed_at", null)
-      .limit(RELATED_LIMIT);
-  const archiveRows = uniqueRows((publicArchiveData || []) as unknown as GuideArchiveRow[]);
+  const allArchives = await scanGuidePages<GuideArchiveRow>({
+    loadPage: async (from, to) => {
+      const result = await supabase.from("archives").select(archiveSelect)
+        .eq("category", entry.category).eq("system_name", entry.name)
+        .eq("is_public", true).is("trashed_at", null)
+        .order("last_record_time", { ascending: false, nullsFirst: false })
+        .order("id", { ascending: true }).range(from, to);
+      return { data: result.data as unknown as GuideArchiveRow[], error: result.error };
+    },
+  });
+  const archiveRows = uniqueRows(allArchives.items);
   const relatedArchives = fullAccess ? await hydrateGuideArchives(archiveRows, currentUserId) : [];
 
   if (archiveRows.length === 0) {
     return { relatedArchives, experienceCards: [] as ExperienceCardListItem[], records: [] as GuideRecordRow[], hasMoreCards: false, hasMoreRecords: false };
   }
-  const { data: publicRecordData } = await supabase.from("records")
-    .select("id, archive_id, note, record_time, visibility, created_at")
-    .in("archive_id", archiveRows.map((archive) => archive.id))
-    .eq("visibility", "public")
-    .order("record_time", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false, nullsFirst: false })
-    .limit(fullAccess ? RELATED_LIMIT : 3);
-  const publicRecords = (publicRecordData || []) as GuideRecordRow[];
+  const archiveIds = archiveRows.map((archive) => archive.id);
+  const recordScan = await scanGuidePages<GuideRecordRow>({
+    target: fullAccess ? Infinity : GUIDE_FREE_TARGET,
+    loadPage: async (from, to) => {
+      const result = await supabase.from("records")
+        .select("id, archive_id, note, record_time, visibility, created_at")
+        .in("archive_id", archiveIds).eq("visibility", "public")
+        .order("record_time", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false, nullsFirst: false })
+        .order("id", { ascending: true }).range(from, to);
+      return { data: result.data as GuideRecordRow[], error: result.error };
+    },
+  });
+  const publicRecords = recordScan.items;
 
-  const { data: cardData } = await supabase
-    .from("experience_cards")
-    .select("id")
-    .in(
-      "archive_id",
-      archiveRows.map((archive) => archive.id),
-    )
-    .eq("status", "published")
-    .order("published_at", { ascending: false, nullsFirst: false })
-    .limit(fullAccess ? RELATED_LIMIT : 12);
-  const cardRows = (cardData || []) as Array<{ id: string }>;
-  const publicStates = await Promise.all(
-    cardRows.map(async (card) => {
-      const { data, error } = await supabase.rpc("is_experience_card_public", {
-        p_card_id: card.id,
-      });
+  const cardScan = await scanGuidePages<{ id: string }>({
+    target: fullAccess ? Infinity : GUIDE_FREE_TARGET,
+    loadPage: async (from, to) => {
+      const result = await supabase.from("experience_cards").select("id")
+        .in("archive_id", archiveIds).eq("status", "published")
+        .order("published_at", { ascending: false, nullsFirst: false })
+        .order("id", { ascending: true }).range(from, to);
+      return { data: result.data, error: result.error };
+    },
+    accept: async (card) => {
+      const { data, error } = await supabase.rpc("is_experience_card_public", { p_card_id: card.id });
       return !error && Boolean(Array.isArray(data) ? data[0] : data);
-    }),
-  );
-  const verifiedIds = cardRows.filter((_card, index) => publicStates[index]).map((card) => card.id);
-  const previews = guideAssociationPreview(verifiedIds, fullAccess);
-  const { data: verifiedCardData } = previews.items.length
-    ? await supabase.from("experience_cards").select("*").in("id", previews.items)
-    : { data: [] as ExperienceCardRow[] };
-  const verifiedById = new Map(((verifiedCardData || []) as ExperienceCardRow[]).map((card) => [card.id, card]));
-  const publicCards = previews.items.map((cardId) => verifiedById.get(cardId)).filter((card): card is ExperienceCardRow => Boolean(card));
+    },
+  });
+  const previews = guideAssociationPreview(cardScan.items, fullAccess);
+  const publicCards: ExperienceCardRow[] = [];
+  for (let i = 0; i < previews.items.length; i += RELATED_LIMIT) {
+    const batch = previews.items.slice(i, i + RELATED_LIMIT).map((card) => card.id);
+    const { data, error } = await supabase.from("experience_cards").select("*").in("id", batch);
+    if (error) throw Error("Guide experience-card details could not be read");
+    const byId = new Map(((data || []) as ExperienceCardRow[]).map((card) => [card.id, card]));
+    for (const id of batch) { const card = byId.get(id); if (card) publicCards.push(card); }
+  }
   const recordPreviews = guideAssociationPreview(publicRecords, fullAccess);
   return {
     relatedArchives,
@@ -323,6 +328,22 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
   const [hasMoreCards, setHasMoreCards] = useState(false);
   const [hasMoreRecords, setHasMoreRecords] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [visibleCards, setVisibleCards] = useState(RELATED_LIMIT);
+  const [visibleRecords, setVisibleRecords] = useState(RELATED_LIMIT);
+  const [authRevision, setAuthRevision] = useState(0);
+  useEffect(() => {
+    if (typeof supabase.auth.onAuthStateChange !== "function") return;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "INITIAL_SESSION") return;
+      setHasCloudAccess(false);
+      setMemberContent(null);
+      setRelatedArchives([]);
+      setExperienceCards([]);
+      setRelatedRecords([]);
+      setAuthRevision((revision) => revision + 1);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
   useGuideInterestRefresh(offline ? null : userId, entry?.id, false, setSaved);
 
   useEffect(() => {
@@ -331,6 +352,8 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
 
     async function load() {
       setLoading(true);
+      setVisibleCards(RELATED_LIMIT);
+      setVisibleRecords(RELATED_LIMIT);
       if (offline) {
         const cached = offlineGuide ? {
           id,
@@ -418,7 +441,12 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
           .catch(() => ({ data: null })) : Promise.resolve({ data: null }),
       ]);
       if (memberResult.error) console.warn("load member guide content failed:", memberResult.error);
-      const fullContent = memberResult.error ? null : memberResult.data as PublicGuideContent | null;
+      const rawFull = memberResult.error ? null : memberResult.data;
+      const fullContent = rawFull && typeof rawFull === "object" && !Array.isArray(rawFull)
+        && Array.isArray((rawFull as PublicGuideContent).parameters)
+        && Array.isArray((rawFull as PublicGuideContent).sections)
+        && Array.isArray((rawFull as PublicGuideContent).cautions)
+        ? rawFull as PublicGuideContent : null;
       if (!cancelled) {
         setIsSignedIn(Boolean(user));
         setUserId(user?.id || null);
@@ -459,7 +487,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
     return () => {
       cancelled = true;
     };
-  }, [language, id, offline, offlineGuide, offlineSignedIn]);
+  }, [language, id, offline, offlineGuide, offlineSignedIn, authRevision]);
 
   const cachedEntry: PublicGuideEntry | null = offlineGuide ? {
       id,
@@ -741,10 +769,12 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
           offline ? <div className={styles.stateCard}>{language === "zh" ? "联网后查看经验卡" : "Connect to view experience cards"}</div> : (
             <>
               {experienceCards.length ? <section className={styles.relatedList}>
-                {experienceCards.map((card) => <ExperienceCardListCard
+                {experienceCards.slice(0, canReadFull ? visibleCards : undefined).map((card) => <ExperienceCardListCard
                   key={card.id} item={card} dateValue={card.published_at} showAuthor />)}
               </section> : <div className={styles.stateCard}>{copy.noExperienceCards}</div>}
               {hasMoreCards && !canReadFull ? <AccessNotice /> : null}
+              {canReadFull && experienceCards.length > visibleCards ? <button type="button" className={styles.saveButton}
+                onClick={() => setVisibleCards((n) => n + RELATED_LIMIT)}>{language === "zh" ? "加载更多经验卡" : "Load more experience cards"}</button> : null}
             </>
           )
         ) : offline ? (
@@ -752,7 +782,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
         ) : (
           <>
             {relatedRecords.length ? <section className={styles.relatedList}>
-              {relatedRecords.map((record) => (
+              {relatedRecords.slice(0, canReadFull ? visibleRecords : undefined).map((record) => (
                 <InternalLink key={record.id} href={`/archive/${record.archive_id}?mode=viewer`}
                   className={styles.sectionCard}>
                   <strong>{record.note?.trim() || (language === "zh" ? "查看公开种植记录" : "View public growing record")}</strong>
@@ -761,6 +791,8 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
               ))}
             </section> : <div className={styles.stateCard}>{language === "zh" ? "暂无关联的公开种植记录" : "No related public growing records"}</div>}
             {hasMoreRecords && !canReadFull ? <AccessNotice /> : null}
+            {canReadFull && relatedRecords.length > visibleRecords ? <button type="button" className={styles.saveButton}
+              onClick={() => setVisibleRecords((n) => n + RELATED_LIMIT)}>{language === "zh" ? "加载更多种植记录" : "Load more growing records"}</button> : null}
             {canReadFull && relatedArchives.length ? <PlantRelatedArchives archives={relatedArchives} /> : null}
           </>
         )}

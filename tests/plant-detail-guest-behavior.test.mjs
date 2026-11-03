@@ -69,8 +69,8 @@ test("a visitor sees the plant basic overview while Android auth never resolves"
   const props = { id: plantId };
   slot = 0;
   PlantDetailContent(props);
-  assert.equal(effects.length, 1);
-  effects[0]();
+  assert.equal(effects.length, 2); // auth-change protection plus basic plant loader
+  effects[1]();
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(calls, ["get_public_plant_catalog"]);
   assert.equal(states[3], "先从少量罗勒开始观察。");

@@ -78,8 +78,8 @@ test("a guest can render an ordinary guide's basic detail while Android auth loo
   const props = { id: guideId };
   slot = 0;
   GuideDetailView(props);
-  assert.equal(effects.length, 1);
-  effects[0]();
+  assert.equal(effects.length, 2); // auth-change protection plus public guide loader
+  effects[1]();
   await new Promise((resolve) => setImmediate(resolve));
   slot = 0;
   const rendered = GuideDetailView(props);
