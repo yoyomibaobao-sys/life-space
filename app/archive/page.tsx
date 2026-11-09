@@ -130,6 +130,10 @@ export default function ArchivePage() {
   const router = useRouter();
   const { language, t } = useLanguage();
   const loadingRef = useRef(false);
+  const ownerEpochRef = useRef(0);
+  const sessionOwnerRef = useRef<string | null>(null);
+  const initializedOwnerRef = useRef(false);
+  const [verifiedOwnerId, setVerifiedOwnerId] = useState<string | null>(null);
 
   const [ready, setReady] = useState(false);
   const [archives, setArchives] = useState<ArchiveItem[]>([]);
@@ -224,6 +228,9 @@ export default function ArchivePage() {
   }
 
   async function loadLocalArchives(ownerContext: LocalArchiveOwnerContext | null = currentOwnerContext) {
+    const epoch = ownerEpochRef.current;
+    const stillCurrent = () => epoch === ownerEpochRef.current && (ownerContext?.userId || null) === sessionOwnerRef.current;
+    if (!stillCurrent()) return;
     setLocalLoading(true);
     try {
       const [result, taxonomyItems, pendingSummaries, cloudCaches] = await Promise.all([
@@ -234,6 +241,7 @@ export default function ArchivePage() {
           ? listVisibleCloudOfflineArchiveSummaries(ownerContext).catch(() => [])
           : Promise.resolve([] as LocalArchiveSummary[]),
       ]);
+      if (!stillCurrent()) return;
       setLocalArchives(result.archives);
       setW5CloudCaches(cloudCaches);
       setLocalTaxonomyItems(taxonomyItems);
@@ -244,9 +252,9 @@ export default function ArchivePage() {
         ? "请重新连接 LifeSpace 本地数据文件夹；旧版本地项目仍可使用。"
         : "");
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : t.archive_workspace.read_local_failed);
+      if (stillCurrent()) setLocalError(err instanceof Error ? err.message : t.archive_workspace.read_local_failed);
     } finally {
-      setLocalLoading(false);
+      if (stillCurrent()) setLocalLoading(false);
     }
   }
 
@@ -274,8 +282,37 @@ export default function ArchivePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOwnerContext]);
 
+  function clearOwnerView(owner: LocalArchiveOwnerContext | null) {
+    setVerifiedOwnerId(null);
+    setCurrentOwnerContext(owner);
+    setArchives([]);
+    setGroupTags([]);
+    setSubTags([]);
+    setSpeciesList([]);
+    setMembership(null);
+    setMembershipFailed(false);
+    setSpaceProfile(null);
+    setExperienceCardCount(0);
+    setCloudCategoryDepths({ ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS });
+    setLocalCategoryDepths(getLocalArchiveCategoryDepths(owner?.userId));
+    setSystemNameCandidateMap(emptySystemNameCandidateMap);
+    setLocalArchives([]);
+    setLocalTaxonomyItems([]);
+    setPendingCloudSyncSummaries([]);
+    setW5CloudCaches([]);
+    setLocalUnownedCount(0);
+    setLocalHiddenOwnedByOtherCount(0);
+    setLocalError("");
+    setDeleteArchiveTarget(null);
+    setEditingPlantArchiveId(null);
+    setEditingSystemArchiveId(null);
+    setEditingLocalSystemArchiveId(null);
+  }
+
   async function loadData() {
     if (loadingRef.current) return;
+    const epoch = ownerEpochRef.current;
+    const stillCurrent = (id: string) => epoch === ownerEpochRef.current && sessionOwnerRef.current === id;
     loadingRef.current = true;
     setMembershipLoading(true);
     setMembershipFailed(false);
@@ -286,26 +323,27 @@ export default function ArchivePage() {
       } = await supabase.auth.getSession();
 
       const user = session?.user;
-      const ownerContext = user
-        ? { userId: user.id, email: user.email || null }
-        : null;
-      setCurrentOwnerContext(ownerContext);
-      setLocalCategoryDepths(getLocalArchiveCategoryDepths(user?.id));
-
-      if (!user) {
-        setArchives([]);
-        setGroupTags([]);
-        setSubTags([]);
-        setSpeciesList([]);
-        setMembership(null);
-        setExperienceCardCount(0);
-        setSpaceProfile(null);
+      if (epoch !== ownerEpochRef.current || (user?.id || null) !== sessionOwnerRef.current) return;
+      if (!user) return;
+      // Verify the signed-in user with Supabase, not only the local getSession snapshot.
+      const { data: serverAuth, error: authError } = await supabase.auth.getUser();
+      if (!stillCurrent(user.id)) return;
+      if (authError || serverAuth.user?.id !== user.id) {
+        setVerifiedOwnerId(null);
+        setMembershipFailed(true);
         return;
       }
+      const ownerContext = { userId: user.id, email: user.email || null };
+      setCurrentOwnerContext(ownerContext);
+      setLocalCategoryDepths(getLocalArchiveCategoryDepths(user.id));
+      setVerifiedOwnerId(user.id);
 
       try {
-        setCloudCategoryDepths(await getCloudArchiveCategoryDepths(user.id));
+        const depths = await getCloudArchiveCategoryDepths(user.id);
+        if (!stillCurrent(user.id)) return;
+        setCloudCategoryDepths(depths);
       } catch (settingsError) {
+        if (!stillCurrent(user.id)) return;
         console.error("load archive category settings error:", settingsError);
         setCloudCategoryDepths({ ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS });
       }
@@ -346,6 +384,7 @@ export default function ArchivePage() {
           .maybeSingle(),
       ]);
 
+      if (!stillCurrent(user.id)) return;
       const archivesData = archivesResult.error ? null : archivesResult.data;
       if (archivesResult.error) {
         console.error("load archives error:", archivesResult.error);
@@ -509,6 +548,8 @@ export default function ArchivePage() {
         };
       });
 
+      // Never apply a late response from the previous account.
+      if (!stillCurrent(user.id)) return;
       setArchives(enrichedArchives);
       setGroupTags((groupTagsData || []) as GroupTagItem[]);
       setSubTags((subTagsData || []) as SubTagItem[]);
@@ -530,14 +571,25 @@ export default function ArchivePage() {
       }
       setSpaceProfile((profileResult.data as SpaceProfile | null) || null);
     } catch {
-      setMembershipFailed(true);
+      if (ownerEpochRef.current === epoch) setMembershipFailed(true);
     } finally {
-      setMembershipLoading(false);
-      loadingRef.current = false;
+      if (ownerEpochRef.current === epoch) {
+        setMembershipLoading(false);
+        loadingRef.current = false;
+      }
     }
   }
 
+  function isVerifiedOwner(id?: string | null) {
+    return Boolean(verifiedOwnerId && verifiedOwnerId === sessionOwnerRef.current &&
+      currentOwnerContext?.userId === verifiedOwnerId && (id === undefined || id === verifiedOwnerId));
+  }
+
   function requireCloudWriteAccess() {
+    if (!isVerifiedOwner()) {
+      showToast(t.archive.cloud_read_only_action);
+      return false;
+    }
     if (canCreateMembershipContent(membership)) return true;
     showToast(t.archive.cloud_read_only_action);
     return false;
@@ -945,6 +997,7 @@ export default function ArchivePage() {
   }
 
   async function toggleArchivePublic(item: ArchiveItem) {
+    if (!isVerifiedOwner(item.user_id)) return;
     const newValue = !item.is_public;
     if (newValue && !requireCloudWriteAccess()) return;
     if (newValue && !window.confirm(t.archive_workspace.confirm_public_project)) return;
@@ -1030,11 +1083,12 @@ export default function ArchivePage() {
   }
 
   async function deleteArchive(item: ArchiveItem) {
+    if (!isVerifiedOwner(item.user_id)) return;
     setDeleteArchiveTarget(item);
   }
 
   async function confirmDeleteArchive() {
-    if (!deleteArchiveTarget || deletingArchiveId) return;
+    if (!deleteArchiveTarget || deletingArchiveId || !isVerifiedOwner(deleteArchiveTarget.user_id)) return;
 
     setDeletingArchiveId(deleteArchiveTarget.id);
     const trashed = await requestCloudTrash("archives", deleteArchiveTarget.id);
@@ -1102,35 +1156,43 @@ export default function ArchivePage() {
   }
 
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
+    const sourceParam = new URLSearchParams(window.location.search).get("source");
+    setActiveSource(isCapacitorAndroid() && sourceParam === "pending" ? "pending" : "cloud");
 
-    async function safeLoad() {
-      try {
-        const { data } = await supabase.auth.getUser();
-        const user = data.user;
-        const ownerContext = user
-          ? { userId: user.id, email: user.email || null }
-          : null;
-        const sourceParam = new URLSearchParams(window.location.search).get("source");
-
-        setActiveSource(
-          isCapacitorAndroid() && sourceParam === "pending" ? "pending" : "cloud"
-        );
-
-        if (!isMounted) return;
-        setCurrentOwnerContext(ownerContext);
-        await Promise.all([loadData(), loadLocalArchives(ownerContext)]);
-      } catch (error) {
-        console.error("loadData error:", error);
-      } finally {
-        if (isMounted) setReady(true);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      const user = session?.user || null;
+      const id = user?.id || null;
+      if (initializedOwnerRef.current && sessionOwnerRef.current === id) return;
+      initializedOwnerRef.current = true;
+      sessionOwnerRef.current = id;
+      const epoch = ++ownerEpochRef.current;
+      loadingRef.current = false;
+      const owner = user ? { userId: user.id, email: user.email || null } : null;
+      clearOwnerView(owner);
+      setReady(false);
+      setMembershipLoading(Boolean(id));
+      if (!id) {
+        setReady(true);
+        return;
       }
-    }
-
-    safeLoad();
+      // Do not call asynchronous Supabase APIs from inside the auth callback lock.
+      window.setTimeout(() => {
+        if (!mounted || epoch !== ownerEpochRef.current) return;
+        void Promise.all([loadData(), loadLocalArchives(owner)]).catch((error) => {
+          console.error("loadData error:", error);
+        }).finally(() => {
+          if (mounted && epoch === ownerEpochRef.current) setReady(true);
+        });
+      }, 0);
+    });
 
     return () => {
-      isMounted = false;
+      mounted = false;
+      ++ownerEpochRef.current;
+      initializedOwnerRef.current = false;
+      subscription.unsubscribe();
     };
   }, []);
 
@@ -1175,7 +1237,14 @@ export default function ArchivePage() {
     };
   }, [archives, currentOwnerContext?.userId, localArchives, speciesList]);
 
-  const archiveCount = archives.length;
+  const ownerReady = isVerifiedOwner();
+  const authorizedArchives = useMemo(
+    () => verifiedOwnerId && ownerReady
+      ? archives.filter((item) => item.user_id === verifiedOwnerId)
+      : [],
+    [archives, verifiedOwnerId, ownerReady]
+  );
+  const archiveCount = authorizedArchives.length;
   const archiveCategoryCounts = useMemo(() => {
     const counts: Record<ArchiveCategory, number> = {
       plant: 0,
@@ -1184,7 +1253,7 @@ export default function ArchivePage() {
       other: 0,
     };
 
-    archives.forEach((item) => {
+    authorizedArchives.forEach((item) => {
       const category =
         item.category === "plant" ||
         item.category === "system" ||
@@ -1196,7 +1265,7 @@ export default function ArchivePage() {
     });
 
     return counts;
-  }, [archives]);
+  }, [authorizedArchives]);
   const localArchiveCategoryCounts = useMemo(() => {
     const counts: Record<ArchiveCategory, number> = {
       plant: 0,
@@ -1225,12 +1294,12 @@ export default function ArchivePage() {
   const w5Workspace = useMemo(() => buildAndroidCloudWorkspace({
     local: localArchives,
     caches: w5CloudCaches,
-    live: w5Online ? archives : [],
+    live: w5Online ? authorizedArchives : [],
     pending: currentOwnerContext?.userId ? pendingCloudSyncSummaries.filter((summary) =>
       [...localArchives, ...w5CloudCaches].some((archive) => archive.id === summary.local_archive_id &&
         archive.local_owner_user_id === currentOwnerContext.userId)) : [],
     preferLive: w5Online,
-  }), [localArchives, w5CloudCaches, w5Online, archives, pendingCloudSyncSummaries, currentOwnerContext?.userId]);
+  }), [localArchives, w5CloudCaches, w5Online, authorizedArchives, pendingCloudSyncSummaries, currentOwnerContext?.userId]);
   const visibleCategoryCounts = useMemo(() => {
     const counts: Record<ArchiveCategory, number> = {
       plant: 0,
@@ -1286,7 +1355,7 @@ export default function ArchivePage() {
   const filteredArchives = useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase();
 
-    const filtered = archives.filter((item) => {
+    const filtered = authorizedArchives.filter((item) => {
       if (activeGroupTag && item.group_tag_id !== activeGroupTag) return false;
       if (activeSubTag && item.sub_tag_id !== activeSubTag) return false;
       if (
@@ -1314,7 +1383,7 @@ export default function ArchivePage() {
 
     return sorted.sort((a, b) => getArchiveSortTime(b, "created") - getArchiveSortTime(a, "created"));
   }, [
-    archives,
+    authorizedArchives,
     activeCategory,
     activeSubTag,
     activeGroupTag,
