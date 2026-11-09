@@ -7,7 +7,9 @@ import { PGlite } from "@electric-sql/pglite";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relativePath) => readFileSync(path.join(root, relativePath), "utf8");
-const migration = read("supabase/migrations/20261108130901_adm_record_moderation_minimal.sql");
+// Git checkout/archive may preserve CRLF in signed SQL; normalize only the
+// in-memory test fixture so preflight boundary assertions remain portable.
+const migration = read("supabase/migrations/20261108130901_adm_record_moderation_minimal.sql").replace(/\r\n/g, "\n");
 const preflightMatch = migration.match(/do \$adm_preflight\$([\s\S]*?)\$adm_preflight\$;/);
 if (!preflightMatch) throw new Error("ADM migration preflight block is missing");
 const legacyTrialGuard = preflightMatch[1].match(
