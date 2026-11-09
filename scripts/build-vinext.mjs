@@ -24,14 +24,22 @@ console.log(
 );
 
 const vinextCli = path.join(root, "node_modules/vinext/dist/cli.js");
-const build = spawnSync(process.execPath, [vinextCli, "build"], {
-  cwd: root,
-  env: process.env,
-  stdio: "inherit",
-});
-
-if (build.status !== 0) {
-  process.exit(build.status ?? 1);
+// On this Windows QA runner the CLI child process stalls before its build
+// banner. The same Vite multi-environment build succeeds in-process.
+// Keep the normal vinext CLI path unchanged on non-Windows environments.
+if (process.platform === "win32") {
+  console.log("vinext Windows local build: Vite multi-environment builder (vite.config.ts)");
+  const { createBuilder } = await import("vite");
+  await (await createBuilder({ logLevel: "info" })).buildApp();
+} else {
+  const build = spawnSync(process.execPath, [vinextCli, "build"], {
+    cwd: root,
+    env: process.env,
+    stdio: "inherit",
+  });
+  if (build.status !== 0) {
+    process.exit(build.status ?? 1);
+  }
 }
 
 const bundle = assertVinextClientSupabaseBundle({
