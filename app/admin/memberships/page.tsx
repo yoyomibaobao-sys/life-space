@@ -9,8 +9,8 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
-import AdminTrialCleanupPreview from "@/components/admin/AdminTrialCleanupPreview";
 import AdminBehaviorPermissions from "@/components/admin/AdminBehaviorPermissions";
+import AdminMembershipCapacity, { type EffectiveMembershipMetrics } from "@/components/admin/AdminMembershipCapacity";
 import {
   formatMembershipDate,
   formatStorageBytes,
@@ -44,25 +44,6 @@ type AdminMembershipRow = {
   record_count: number | string | null;
 };
 
-type CloudTrialStatus = {
-  internal_test_account_count: number | string | null;
-  formal_account_count: number | string | null;
-  trial_claim_count: number | string | null;
-  active_trial_count: number | string | null;
-  handling_period_count: number | string | null;
-  cleanup_due_count: number | string | null;
-  trial_allowance_bytes: number | string | null;
-  trial_duration_days: number | string | null;
-  handling_period_days: number | string | null;
-  platform_storage_bytes: number | string | null;
-  unrealized_trial_allowance_bytes: number | string | null;
-  projected_storage_bytes: number | string | null;
-  platform_storage_pause_bytes: number | string | null;
-  trial_claims_enabled: boolean | null;
-  trial_claims_paused: boolean | null;
-  pause_reason: string | null;
-};
-
 type MembershipPaymentRow = {
   id: string;
   user_id: string;
@@ -79,6 +60,15 @@ type MembershipPaymentRow = {
   created_by: string | null;
   created_at: string | null;
   updated_at: string | null;
+  order_number: string | null;
+  provider_order_id: string | null;
+  provider_capture_id: string | null;
+  provider_order_created_at: string | null;
+  provider_paid_at: string | null;
+  expires_at: string | null;
+  close_reason: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
 };
 
 type PendingPaymentQueueRow = {
@@ -129,7 +119,7 @@ type MembershipRefundQueueRow = {
   service_ends_at: string | null;
 };
 
-type AdminOperationsMetrics = {
+type AdminOperationsMetrics = EffectiveMembershipMetrics & {
   page_views_today: number | string | null;
   page_views_period: number | string | null;
   visitors_7d: number | string | null;
@@ -175,6 +165,12 @@ type AdminOperationsDashboard = {
   storage_leaders: StorageLeaderRow[];
 };
 
+type AdminTodoCounts = {
+  reports: number | null;
+  payments: number | null;
+  refunds: number | null;
+};
+
 type AccountDeletionAuditRow = {
   id: string;
   target_user_id: string;
@@ -188,8 +184,8 @@ type AccountDeletionAuditRow = {
   error_code: string | null;
 };
 
-type PlanKey = "trial" | "basic" | "large" | "seller" | "admin";
-type PaymentPlanKey = Exclude<PlanKey, "trial">;
+type PlanKey = "free" | "trial" | "basic" | "large" | "seller" | "admin";
+type PaymentPlanKey = "basic";
 type PaymentCurrency = "CNY" | "USD";
 type PaymentMethod = "wechat" | "alipay" | "paypal" | "manual" | "other";
 
@@ -201,40 +197,12 @@ type PlanPreset = {
 };
 
 const PLAN_PRESETS: PlanPreset[] = [
-  {
-    key: "trial",
-    storageLimitBytes: 30_000_000,
-    baseMarketPostLimit: 3,
-    paidMonths: null,
-  },
-  {
-    key: "basic",
-    storageLimitBytes: 1_000_000_000,
-    baseMarketPostLimit: 30,
-    paidMonths: 12,
-  },
-  {
-    key: "large",
-    storageLimitBytes: 10_000_000_000,
-    baseMarketPostLimit: 20,
-    paidMonths: 12,
-  },
-  {
-    key: "seller",
-    storageLimitBytes: 10_000_000_000,
-    baseMarketPostLimit: 100,
-    paidMonths: 12,
-  },
-  {
-    key: "admin",
-    storageLimitBytes: 20_000_000_000,
-    baseMarketPostLimit: 999,
-    paidMonths: 120,
-  },
+  {key:"free",storageLimitBytes:30_000_000,baseMarketPostLimit:5,paidMonths:null},
+  {key:"basic",storageLimitBytes:1_000_000_000,baseMarketPostLimit:30,paidMonths:12},
 ];
 
 const PAYMENT_PLAN_OPTIONS = PLAN_PRESETS.filter(
-  (preset): preset is PlanPreset & { key: PaymentPlanKey } => preset.key !== "trial"
+  (preset): preset is PlanPreset & { key: PaymentPlanKey } => preset.key === "basic"
 );
 
 function getAdminMembershipStatusLabel(
@@ -243,13 +211,6 @@ function getAdminMembershipStatusLabel(
 ) {
   if (status === "canceled") return getTranslations(language).admin_memberships.deleted;
   return getMembershipStatusLabel(status, language);
-}
-
-function getSignupTrialPauseLabel(reason: string | null | undefined, language: Language) {
-  const copy = getTranslations(language).admin_memberships;
-  if (reason === "disabled") return copy.pause_disabled;
-  if (reason === "storage_safety_threshold") return copy.pause_storage;
-  return copy.grants_available;
 }
 
 function canDeleteMembership(row: AdminMembershipRow | null, currentUserId: string) {
@@ -277,6 +238,22 @@ function formatAdminCount(value: number | string | null | undefined, language: L
     : "0";
 }
 
+function parseAdminCount(value: unknown): number | null {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  if (candidate === null || typeof candidate === "undefined") return null;
+  const count = Number(candidate);
+  return Number.isFinite(count) && count >= 0 ? count : null;
+}
+
+function formatOptionalAdminCount(
+  value: number | string | null | undefined,
+  language: Language
+) {
+  return value === null || typeof value === "undefined"
+    ? "—"
+    : formatAdminCount(value, language);
+}
+
 function getDefaultPaymentAmount(plan: PaymentPlanKey, currency: PaymentCurrency) {
   if (plan === "basic") return currency === "CNY" ? 64 : 8;
   return 0;
@@ -284,7 +261,7 @@ function getDefaultPaymentAmount(plan: PaymentPlanKey, currency: PaymentCurrency
 
 function getPlanPresetLabel(plan: PlanKey, language: Language) {
   const copy = getTranslations(language).admin_memberships;
-  if (plan === "trial") return copy.plan_trial;
+  if (plan === "free" || plan === "trial") return language==="zh" ? "普通注册用户（Free）" : "Registered user (Free)";
   if (plan === "basic") return copy.plan_basic;
   if (plan === "large") return copy.plan_large;
   if (plan === "seller") return copy.plan_seller;
@@ -293,7 +270,7 @@ function getPlanPresetLabel(plan: PlanKey, language: Language) {
 
 function getPlanPresetNote(plan: PlanKey, language: Language) {
   const copy = getTranslations(language).admin_memberships;
-  if (plan === "trial") return copy.plan_trial_note;
+  if (plan === "free" || plan === "trial") return language==="zh" ? "永久30MB · 集市5条" : "Permanent 30MB · 5 marketplace posts";
   if (plan === "basic") return copy.plan_basic_note;
   if (plan === "large") return copy.plan_large_note;
   if (plan === "seller") return copy.plan_seller_note;
@@ -322,6 +299,7 @@ function getPaymentStatusLabel(status: string | null | undefined, language: Lang
   if (status === "confirmed") return copy.status_confirmed;
   if (status === "refunded") return copy.status_refunded;
   if (status === "canceled") return copy.status_canceled;
+  if (status === "expired") return language === "zh" ? "已过期" : "Expired";
   return status || copy.not_recorded;
 }
 
@@ -396,7 +374,7 @@ function buildPaymentReference(
 }
 
 function getPreset(plan: string | null | undefined) {
-  return PLAN_PRESETS.find((item) => item.key === plan) || PLAN_PRESETS[1];
+  return PLAN_PRESETS.find((item) => item.key === plan) || PLAN_PRESETS[0];
 }
 
 function normalizeRows(data: unknown): AdminMembershipRow[] {
@@ -484,9 +462,6 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
   const [viewportWidth, setViewportWidth] = useState(1200);
   const [keyword, setKeyword] = useState("");
   const [rows, setRows] = useState<AdminMembershipRow[]>([]);
-  const [rolloutStatus, setRolloutStatus] = useState<CloudTrialStatus | null>(null);
-  const [rolloutLoading, setRolloutLoading] = useState(false);
-  const [rolloutError, setRolloutError] = useState("");
   const [selected, setSelected] = useState<AdminMembershipRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminMembershipRow | null>(null);
   const [deleteSaving, setDeleteSaving] = useState(false);
@@ -517,6 +492,13 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
     useState<AdminOperationsDashboard | null>(null);
   const [operationsLoading, setOperationsLoading] = useState(false);
   const [operationsError, setOperationsError] = useState("");
+  const [todoCounts, setTodoCounts] = useState<AdminTodoCounts>({
+    reports: null,
+    payments: null,
+    refunds: null,
+  });
+  const [todoLoading, setTodoLoading] = useState(false);
+  const [todoError, setTodoError] = useState("");
   const [deletionAuditRows, setDeletionAuditRows] = useState<AccountDeletionAuditRow[]>([]);
   const [deletionAuditLoading, setDeletionAuditLoading] = useState(false);
   const [accountDeleteTarget, setAccountDeleteTarget] =
@@ -589,7 +571,6 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
       "refund-review",
       "capacity",
       "account-closures",
-      "trial-cleanup",
     ];
     const sections = sectionIds
       .map((id) => document.getElementById(id))
@@ -631,28 +612,6 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
     setAppliedKeyword(searchKeyword.trim());
     setSelected((previous) => previous ? nextRows.find((row) => row.user_id === previous.user_id) || null : null);
     setLoading(false);
-  }
-
-  async function loadSignupRolloutStatus() {
-    setRolloutLoading(true);
-    setRolloutError("");
-
-    const { data, error } = await supabase.rpc(
-      "admin_get_cloud_trial_status"
-    );
-
-    if (error) {
-      logSupabaseError("load signup rollout status error:", error);
-      setRolloutStatus(null);
-      setRolloutError(
-        describeSupabaseError(error, language) || t.admin_memberships.read_rollout_failed
-      );
-      setRolloutLoading(false);
-      return;
-    }
-
-    setRolloutStatus(firstRpcRow<CloudTrialStatus>(data));
-    setRolloutLoading(false);
   }
 
   async function loadPendingPaymentQueue() {
@@ -708,6 +667,39 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
     }
 
     setOperationsLoading(false);
+  }
+
+  async function loadAdminTodoCounts() {
+    setTodoLoading(true);
+    setTodoError("");
+    try {
+      const [reports, payments, refunds] = await Promise.all([
+        supabase.rpc("admin_get_support_submission_queue_count"),
+        supabase.rpc("admin_get_membership_payment_queue_count"),
+        supabase.rpc("admin_get_membership_refund_queue_count"),
+      ]);
+      if (reports.error) logSupabaseError("load safety report todo count error:", reports.error);
+      if (payments.error) logSupabaseError("load payment todo count error:", payments.error);
+      if (refunds.error) logSupabaseError("load refund todo count error:", refunds.error);
+      setTodoCounts({
+        reports: reports.error ? null : parseAdminCount(reports.data),
+        payments: payments.error ? null : parseAdminCount(payments.data),
+        refunds: refunds.error ? null : parseAdminCount(refunds.data),
+      });
+      if (reports.error || payments.error || refunds.error) {
+        setTodoError(language === "zh"
+          ? "部分待办数量读取失败；“—”表示未能读取，不代表数量为0。"
+          : "Some task counts could not be loaded. “—” means unavailable, not zero.");
+      }
+    } catch (error) {
+      logSupabaseError("load admin todo counts error:", error);
+      setTodoCounts({ reports: null, payments: null, refunds: null });
+      setTodoError(language === "zh"
+        ? "待办数量暂时无法读取；请刷新重试。"
+        : "Task counts are unavailable. Refresh to retry.");
+    } finally {
+      setTodoLoading(false);
+    }
   }
 
   async function loadAccountDeletionAudits() {
@@ -779,6 +771,7 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
         loadPendingPaymentQueue(),
         loadRows(keyword),
         loadOperationsDashboard(),
+        loadAdminTodoCounts(),
       ]);
     }
     setPendingPaymentActionId(null);
@@ -804,7 +797,11 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
       showToast(t.admin_memberships.request_payment_update_failed);
     } else {
       showToast(t.admin_memberships.request_payment_update_success);
-      await Promise.all([loadPendingPaymentQueue(), loadOperationsDashboard()]);
+      await Promise.all([
+        loadPendingPaymentQueue(),
+        loadOperationsDashboard(),
+        loadAdminTodoCounts(),
+      ]);
     }
     setPendingPaymentActionId(null);
   }
@@ -814,6 +811,7 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
       loadRefundQueue(),
       loadRows(keyword),
       loadOperationsDashboard(),
+      loadAdminTodoCounts(),
     ];
     if (selected?.user_id === userId) tasks.push(loadPaymentRows(userId));
     await Promise.all(tasks);
@@ -921,9 +919,8 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
       .from("membership_payments")
       .select("*")
       .eq("user_id", userId)
-      .in("status", ["confirmed", "refunded", "canceled"])
-      .order("paid_at", { ascending: false })
-      .limit(10);
+      .order("created_at", { ascending: false })
+      .limit(20);
 
     if (error) {
       logSupabaseError("load membership payments error:", error);
@@ -987,8 +984,8 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
           loadPendingPaymentQueue(),
           loadRefundQueue(),
           loadRows(""),
-          loadSignupRolloutStatus(),
           loadOperationsDashboard(),
+          loadAdminTodoCounts(),
           loadAccountDeletionAudits(),
         ]);
       } else {
@@ -1008,7 +1005,7 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
 
     const nextPlan = getPreset(selected.plan).key;
     const preset = getPreset(nextPlan);
-    const nextPaymentPlan = nextPlan === "trial" ? "basic" : (nextPlan as PaymentPlanKey);
+    const nextPaymentPlan: PaymentPlanKey = "basic";
     const today = new Date().toISOString().slice(0, 10);
 
     setPlan(nextPlan);
@@ -1034,9 +1031,8 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
   }, [selected]);
 
   const operationsMetrics = operationsDashboard?.metrics || null;
-  const openRefundCount = refundRows.filter((row) =>
-    row.status === "submitted" || row.status === "approved_pending_refund"
-  ).length;
+  const openRefundCount = todoCounts.refunds;
+  const pendingPaymentCount = todoCounts.payments;
   const maxDailyPageViews = Math.max(
     1,
     ...(operationsDashboard?.daily_traffic || []).map((item) =>
@@ -1045,12 +1041,10 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
   );
   const platformStorageBytes = Number(
     operationsMetrics?.platform_storage_bytes ??
-      rolloutStatus?.platform_storage_bytes ??
       0
   );
   const platformStorageLimitBytes = Number(
     operationsMetrics?.platform_storage_pause_bytes ??
-      rolloutStatus?.platform_storage_pause_bytes ??
       0
   );
   const platformStoragePercent = platformStorageLimitBytes
@@ -1059,13 +1053,21 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
 
   function handleApplyPreset(nextPlan: PlanKey) {
     const preset = getPreset(nextPlan);
-    const nextPaidUntil = preset.paidMonths ? addMonths(new Date(), preset.paidMonths).toISOString().slice(0, 10) : "";
+    const currentPaidUntil = selected?.paid_until ? new Date(selected.paid_until) : null;
+    const renewalBase = currentPaidUntil
+      && Number.isFinite(currentPaidUntil.getTime())
+      && currentPaidUntil.getTime() > Date.now()
+      ? currentPaidUntil
+      : new Date();
+    const nextPaidUntil = preset.paidMonths
+      ? addMonths(renewalBase, preset.paidMonths).toISOString().slice(0, 10)
+      : "";
     setPlan(nextPlan);
     setStorageLimitBytes(String(preset.storageLimitBytes));
     setBaseMarketPostLimit(String(preset.baseMarketPostLimit));
     setPaidUntilDate(nextPaidUntil);
 
-    if (nextPlan !== "trial") {
+    if (nextPlan === "basic") {
       const nextPaymentPlan = nextPlan as PaymentPlanKey;
       setPaymentPlan(nextPaymentPlan);
       setPaymentAmount(String(getDefaultPaymentAmount(nextPaymentPlan, paymentCurrency)));
@@ -1075,7 +1077,15 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
 
   function handlePaymentPlanChange(nextPlan: PaymentPlanKey) {
     const preset = getPreset(nextPlan);
-    const nextPaidUntil = preset.paidMonths ? addMonths(new Date(), preset.paidMonths).toISOString().slice(0, 10) : "";
+    const currentPaidUntil = selected?.paid_until ? new Date(selected.paid_until) : null;
+    const renewalBase = currentPaidUntil
+      && Number.isFinite(currentPaidUntil.getTime())
+      && currentPaidUntil.getTime() > Date.now()
+      ? currentPaidUntil
+      : new Date();
+    const nextPaidUntil = preset.paidMonths
+      ? addMonths(renewalBase, preset.paidMonths).toISOString().slice(0, 10)
+      : "";
 
     setPaymentPlan(nextPlan);
     setPaymentAmount(String(getDefaultPaymentAmount(nextPlan, paymentCurrency)));
@@ -1119,7 +1129,7 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
       return;
     }
 
-    if (plan !== "trial" && !paidUntilIso) {
+    if (plan !== "free" && plan !== "trial" && !paidUntilIso) {
       showToast(t.admin_memberships.enter_paid_until);
       return;
     }
@@ -1140,7 +1150,7 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
     const { data, error } = await supabase.rpc("admin_update_user_membership_json", {
       p_user_id: selected.user_id,
       p_plan: plan,
-      p_paid_until: plan === "trial" ? null : paidUntilIso,
+      p_paid_until: plan === "free" || plan === "trial" ? null : paidUntilIso,
       p_storage_limit_bytes: safeStorageLimit,
       p_base_market_post_limit: safeMarketLimit,
     });
@@ -1325,7 +1335,6 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
       setAccountDeleteAcknowledged(false);
       await Promise.all([
         loadRows(keyword),
-        loadSignupRolloutStatus(),
         loadPendingPaymentQueue(),
         loadOperationsDashboard(),
         loadAccountDeletionAudits(),
@@ -1511,7 +1520,11 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
             {t.admin_memberships.intro}
           </p>
         </div>
-        <Link href="/membership" style={secondaryButtonStyle}>{t.admin_memberships.view_membership_page}</Link>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <Link href="/admin/guides" style={secondaryButtonStyle}>{language === "zh" ? "关联指引审核" : "Linked guide review"}</Link>
+          <Link href="/admin/support#audit" style={secondaryButtonStyle}>{language==="zh"?"管理员操作记录":"Administrator action history"}</Link>
+          <Link href="/membership" style={secondaryButtonStyle}>{t.admin_memberships.view_membership_page}</Link>
+        </div>
       </section>
 
       {!isMobileViewport ? <nav
@@ -1525,7 +1538,6 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
         <a href="#payment-review" style={adminAnchorLinkStyle(activeAdminSection === "payment-review")} onClick={() => setActiveAdminSection("payment-review")}>{t.admin_memberships.nav_payments}</a>
         <a href="#refund-review" style={adminAnchorLinkStyle(activeAdminSection === "refund-review")} onClick={() => setActiveAdminSection("refund-review")}>{t.admin_memberships.nav_refunds}</a>
         <a href="#capacity" style={adminAnchorLinkStyle(activeAdminSection === "capacity")} onClick={() => setActiveAdminSection("capacity")}>{t.admin_memberships.nav_capacity}</a>
-        <a href="#trial-cleanup" style={adminAnchorLinkStyle(activeAdminSection === "trial-cleanup")} onClick={() => setActiveAdminSection("trial-cleanup")}>{language === "zh" ? "过期云端资料清理" : "Expired trial cleanup"}</a>
         <a href="#account-closures" style={adminAnchorLinkStyle(activeAdminSection === "account-closures")} onClick={() => setActiveAdminSection("account-closures")}>{t.admin_memberships.nav_account_closures}</a>
       </nav> : null}
 
@@ -1548,9 +1560,9 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
             style={secondaryButtonStyle}
             onClick={() => void Promise.all([
               loadOperationsDashboard(),
-              loadSignupRolloutStatus(),
               loadPendingPaymentQueue(),
               loadRefundQueue(),
+              loadAdminTodoCounts(),
             ])}
             disabled={operationsLoading}
           >
@@ -1561,6 +1573,59 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
         </div>
 
         {operationsError ? <p style={errorStyle}>{operationsError}</p> : null}
+
+        <div style={{ marginBottom: 9 }}>
+          <h3 style={{ ...subsectionTitleStyle, fontSize: 16 }}>
+            {language === "zh" ? "管理待办" : "Management tasks"}
+          </h3>
+          <p style={smallTextStyle}>
+            {language === "zh" ? "数量来自管理员专用服务端统计，点击进入对应处理页面。" : "Counts come from admin-only server queries. Open a task to review it."}
+          </p>
+        </div>
+        {todoError ? <p role="alert" style={errorStyle}>{todoError}</p> : null}
+        <div style={currentOperationsGridStyle}>
+          <Link href="/admin/support" style={{
+            ...metricCardStyle((todoCounts.reports || 0) > 0 ? "attention" : "normal"),
+            display: "flex", flexDirection: "column", justifyContent: "space-between",
+            minHeight: 92, textDecoration: "none", color: "inherit",
+          }}>
+            <div style={metricLabelStyle}>{language === "zh" ? "待处理安全举报" : "Open safety reports"}</div>
+            <div style={metricValueStyle}>{todoLoading ? "…" : formatOptionalAdminCount(todoCounts.reports, language)}</div>
+            <div style={metricHintStyle}>{language === "zh" ? "项目与集市信息举报" : "Projects and marketplace reports"}</div>
+          </Link>
+          <a href="#payment-review" style={{
+            ...metricCardStyle((todoCounts.payments || 0) > 0 ? "attention" : "normal"),
+            display: "flex", flexDirection: "column", justifyContent: "space-between",
+            minHeight: 92, textDecoration: "none", color: "inherit",
+          }}>
+            <div style={metricLabelStyle}>{language === "zh" ? "待确认人工付款" : "Manual payments to review"}</div>
+            <div style={metricValueStyle}>{todoLoading ? "…" : formatOptionalAdminCount(todoCounts.payments, language)}</div>
+            <div style={metricHintStyle}>{language === "zh" ? "支付宝、微信等凭证审核" : "Alipay, WeChat and other proof reviews"}</div>
+          </a>
+          <a href="#refund-review" style={{
+            ...metricCardStyle((todoCounts.refunds || 0) > 0 ? "attention" : "normal"),
+            display: "flex", flexDirection: "column", justifyContent: "space-between",
+            minHeight: 92, textDecoration: "none", color: "inherit",
+          }}>
+            <div style={metricLabelStyle}>{language === "zh" ? "待处理退款" : "Refunds to review"}</div>
+            <div style={metricValueStyle}>{todoLoading ? "…" : formatOptionalAdminCount(todoCounts.refunds, language)}</div>
+            <div style={metricHintStyle}>{language === "zh" ? "包含待审核及待外部退款确认" : "Includes review and external-refund confirmation"}</div>
+          </a>
+          <a href="#account-closures" style={{
+            ...metricCardStyle(Number(operationsMetrics?.account_deletion_failures || 0) > 0 ? "danger" : "normal"),
+            display: "flex", flexDirection: "column", justifyContent: "space-between",
+            minHeight: 92, textDecoration: "none", color: "inherit",
+          }}>
+            <div style={metricLabelStyle}>{language === "zh" ? "账号注销失败记录" : "Failed account closures"}</div>
+            <div style={metricValueStyle}>{formatOptionalAdminCount(operationsMetrics?.account_deletion_failures, language)}</div>
+            <div style={metricHintStyle}>{language === "zh" ? "查看最近30条记录及错误原因" : "Review the latest 30 records and reasons"}</div>
+          </a>
+        </div>
+        <p style={smallTextStyle}>
+          {language === "zh"
+            ? "会员及容量统计使用服务端 Free/Plus 权益口径；Free闲置资料清理仍缺通知送达与资格记录，本页不提供清理执行入口。"
+            : "Membership and capacity statistics use server Free/Plus benefits. Free idle-data cleanup still lacks notice-delivery and eligibility records; this page has no cleanup execution entry."}
+        </p>
 
         <div style={currentOperationsGridStyle}>
           <MetricCard
@@ -1583,21 +1648,7 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
             value={formatAdminCount(operationsMetrics?.cloud_members, language)}
             hint={t.admin_memberships.paid_members_hint}
           />
-          <MetricCard
-            label={t.admin_memberships.awaiting_payment_confirmation}
-            value={formatAdminCount(
-              operationsMetrics?.payments_awaiting_confirmation ?? pendingPaymentRows.length,
-              language
-            )}
-            hint={t.admin_memberships.payment_queue_hint}
-            tone={Number(operationsMetrics?.payments_awaiting_confirmation || pendingPaymentRows.length) > 0 ? "attention" : "normal"}
-          />
-          <MetricCard
-            label={t.admin_memberships.awaiting_refunds}
-            value={formatAdminCount(openRefundCount, language)}
-            hint={t.admin_memberships.refund_queue_hint}
-            tone={openRefundCount > 0 ? "attention" : "normal"}
-          />
+
           <MetricCard
             label={t.admin_memberships.apk_downloads}
             value={formatAdminCount(operationsMetrics?.apk_download_total, language)}
@@ -1705,7 +1756,7 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
         id="payment-review"
         style={{
           ...currentCardStyle,
-          ...pendingPaymentQueueStyle(pendingPaymentRows.length > 0),
+          ...pendingPaymentQueueStyle((pendingPaymentCount ?? 0) > 0),
           marginBottom: isMobileViewport ? 12 : 16,
           scrollMarginTop: adminSectionScrollMarginTop,
         }}
@@ -1714,15 +1765,15 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
           <div>
             <div style={sectionLabelStyle}>{t.admin_memberships.payment_review_eyebrow}</div>
             <h2 style={sectionTitleStyle}>
-              {t.admin_memberships.pending_payment_title}（{pendingPaymentRows.length}）
+              {t.admin_memberships.pending_payment_title}（{formatOptionalAdminCount(pendingPaymentCount, language)}）
             </h2>
             <p style={smallTextStyle}>{t.admin_memberships.pending_payment_intro}</p>
           </div>
           <button
             type="button"
             style={secondaryButtonStyle}
-            onClick={() => void loadPendingPaymentQueue()}
-            disabled={pendingPaymentLoading}
+            onClick={() => void Promise.all([loadPendingPaymentQueue(), loadAdminTodoCounts()])}
+            disabled={pendingPaymentLoading || todoLoading}
           >
             {pendingPaymentLoading ? t.admin_memberships.reading : t.admin_memberships.refresh_queue}
           </button>
@@ -1787,7 +1838,7 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
         id="refund-review"
         style={{
           ...currentCardStyle,
-          ...refundQueueStyle(openRefundCount > 0),
+          ...refundQueueStyle((openRefundCount ?? 0) > 0),
           marginBottom: isMobileViewport ? 12 : 16,
           scrollMarginTop: adminSectionScrollMarginTop,
         }}
@@ -1796,15 +1847,15 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
           <div>
             <div style={sectionLabelStyle}>{t.admin_memberships.refund_review_eyebrow}</div>
             <h2 style={sectionTitleStyle}>
-              {t.admin_memberships.refund_review_title}（{openRefundCount}）
+              {t.admin_memberships.refund_review_title}（{formatOptionalAdminCount(openRefundCount, language)}）
             </h2>
             <p style={smallTextStyle}>{t.admin_memberships.refund_review_intro}</p>
           </div>
           <button
             type="button"
             style={secondaryButtonStyle}
-            onClick={() => void loadRefundQueue()}
-            disabled={refundLoading}
+            onClick={() => void Promise.all([loadRefundQueue(), loadAdminTodoCounts()])}
+            disabled={refundLoading || todoLoading}
           >
             {refundLoading ? t.admin_memberships.reading : t.admin_memberships.refresh_refunds}
           </button>
@@ -1922,93 +1973,7 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
           scrollMarginTop: adminSectionScrollMarginTop,
         }}
       >
-        <div style={detailTopStyle}>
-          <div>
-            <div style={sectionLabelStyle}>{t.admin_memberships.rollout_eyebrow}</div>
-            <h2 style={sectionTitleStyle}>{t.admin_memberships.rollout_title}</h2>
-            <p style={smallTextStyle}>
-              {t.admin_memberships.rollout_intro}
-            </p>
-          </div>
-          <span style={pillStyle}>
-            {rolloutLoading
-              ? t.admin_memberships.reading
-              : rolloutStatus?.trial_claims_paused
-                ? getSignupTrialPauseLabel(rolloutStatus.pause_reason, language)
-                : t.admin_memberships.grants_available}
-          </span>
-        </div>
-
-        {rolloutError ? <p style={errorStyle}>{rolloutError}</p> : null}
-
-        {rolloutStatus ? (
-          <div style={currentSummaryGridStyle}>
-            <InfoItem
-              label={t.admin_memberships.formal_accounts}
-              value={`${Number(rolloutStatus.formal_account_count || 0)}${
-                language === "en" ? " " : ""
-              }${t.admin_memberships.account_unit}`}
-            />
-            <InfoItem
-              label={t.admin_memberships.internal_accounts}
-              value={`${Number(rolloutStatus.internal_test_account_count || 0)}${
-                language === "en" ? " " : ""
-              }${t.admin_memberships.account_unit}`}
-            />
-            <InfoItem
-              label={t.admin_memberships.trial_slots}
-              value={`${Number(rolloutStatus.trial_claim_count || 0)}${
-                language === "en" ? " " : ""
-              }${t.admin_memberships.account_unit}`}
-            />
-            <InfoItem
-              label={t.admin_memberships.trial_window_remaining}
-              value={`${Number(rolloutStatus.active_trial_count || 0)}${
-                language === "en" ? " " : ""
-              }${t.admin_memberships.account_unit}`}
-            />
-            <InfoItem
-              label={t.admin_memberships.handling_trials}
-              value={`${Number(rolloutStatus.handling_period_count || 0)}${
-                language === "en" ? " " : ""
-              }${t.admin_memberships.account_unit}`}
-            />
-            <InfoItem
-              label={t.admin_memberships.cleanup_due_trials}
-              value={`${Number(rolloutStatus.cleanup_due_count || 0)}${
-                language === "en" ? " " : ""
-              }${t.admin_memberships.account_unit}`}
-            />
-            <InfoItem
-              label={t.admin_memberships.allowance_per_user}
-              value={formatStorageBytes(Number(rolloutStatus.trial_allowance_bytes || 0))}
-            />
-            <InfoItem
-              label={t.admin_memberships.trial_duration}
-              value={`${Number(rolloutStatus.trial_duration_days || 0)}${
-                language === "en" ? " " : ""
-              }${t.admin_memberships.day_unit}`}
-            />
-            <InfoItem
-              label={t.admin_memberships.handling_duration}
-              value={`${Number(rolloutStatus.handling_period_days || 0)}${
-                language === "en" ? " " : ""
-              }${t.admin_memberships.day_unit}`}
-            />
-            <InfoItem
-              label={t.admin_memberships.platform_storage}
-              value={`${formatStorageBytes(Number(rolloutStatus.platform_storage_bytes || 0))} / ${formatStorageBytes(Number(rolloutStatus.platform_storage_pause_bytes || 0))}`}
-            />
-            <InfoItem
-              label={t.admin_memberships.unused_allowance}
-              value={formatStorageBytes(Number(rolloutStatus.unrealized_trial_allowance_bytes || 0))}
-            />
-            <InfoItem
-              label={t.admin_memberships.safety_budget}
-              value={`${formatStorageBytes(Number(rolloutStatus.projected_storage_bytes || 0))} / ${formatStorageBytes(Number(rolloutStatus.platform_storage_pause_bytes || 0))}`}
-            />
-          </div>
-        ) : null}
+        <AdminMembershipCapacity metrics={operationsMetrics} language={language} loading={operationsLoading} error={operationsError} />
 
         {(operationsDashboard?.storage_leaders || []).length > 0 ? (
           <div style={capacityLeaderBlockStyle}>
@@ -2033,24 +1998,11 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
         <button
           type="button"
           style={secondaryButtonStyle}
-          onClick={() => void loadSignupRolloutStatus()}
-          disabled={rolloutLoading}
+          onClick={() => void loadOperationsDashboard()}
+          disabled={operationsLoading}
         >
-          {t.admin_memberships.reload_rollout}
+          {language === "zh" ? "重新读取会员统计" : "Refresh membership statistics"}
         </button>
-      </section>
-
-      <section
-        id="trial-cleanup"
-        style={{
-          ...currentCardStyle,
-          marginBottom: isMobileViewport ? 12 : 16,
-          scrollMarginTop: adminSectionScrollMarginTop,
-        }}>
-        <h2 style={sectionTitleStyle}>
-          {language === "zh" ? "过期云端资料清理" : "Expired cloud trial cleanup"}
-        </h2>
-        <AdminTrialCleanupPreview language={language} />
       </section>
 
       <section
@@ -2195,10 +2147,6 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
                     value={getMembershipPlanLabel(selected.plan, language)}
                   />
                   <InfoItem
-                    label={t.admin_memberships.trial_expires}
-                    value={formatMembershipDate(selected.trial_ends_at, language)}
-                  />
-                  <InfoItem
                     label={t.admin_memberships.paid_expires}
                     value={formatMembershipDate(selected.paid_until, language)}
                   />
@@ -2214,6 +2162,14 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
                     value={`${Number(selected.base_market_post_limit || 0)} ${t.admin_memberships.post_unit}`}
                   />
                 </div>
+
+                {!selected.plan && Number(selected.storage_limit_bytes || 0) === 0 && Number(selected.market_post_limit || 0) === 0 ? (
+                  <p role="status" style={refundWorkflowNoticeStyle}>
+                    {language === "zh"
+                      ? "Free权益差异：当前账号没有会员记录，现有服务端查询返回0容量和0条集市额度；与Free永久30MB、5条的正式口径不一致。不要用云体验30MB／3条代替Free。"
+                      : "Free entitlement mismatch: this account has no membership row, so current server queries return 0 storage and 0 marketplace posts. This differs from the approved Free 30MB/5-post entitlement. Do not substitute the 30MB/3-post cloud trial."}
+                  </p>
+                ) : null}
 
                 <details key={`${selected.user_id}-membership`} open={!isMobileViewport} style={{ marginTop: 14 }}><summary style={adminDetailSummaryStyle}>{language === "zh" ? "会员权益设置" : "Membership benefits"}</summary>
                 <div style={currentPresetGridStyle}>
@@ -2455,6 +2411,11 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
                     </button>
                   </div>
 
+                  <p style={smallTextStyle}>
+                    {language === "zh"
+                      ? "最近20笔订单包含待付款、待审核、需补充材料、已确认、已退款、已取消及已过期记录。PayPal显示服务端最终状态、订单ID和Capture ID；重复Capture确认由现有幂等RPC及唯一索引保护。当前没有逐次Webhook投递日志，不能展示每次回调记录。"
+                      : "The latest 20 orders include pending, submitted, needs-update, confirmed, refunded, canceled and expired records. PayPal shows the server-confirmed status, order ID and Capture ID. Duplicate Capture confirmations are protected by the existing idempotent RPC and unique indexes; individual webhook deliveries are not persisted."}
+                  </p>
                   <div style={paymentHistoryStyle}>
                     {paymentLoading ? (
                       <div style={emptyStyle}>{t.admin_memberships.loading_payments}</div>
@@ -2473,9 +2434,45 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
                             {getPaymentPlanLabel(payment.plan, language)} · {getPaymentMethodLabel(
                               payment.payment_method,
                               language
-                            )} · {t.admin_memberships.payment_time}{" "}
-                            {formatMembershipDate(payment.paid_at, language)}
+                            )} · {language === "zh" ? "订单创建：" : "Created: "}
+                            {formatMembershipDate(payment.created_at, language)}
                           </div>
+                          {payment.order_number ? (
+                            <div style={smallTextStyle}>
+                              {language === "zh" ? "订单号：" : "Order number: "}{payment.order_number}
+                            </div>
+                          ) : null}
+                          <div style={smallTextStyle}>
+                            {t.admin_memberships.payment_time}
+                            {formatMembershipDate(payment.provider_paid_at || payment.paid_at, language)}
+                          </div>
+                          {payment.provider_order_id ? (
+                            <div style={smallTextStyle}>
+                              {language === "zh" ? "PayPal订单ID：" : "PayPal order ID: "}{payment.provider_order_id}
+                            </div>
+                          ) : null}
+                          {payment.payment_method === "paypal" && payment.provider_capture_id ? (
+                            <div style={smallTextStyle}>
+                              {language === "zh" ? "Capture ID：" : "Capture ID: "}{payment.provider_capture_id}
+                            </div>
+                          ) : null}
+                          {payment.provider_order_created_at ? (
+                            <div style={smallTextStyle}>
+                              {language === "zh" ? "PayPal订单创建：" : "PayPal order created: "}
+                              {formatMembershipDate(payment.provider_order_created_at, language)}
+                            </div>
+                          ) : null}
+                          {payment.payment_reference && payment.payment_reference !== payment.provider_capture_id ? (
+                            <div style={smallTextStyle}>
+                              {t.admin_memberships.transaction_prefix}{payment.payment_reference}
+                            </div>
+                          ) : null}
+                          {payment.expires_at ? (
+                            <div style={smallTextStyle}>
+                              {language === "zh" ? "订单有效期至：" : "Order expires: "}
+                              {formatMembershipDate(payment.expires_at, language)}
+                            </div>
+                          ) : null}
                           <div style={smallTextStyle}>
                             {t.admin_memberships.service_period}
                             {formatMembershipDate(payment.service_started_at, language)} - {formatMembershipDate(
@@ -2483,10 +2480,31 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
                               language
                             )}
                           </div>
-                          {payment.payment_reference ? (
+                          {payment.reviewed_at ? (
                             <div style={smallTextStyle}>
-                              {t.admin_memberships.transaction_prefix}{payment.payment_reference}
+                              {language === "zh" ? "审核时间：" : "Reviewed: "}
+                              {formatMembershipDate(payment.reviewed_at, language)}
                             </div>
+                          ) : null}
+                          {payment.review_note ? (
+                            <div style={smallTextStyle}>
+                              {language === "zh" ? "审核备注：" : "Review note: "}{payment.review_note}
+                            </div>
+                          ) : null}
+                          {payment.close_reason ? (
+                            <div style={smallTextStyle}>
+                              {language === "zh" ? "关闭原因：" : "Close reason: "}{payment.close_reason}
+                            </div>
+                          ) : null}
+                          {payment.payment_method === "paypal" && payment.status === "confirmed" && Boolean(payment.order_number) && !payment.provider_capture_id ? (
+                            <p role="alert" style={errorStyle}>
+                              {language === "zh" ? "异常：PayPal订单已确认，但缺少Capture ID。" : "Anomaly: PayPal order is confirmed without a Capture ID."}
+                            </p>
+                          ) : null}
+                          {payment.payment_method === "paypal" && payment.status === "pending_payment" && payment.expires_at && Date.parse(payment.expires_at) < Date.now() ? (
+                            <p role="alert" style={errorStyle}>
+                              {language === "zh" ? "异常：PayPal待付款订单已超过有效期，需复核最终状态。" : "Anomaly: PayPal pending order is past expiry and needs status review."}
+                            </p>
                           ) : null}
                           {payment.note ? (
                             <div style={smallTextStyle}>

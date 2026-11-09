@@ -100,9 +100,9 @@ async function hydrateGuideArchives(
   const ownerIds = Array.from(
     new Set(rows.map((row) => row.user_id).filter((id): id is string => Boolean(id))),
   );
-  const [{ data: recordData }, { data: profileData }] = await Promise.all([
-    supabase
-      .from("records")
+  const [{ data: recordData, error: recordError }, { data: profileData, error: profileError }] = await Promise.all([
+    (supabase as any)
+      .from("public_guide_record_projection")
       .select(
         "id, archive_id, note, record_time, primary_image_url, visibility, created_at",
       )
@@ -111,9 +111,10 @@ async function hydrateGuideArchives(
       .order("created_at", { ascending: false, nullsFirst: false }),
     ownerIds.length > 0
       ? supabase.from("public_profiles").select("id, username").in("id", ownerIds)
-      : Promise.resolve({ data: [] as GuideProfileRow[] }),
+      : Promise.resolve({ data: [] as GuideProfileRow[], error: null }),
   ]);
 
+  if (recordError || profileError) throw Error("Guide project details could not be read");
   const archiveById = new Map(rows.map((row) => [row.id, row]));
   const records = ((recordData || []) as GuideRecordRow[]).filter((record) => {
     const archive = archiveById.get(record.archive_id);
@@ -135,7 +136,7 @@ async function hydrateGuideArchives(
   const latestRecordIds = Array.from(latestRecordByArchive.values()).map(
     (record) => record.id,
   );
-  const { data: mediaData } = latestRecordIds.length
+  const { data: mediaData, error: mediaError } = latestRecordIds.length
     ? await supabase
         .from("media")
         .select("record_id, url, storage_path, thumb_path, sort_order, created_at")
@@ -143,7 +144,8 @@ async function hydrateGuideArchives(
         .eq("type", "image")
         .order("sort_order", { ascending: true })
         .order("created_at", { ascending: true })
-    : { data: [] as GuideMediaRow[] };
+    : { data: [] as GuideMediaRow[], error: null };
+  if (mediaError) throw Error("Guide project media could not be read");
   const firstMediaByRecord = new Map<string, GuideMediaRow>();
   ((mediaData || []) as GuideMediaRow[]).forEach((media) => {
     if (media.record_id && !firstMediaByRecord.has(media.record_id)) {
@@ -255,7 +257,7 @@ async function loadRelatedGuideContent(
   const recordScan = await scanGuidePages<GuideRecordRow>({
     target: fullAccess ? Infinity : GUIDE_FREE_TARGET,
     loadPage: async (from, to) => {
-      const result = await supabase.from("records")
+      const result = await (supabase as any).from("public_guide_record_projection")
         .select("id, archive_id, note, record_time, visibility, created_at")
         .in("archive_id", archiveIds).eq("visibility", "public")
         .order("record_time", { ascending: false, nullsFirst: false })

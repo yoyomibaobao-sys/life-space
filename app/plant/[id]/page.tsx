@@ -259,14 +259,14 @@ async function buildArchiveItemsFromRows(
   const latestPublicMediaMap = new Map<string, RelatedArchiveMediaRow>();
 
   if (archiveIds.length > 0) {
-    const baseRecordQuery = supabase
-      .from("records")
-      .select("id, archive_id, note, record_time, primary_image_url")
-      .in("archive_id", archiveIds);
-    const recordQuery =
-      options.recordScope === "all"
-        ? baseRecordQuery
-        : baseRecordQuery.eq("visibility", "public");
+    const recordQuery = options.recordScope === "all"
+      ? supabase.from("records")
+          .select("id, archive_id, note, record_time, primary_image_url")
+          .in("archive_id", archiveIds)
+      : (supabase as any).from("public_guide_record_projection")
+          .select("id, archive_id, note, record_time, primary_image_url, visibility, created_at")
+          .in("archive_id", archiveIds)
+          .eq("visibility", "public");
     const { data: recordRows, error } = await recordQuery
       .order("record_time", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false, nullsFirst: false });
@@ -1469,7 +1469,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
         const records = await scanGuidePages<{ id: string; archive_id: string; note: string | null }>({
           target,
           loadPage: async (from, to) => {
-            const result = await supabase.from("records").select("id, archive_id, note")
+            const result = await (supabase as any).from("public_guide_record_projection").select("id, archive_id, note")
               .in("archive_id", publicIds).eq("visibility", "public")
               .order("record_time", { ascending: false, nullsFirst: false })
               .order("created_at", { ascending: false, nullsFirst: false })

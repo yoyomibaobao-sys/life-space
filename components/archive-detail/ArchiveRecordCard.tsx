@@ -35,6 +35,8 @@ type ArchiveRecordCardProps = {
   index: number;
   mode: ArchiveMode;
   variant?: "cloud" | "local";
+  /** Display only: pending cloud records retain the existing local data adapter. */
+  localStatusLabel?: string;
   cloudWritable?: boolean;
   startTime?: string | null;
   isHighlighted: boolean;
@@ -77,6 +79,7 @@ export default function ArchiveRecordCard({
   index,
   mode,
   variant = "cloud",
+  localStatusLabel,
   cloudWritable = true,
   startTime,
   isHighlighted,
@@ -119,6 +122,45 @@ export default function ArchiveRecordCard({
   const chooseInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
+  const showOwnerModerationStatus = mode === "owner"
+    && !isLocalMode
+    && !localStatusLabel
+    && Boolean(currentUserId && currentUserId === archive.user_id);
+  type ModerationLookupStatus = "unknown" | "hidden" | "visible" | "error";
+  const [recordModerationLookup, setRecordModerationLookup] = useState<{
+    recordId: string;
+    status: ModerationLookupStatus;
+  } | null>(null);
+  // A cached status for a different record must never appear on this card.
+  const recordModerationStatus: ModerationLookupStatus =
+    recordModerationLookup?.recordId === item.id ? recordModerationLookup.status : "unknown";
+
+  useEffect(() => {
+    if (!showOwnerModerationStatus) {
+      setRecordModerationLookup(null);
+      return;
+    }
+    let active = true;
+    setRecordModerationLookup({ recordId: item.id, status: "unknown" });
+    void (async () => {
+      try {
+        const { data, error } = await supabase.rpc("get_my_record_moderation_status", {
+          p_record_id: item.id,
+        });
+        if (!active) return;
+        const row = (Array.isArray(data) ? data[0] : data) as { is_hidden?: unknown } | null;
+        const status: ModerationLookupStatus = error
+          ? "error"
+          : typeof row?.is_hidden !== "boolean"
+            ? "unknown"
+            : row.is_hidden ? "hidden" : "visible";
+        setRecordModerationLookup({ recordId: item.id, status });
+      } catch {
+        if (active) setRecordModerationLookup({ recordId: item.id, status: "error" });
+      }
+    })();
+    return () => { active = false; };
+  }, [showOwnerModerationStatus, item.id]);
 
   const statusBadge = isHelpRecord
     ? { label: copy.help_in_progress, kind: "help" as const }
@@ -221,6 +263,27 @@ export default function ArchiveRecordCard({
         ) : null
       }
     >
+        {showOwnerModerationStatus && recordModerationStatus === "hidden" ? (
+          <p role="status" style={{ margin: "0 0 12px", color: "var(--muted-text, #687568)", fontSize: 13 }}>
+            {language === "zh"
+              ? "该记录目前受到平台管理限制；你仍可查看自己的原始记录。"
+              : "This record is currently restricted by platform moderation; you can still view your original record."}
+          </p>
+        ) : null}
+        {showOwnerModerationStatus && recordModerationStatus === "unknown" ? (
+          <p role="status" style={{ margin: "0 0 12px", color: "var(--muted-text, #687568)", fontSize: 13 }}>
+            {language === "zh"
+              ? "该记录的管理状态尚未确认。"
+              : "The moderation status for this record has not yet been verified."}
+          </p>
+        ) : null}
+        {showOwnerModerationStatus && recordModerationStatus === "error" ? (
+          <p role="status" style={{ margin: "0 0 12px", color: "var(--muted-text, #687568)", fontSize: 13 }}>
+            {language === "zh"
+              ? "暂时无法确认该记录的管理状态，请稍后刷新。"
+              : "The moderation status of this record could not be verified. Please refresh later."}
+          </p>
+        ) : null}
         {isMobileViewport ? (
           <>
             {canEditRecord && !isLocalMode ? (
@@ -336,7 +399,7 @@ export default function ArchiveRecordCard({
             ) : null}
 
             {isLocalMode ? (
-              <MobileLocalRecordMetaRow />
+              <MobileLocalRecordMetaRow statusLabel={localStatusLabel} />
             ) : (
               <>
                 <MobileRecordMetaRow
@@ -443,6 +506,7 @@ export default function ArchiveRecordCard({
 
             {mode === "owner" && isLocalMode ? (
               <DesktopLocalRecordActions
+                statusLabel={localStatusLabel}
                 onDelete={() => onRecordDeleted?.(item.id)}
               />
             ) : mode === "owner" ? (
@@ -715,7 +779,10 @@ function DesktopAndMobileRecordActions({
   );
 }
 
-function DesktopLocalRecordActions({ onDelete }: { onDelete: () => void }) {
+function DesktopLocalRecordActions({ onDelete, statusLabel }: {
+  onDelete: () => void;
+  statusLabel?: string;
+}) {
   const { t } = useLanguage();
 
   return (
@@ -728,7 +795,7 @@ function DesktopLocalRecordActions({ onDelete }: { onDelete: () => void }) {
         marginBottom: 10,
       }}
     >
-      <ArchiveStatusBadge>{t.record.local}</ArchiveStatusBadge>
+      <ArchiveStatusBadge>{statusLabel ?? t.record.local}</ArchiveStatusBadge>
       <button
         type="button"
         onClick={onDelete}
@@ -1134,13 +1201,13 @@ function MobileRecordLocalMenu({
   );
 }
 
-function MobileLocalRecordMetaRow() {
+function MobileLocalRecordMetaRow({ statusLabel }: { statusLabel?: string }) {
   const { t } = useLanguage();
 
   return (
     <div style={mobileRecordMetaWrapStyle}>
       <div style={mobileRecordMetaRowStyle}>
-        <span style={mobileRecordMetaTextStyle}>{t.record.local}</span>
+        <span style={mobileRecordMetaTextStyle}>{statusLabel ?? t.record.local}</span>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import Link from "@/components/navigation/InternalLink";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import { showToast } from "@/components/Toast";
@@ -10,6 +10,7 @@ import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 import { buildLoginHref } from "@/lib/auth-return";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { supabase } from "@/lib/supabase";
+import { reviewGuideCandidate, type GuideCandidateReviewRow } from "@/lib/guide-candidate-review";
 
 type GuideCandidateRow = {
   id: string;
@@ -30,23 +31,30 @@ export default function AdminGuideReviewPage({ onBack, onRequireLogin }: { onBac
   const [rows, setRows] = useState<GuideCandidateRow[]>([]);
   const [actionId, setActionId] = useState("");
   const [error, setError] = useState("");
+  const actionLock = useRef(false);
+  const [lastReview, setLastReview] = useState<(GuideCandidateReviewRow & { name: string }) | null>(null);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
     setError("");
-    const { data, error: loadError } = await supabase.rpc("list_pending_guide_candidates");
-    if (loadError) {
-      console.error("load pending linked guides error:", loadError);
+    try {
+      const { data, error: loadError } = await supabase.rpc("list_pending_guide_candidates");
+      if (loadError) {
+        if (String(loadError.message || "").includes("not_authorized")) setAllowed(false);
+        throw loadError;
+      }
+      setRows((data || []) as GuideCandidateRow[]);
+    } catch {
       setError(isEnglish ? "Could not load the review queue." : "关联指引审核队列加载失败。");
       setRows([]);
-    } else {
-      setRows((data || []) as GuideCandidateRow[]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [isEnglish]);
 
   useEffect(() => {
     async function init() {
+      try {
       const { data } = await supabase.auth.getUser();
       if (!data.user) {
         if (onRequireLogin) onRequireLogin();
@@ -60,33 +68,46 @@ export default function AdminGuideReviewPage({ onBack, onRequireLogin }: { onBac
       setAllowed(nextAllowed);
       setChecking(false);
       if (nextAllowed) await loadRows();
+      } catch {
+        setAllowed(false);
+        setChecking(false);
+        setError(isEnglish ? "Access could not be verified. Reopen this page to try again." : "权限验证失败，请重新打开此页重试。");
+      }
     }
     void init();
-  }, [loadRows, onRequireLogin]);
+  }, [loadRows, onRequireLogin, isEnglish]);
 
   async function review(row: GuideCandidateRow, decision: "approve" | "reject") {
-    if (actionId) return;
-    const reviewNote = decision === "reject"
-      ? window.prompt(isEnglish ? "Optional rejection note" : "可填写拒绝原因（选填）") || ""
+    if (actionLock.current) return;
+    const note = decision === "reject"
+      ? window.prompt(isEnglish ? "Optional rejection note" : "可填写拒绝原因（选填）")
       : "";
+    if (note === null) return;
+    actionLock.current = true;
     setActionId(row.id);
-    const { data, error: reviewError } = await supabase.rpc("review_guide_candidate", {
-      p_candidate_id: row.id,
-      p_decision: decision,
-      p_review_note: reviewNote || null,
-    });
-    setActionId("");
-    if (reviewError || !data) {
-      console.error("review linked guide error:", reviewError);
-      showToast(isEnglish ? "Review failed" : "审核失败");
-      return;
-    }
-    showToast(
-      decision === "approve"
+    setLastReview(null);
+    try {
+      const result = await reviewGuideCandidate(supabase, row.id, decision, note);
+      if (!result.accepted) {
+        await loadRows();
+        setError(isEnglish ? "The candidate has changed. Refresh the queue before reviewing again." : "候选状态已变化，请刷新队列后核对。");
+        return;
+      }
+      await loadRows();
+      if (!result.review) {
+        setError(isEnglish ? "Review submitted, but the result could not be verified. Refresh the queue before acting again." : "审核已提交，但结果未能回读，请先刷新队列核对。");
+        return;
+      }
+      setLastReview({ ...result.review, name: row.name });
+      showToast(result.review.status === "approved"
         ? (isEnglish ? "Added to the public guide library" : "已加入公共指引库")
-        : (isEnglish ? "Candidate rejected" : "已拒绝该候选"),
-    );
-    await loadRows();
+        : (isEnglish ? "Candidate rejected" : "已拒绝该候选"));
+    } catch {
+      setError(isEnglish ? "The review result is unconfirmed. Refresh the queue before trying again." : "审核结果尚未确认，请刷新队列核对后再操作。");
+    } finally {
+      actionLock.current = false;
+      setActionId("");
+    }
   }
 
   const title = isEnglish ? "Linked guide review" : "关联指引审核";
@@ -118,14 +139,19 @@ export default function AdminGuideReviewPage({ onBack, onRequireLogin }: { onBac
           </p>
         </header>
 
+        {allowed && lastReview ? <div role="status" style={{ ...emptyStyle, textAlign: "left", marginBottom: 12 }}>
+          <strong>{lastReview.name}</strong> · {lastReview.status === "approved" ? (isEnglish ? "Approved" : "已通过") : (isEnglish ? "Rejected" : "已拒绝")}
+          {lastReview.review_note ? <p style={{ marginBottom: 0 }}>{lastReview.review_note}</p> : null}
+        </div> : null}
+
         {checking ? (
           <div style={emptyStyle}>{isEnglish ? "Checking access..." : "正在验证权限…"}</div>
         ) : !allowed ? (
-          <div style={errorStyle}>{isEnglish ? "Administrator access required." : "仅管理员可以查看。"}</div>
+          <div role="alert" style={errorStyle}>{error || (isEnglish ? "Administrator access required." : "仅管理员可以查看。")}</div>
         ) : loading && rows.length === 0 ? (
           <div style={emptyStyle}>{isEnglish ? "Loading..." : "加载中…"}</div>
         ) : error ? (
-          <div style={errorStyle}>{error}</div>
+          <div role="alert" style={errorStyle}>{error}<div style={{ marginTop: 12 }}><button type="button" disabled={loading || Boolean(actionId)} onClick={() => void loadRows()} style={approveButtonStyle}>{isEnglish ? "Refresh queue" : "刷新队列"}</button></div></div>
         ) : rows.length === 0 ? (
           <div style={emptyStyle}>{isEnglish ? "No candidates are awaiting review." : "当前没有待审核的关联指引。"}</div>
         ) : (

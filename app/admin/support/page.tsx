@@ -13,6 +13,18 @@ import { getFeedbackCategoryLabel, getReportCategoryLabel, getSupportResolutionL
 import { supabase } from "@/lib/supabase";
 import styles from "@/components/support/support.module.css";
 
+type RecordModerationSnapshot = { isHidden: boolean; version: number };
+type RecordModerationEventRow = {
+  next_is_hidden: boolean;
+  next_version: number | string;
+};
+type RecordModerationRpcResult = {
+  ok?: boolean;
+  error?: string;
+  is_hidden?: boolean;
+  version?: number | string;
+};
+
 export default function AdminSupportPage({ onBack }: { onBack?: () => void } = {}) {
   const { language } = useLanguage();
   const copy = getSupportCopy(language);
@@ -155,6 +167,10 @@ function ReportGroupCard({ group, status, onUpdated }: {
   const [resolution, setResolution] = useState("");
   const [saving, setSaving] = useState(false);
   const [actionFailed, setActionFailed] = useState(false);
+  const [moderation, setModeration] = useState<RecordModerationSnapshot | null>(null);
+  const [moderationLoadFailed, setModerationLoadFailed] = useState(false);
+  const [representativeCategory, setRepresentativeCategory] = useState<string | null>(null);
+  const moderationRequestRef = useRef<{ key: string; requestId: string } | null>(null);
   const inFlight = useRef(false);
   const pageSize = 50;
   const total = Number(details[0]?.total_count ?? group.report_count);
@@ -165,24 +181,120 @@ function ReportGroupCard({ group, status, onUpdated }: {
     const abort = new AbortController();
     setLoading(true);
     setDetailError(false);
+    setModeration(null);
+    setModerationLoadFailed(false);
     void (async () => {
       try {
-        const { data, error } = await supabase.rpc("admin_get_support_report_group_details", {
+        const detailRequest = supabase.rpc("admin_get_support_report_group_details", {
           p_target_type: group.target_type, p_target_id: group.target_id,
           p_status: status, p_limit: pageSize, p_offset: detailPage * pageSize,
         }).abortSignal(abort.signal);
+        const moderationRequest = group.target_type === "record"
+          ? supabase.rpc("admin_list_record_moderation_events", {
+              p_record_id: group.target_id, p_limit: 1, p_offset: 0,
+            }).abortSignal(abort.signal)
+          : Promise.resolve({ data: [], error: null });
+        const [detailResult, moderationResult] = await Promise.all([detailRequest, moderationRequest]);
         if (!active) return;
-        if (error) { setDetailError(true); return; }
-        setDetails(normalizeSupportRows<AdminSupportReportDetailRow>(data));
+        if (detailResult.error) setDetailError(true);
+        else setDetails(normalizeSupportRows<AdminSupportReportDetailRow>(detailResult.data));
+        if (group.target_type === "record") {
+          if (moderationResult.error) {
+            setModerationLoadFailed(true);
+          } else {
+            const latest = normalizeSupportRows<RecordModerationEventRow>(moderationResult.data)[0];
+            setModeration({
+              isHidden: latest?.next_is_hidden === true,
+              version: Number(latest?.next_version ?? 0),
+            });
+          }
+        }
       } catch { if (active) setDetailError(true); }
       finally { if (active) setLoading(false); }
     })();
     return () => { active = false; abort.abort(); };
   }, [expanded, group.target_id, group.target_type, status, detailPage]);
 
+  useEffect(() => {
+    if (!expanded || group.target_type !== "record") return;
+    let active = true;
+    const abort = new AbortController();
+    setRepresentativeCategory(null);
+    void (async () => {
+      try {
+        const { data, error } = await supabase.rpc("admin_get_support_report_group_details", {
+          p_target_type: group.target_type, p_target_id: group.target_id,
+          p_status: status, p_limit: 1, p_offset: 0,
+        }).abortSignal(abort.signal);
+        if (!active) return;
+        if (error) { setDetailError(true); return; }
+        const representative = normalizeSupportRows<AdminSupportReportDetailRow>(data)[0];
+        setRepresentativeCategory(representative?.category ?? null);
+      } catch { if (active) setDetailError(true); }
+    })();
+    return () => { active = false; abort.abort(); };
+  }, [expanded, group.target_id, group.target_type, status]);
+
+  async function moderateRecord(action: "hide" | "restore", submissionId: string | null = null) {
+    if (inFlight.current || !moderation || moderationLoadFailed) return;
+    const reasonCode = action === "hide" ? representativeCategory : null;
+    if (action === "hide" && !reasonCode) { setActionFailed(true); return; }
+    const adminNote = note.trim() || null;
+    const requestKey = [group.target_id, action, submissionId || "", moderation.version, reasonCode || "", adminNote || ""].join("|");
+    const pendingRequest = moderationRequestRef.current;
+    const requestId = pendingRequest?.key === requestKey
+      ? pendingRequest.requestId
+      : crypto.randomUUID();
+    moderationRequestRef.current = { key: requestKey, requestId };
+
+    inFlight.current = true;
+    setSaving(true);
+    setActionFailed(false);
+    try {
+      const { data, error } = await supabase.rpc("admin_moderate_record", {
+        p_record_id: group.target_id,
+        p_action: action,
+        p_reason_code: reasonCode,
+        p_admin_note: adminNote,
+        p_request_id: requestId,
+        p_expected_version: moderation.version,
+        p_submission_id: submissionId,
+      });
+      const result = data as RecordModerationRpcResult | null;
+      if (error || !result?.ok) {
+        setActionFailed(true);
+        if (result?.error === "version_conflict" || result?.error === "already_hidden" || result?.error === "already_restored") {
+          moderationRequestRef.current = null;
+          setModeration(null);
+          setModerationLoadFailed(true);
+          onUpdated();
+        }
+        return;
+      }
+      moderationRequestRef.current = null;
+      setModeration({ isHidden: result.is_hidden === true, version: Number(result.version ?? moderation.version) });
+      onUpdated();
+    } catch {
+      setActionFailed(true);
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
+    }
+  }
+
   async function update(nextStatus: "needs_info" | "resolved") {
     if (inFlight.current || (nextStatus === "resolved" && !resolution)) return;
     if (nextStatus === "resolved" && !window.confirm(copy.confirmGroup)) return;
+    if (nextStatus === "resolved" && resolution === "action_taken") {
+      if (group.target_type !== "record" || !representativeCategory || !moderation || moderationLoadFailed) {
+        setActionFailed(true);
+        return;
+      }
+      // One RPC handles both first-time hide+report closure and report-only
+      // closure when an administrator hide already exists.
+      await moderateRecord("hide", group.representative_id);
+      return;
+    }
     inFlight.current = true;
     setSaving(true);
     setActionFailed(false);
@@ -246,6 +358,38 @@ function ReportGroupCard({ group, status, onUpdated }: {
             </button>
           </div>
         </>}
+      {group.target_type === "record" && <div className={styles.form}>
+        <p className={styles.note}>{language === "zh" ? "记录公开状态（与举报处理分开）：" : "Record public status (separate from report resolution): "}
+          {moderationLoadFailed
+            ? (language === "zh" ? "状态读取失败，暂不可操作" : "Status unavailable; actions are disabled")
+            : moderation
+              ? (moderation.isHidden
+                ? (language === "zh" ? "已下架" : "Hidden")
+                : (language === "zh" ? "公开中" : "Public"))
+              : copy.loading}
+        </p>
+        {moderationLoadFailed && <p role="alert" className={styles.error}>{copy.loadError}</p>}
+        {moderation && <div className={styles.actions}>
+          <button type="button" className={styles.secondary}
+            disabled={saving || moderation.isHidden || detailError || details.length === 0}
+            onClick={() => {
+              if (window.confirm(language === "zh" ? "确认下架这条记录？" : "Hide this record?")) {
+                void moderateRecord("hide");
+              }
+            }}>
+            {language === "zh" ? "下架记录" : "Hide record"}
+          </button>
+          <button type="button" className={styles.secondary}
+            disabled={saving || !moderation.isHidden}
+            onClick={() => {
+              if (window.confirm(language === "zh" ? "确认恢复这条记录的公开资格？" : "Restore this record's public eligibility?")) {
+                void moderateRecord("restore");
+              }
+            }}>
+            {language === "zh" ? "恢复记录" : "Restore record"}
+          </button>
+        </div>}
+      </div>}
       {status !== "resolved" && <div className={styles.form}>
         <p className={styles.note}>{copy.adminHint} {copy.groupHint}</p>
         <label className={styles.field}>{copy.adminNote}
@@ -254,7 +398,9 @@ function ReportGroupCard({ group, status, onUpdated }: {
         <label className={styles.field}>{copy.result}
           <select value={resolution} onChange={event => setResolution(event.target.value)} disabled={saving}>
             <option value="">{copy.choose}</option>
-            {["action_taken","no_violation","duplicate","closed"].map(value =>
+            {(group.target_type === "record"
+              ? ["action_taken", "no_violation", "duplicate", "closed"]
+              : ["no_violation", "duplicate", "closed"]).map(value =>
               <option key={value} value={value}>{getSupportResolutionLabel(value, language)}</option>)}
           </select>
         </label>
@@ -313,7 +459,7 @@ function QueueItem({ row, onUpdated }: { row: AdminSupportSubmissionRow; onUpdat
   const [failed, setFailed] = useState(false);
   const inFlight = useRef(false);
   const href = safeSupportUrl(row.target_url || row.source_url);
-  const choices = row.kind === "report" ? ["action_taken", "no_violation", "duplicate", "closed"] : ["recorded", "action_taken", "not_planned", "closed"];
+  const choices = row.kind === "report" ? ["no_violation", "duplicate", "closed"] : ["recorded", "action_taken", "not_planned", "closed"];
   async function update(status: "needs_info" | "resolved") {
     if (inFlight.current || (status === "resolved" && !resolution)) return;
     if (status === "resolved" && !window.confirm(row.kind === "report" ? copy.confirmGroup : copy.confirm)) return;
