@@ -1013,11 +1013,18 @@ const activeArchiveSyncs = new Map<string, Promise<PendingCloudSyncResult>>();
 export function syncPendingCloudArchive(params: {
   localArchiveId: string;
   ownerContext: LocalArchiveOwnerContext;
+  /** Explicit record-only scope; never runs sibling records or unrelated images. */
+  targetRecordId?: string;
   onProgress?: (progress: PendingCloudSyncProgress) => void;
 }): Promise<PendingCloudSyncResult> {
   const key = `${params.ownerContext.userId}:${params.localArchiveId}`;
   const active = activeArchiveSyncs.get(key);
-  if (active) return active;
+  if (active && !params.targetRecordId) return active;
+  if (active) return Promise.resolve({
+    success: false, cloudArchiveId: null, archiveUpdated: false,
+    recordCount: 0, imageCount: 0, failedCount: 1,
+    error: "当前项目已有上传任务，请等待结果核验后再操作。",
+  });
   const work = syncPendingCloudArchiveUnlocked(params);
   activeArchiveSyncs.set(key, work);
   void work.finally(() => { if (activeArchiveSyncs.get(key) === work) activeArchiveSyncs.delete(key); }).catch(() => undefined);
@@ -1027,6 +1034,7 @@ export function syncPendingCloudArchive(params: {
 async function syncPendingCloudArchiveUnlocked(params: {
   localArchiveId: string;
   ownerContext: LocalArchiveOwnerContext;
+  targetRecordId?: string;
   onProgress?: (progress: PendingCloudSyncProgress) => void;
 }): Promise<PendingCloudSyncResult> {
   const userId = cleanText(params.ownerContext.userId);
@@ -1053,10 +1061,20 @@ async function syncPendingCloudArchiveUnlocked(params: {
     };
   }
 
-  await preparePendingCloudSyncQueue(params.ownerContext);
+  // Verify the real Supabase identity before any writable queue preparation,
+  // including the SAF adoption/mirror path.
+  const { data: verifiedAuth, error: verifiedAuthError } = await supabase.auth.getUser();
+  if (verifiedAuthError || verifiedAuth.user?.id !== userId) {
+    return {
+      success: false, cloudArchiveId: null, archiveUpdated: false,
+      recordCount: 0, imageCount: 0, failedCount: 1,
+      error: "当前登录Owner与待上传资料不一致，已停止操作。",
+    };
+  }
   let detail = await getLocalArchiveDetail(
     params.localArchiveId,
-    params.ownerContext
+    params.ownerContext,
+    true
   );
   if (!detail) {
     return {
@@ -1069,6 +1087,70 @@ async function syncPendingCloudArchiveUnlocked(params: {
       error: "找不到可上传的本机项目。",
     };
   }
+  // Unknown and in-flight receipts never authorize a second remote create.
+  // Require an explicit matching Owner, not an unowned legacy local archive.
+  if (detail.archive.local_owner_user_id !== userId) {
+    return {
+      success: false, cloudArchiveId: null, archiveUpdated: false,
+      recordCount: 0, imageCount: 0, failedCount: 1,
+      error: "当前登录Owner与待上传资料不一致，已停止操作。",
+    };
+  }
+  if (params.targetRecordId &&
+      (!detail.archive.source_cloud_archive_id || isPendingCloudCreateArchive(detail.archive))) {
+    return {
+      success: false, cloudArchiveId: null, archiveUpdated: false,
+      recordCount: 0, imageCount: 0, failedCount: 1,
+      error: "请先明确上传待创建项目，再单独上传记录。",
+    };
+  }
+  const candidateRecords = params.targetRecordId
+    ? detail.records.filter((record) => record.id === params.targetRecordId)
+    : detail.records;
+  if (params.targetRecordId && candidateRecords.length !== 1) {
+    return {
+      success: false, cloudArchiveId: null, archiveUpdated: false,
+      recordCount: 0, imageCount: 0, failedCount: 1,
+      error: "记录归属不匹配，已保留本机原件。",
+    };
+  }
+  const unsafe = (sync: { status: string; attempt_count?: number }) =>
+    sync.status === "uploading" ||
+    ((sync.attempt_count || 0) > 0 && sync.status !== "synced");
+  const candidateImages = candidateRecords.flatMap((record) => record.images);
+  if ((!params.targetRecordId && unsafe(detail.archive.sync)) ||
+      candidateRecords.some((record) => unsafe(record.sync)) ||
+      candidateImages.some((image) => unsafe(image.sync))) {
+    return {
+      success: false, cloudArchiveId: null, archiveUpdated: false,
+      recordCount: 0, imageCount: 0, failedCount: 1,
+      error: "已有上传尝试或回执未确认，需先核账，禁止重复上传。",
+    };
+  }
+
+
+  // The target exists, belongs to the authenticated Owner, has a valid
+  // record scope and has no unresolved upload attempt. Only now may the
+  // queue preparation touch local state, and only in this exact scope.
+  await preparePendingCloudSyncQueue(params.ownerContext, {
+    targetArchiveId: params.localArchiveId,
+    ...(params.targetRecordId ? { targetRecordId: params.targetRecordId } : {}),
+  });
+  detail = (await getLocalArchiveDetail(
+    params.localArchiveId, params.ownerContext, true
+  )) || detail;
+  const refreshedCandidates = params.targetRecordId
+    ? detail.records.filter((record) => record.id === params.targetRecordId)
+    : detail.records;
+  if ((!params.targetRecordId && unsafe(detail.archive.sync)) ||
+      refreshedCandidates.some((record) => unsafe(record.sync) ||
+        record.images.some((image) => unsafe(image.sync)))) {
+    return {
+      success: false, cloudArchiveId: null, archiveUpdated: false,
+      recordCount: 0, imageCount: 0, failedCount: 1,
+      error: "上传状态已变化或回执尚未确认，已停止重复上传。",
+    };
+  }
 
   let cloudArchiveId = cleanText(detail.archive.source_cloud_archive_id);
   let archiveUpdated = false;
@@ -1079,7 +1161,7 @@ async function syncPendingCloudArchiveUnlocked(params: {
   let taxonomyWarning: string | null = null;
 
   try {
-    if (!cloudArchiveId && isPendingCloudCreateArchive(detail.archive)) {
+    if (!params.targetRecordId && !cloudArchiveId && isPendingCloudCreateArchive(detail.archive)) {
       const created = await syncCreateArchive({
         detail,
         userId,
@@ -1091,7 +1173,8 @@ async function syncPendingCloudArchiveUnlocked(params: {
       params.onProgress?.({ completed: 1, total: 1, label: "archive" });
       const mapped = await getLocalArchiveDetail(
         params.localArchiveId,
-        params.ownerContext
+        params.ownerContext,
+        true
       );
       if (!mapped?.archive.source_cloud_archive_id) {
         return {
@@ -1110,13 +1193,16 @@ async function syncPendingCloudArchiveUnlocked(params: {
         archiveId: cloudArchiveId,
         cycles: mapped.archive.cycles || [],
       });
-      await preparePendingCloudSyncQueue(params.ownerContext);
+      await preparePendingCloudSyncQueue(params.ownerContext, {
+        targetArchiveId: params.localArchiveId,
+      });
       detail =
         (await getLocalArchiveDetail(
           params.localArchiveId,
-          params.ownerContext
+          params.ownerContext,
+          true
         )) || mapped;
-    } else if (cloudArchiveId && detail.archive.local_role !== "cloud-offline-cache" &&
+    } else if (!params.targetRecordId && cloudArchiveId && detail.archive.local_role !== "cloud-offline-cache" &&
                (detail.archive.cycles || []).length) {
       // A cached cloud project must never replay the full cycle snapshot as
       // unrequested remote writes. Its existing cycle identities are immutable.
@@ -1139,6 +1225,7 @@ async function syncPendingCloudArchiveUnlocked(params: {
     }
 
     const pendingRecords = detail.records
+      .filter((record) => !params.targetRecordId || record.id === params.targetRecordId)
       .filter((record) => isPendingCloudSyncStatus(record.sync.status))
       .sort((left, right) => {
         const leftCreate = left.sync.operation_kind === "create-record" ? 0 : 1;
@@ -1155,7 +1242,9 @@ async function syncPendingCloudArchiveUnlocked(params: {
     const cycleMap = needsCycleMap
       ? await loadCloudCycleMap(detail, cloudArchiveId)
       : new Map<string, string>();
-    const pendingImageCount = detail.records.reduce(
+    const pendingImageCount = detail.records
+      .filter((record) => !params.targetRecordId || record.id === params.targetRecordId)
+      .reduce(
       (total, record) =>
         total +
         record.images.filter((image) =>
@@ -1164,12 +1253,13 @@ async function syncPendingCloudArchiveUnlocked(params: {
       0
     );
     const total =
-      (isPendingCloudSyncStatus(detail.archive.sync.status) ? 1 : 0) +
+      (!params.targetRecordId && isPendingCloudSyncStatus(detail.archive.sync.status) ? 1 : 0) +
       pendingRecords.length +
       pendingImageCount;
     let completed = 0;
 
     if (
+      !params.targetRecordId &&
       isPendingCloudSyncStatus(detail.archive.sync.status) &&
       detail.archive.sync.operation_kind === "update-archive" &&
       (detail.archive.local_role !== "cloud-offline-cache" ||
@@ -1209,9 +1299,11 @@ async function syncPendingCloudArchiveUnlocked(params: {
 
     const refreshed = await getLocalArchiveDetail(
       params.localArchiveId,
-      params.ownerContext
+      params.ownerContext,
+      true
     );
-    for (const record of refreshed?.records || []) {
+    for (const record of (refreshed?.records || [])
+      .filter((record) => !params.targetRecordId || record.id === params.targetRecordId)) {
       for (const image of record.images.filter((candidate) =>
         isPendingCloudSyncStatus(candidate.sync.status)
       )) {
@@ -1262,9 +1354,13 @@ async function syncPendingCloudArchiveUnlocked(params: {
       params.localArchiveId,
       params.ownerContext
     );
-    const remaining = (
-      await listPendingCloudSyncSummaries(params.ownerContext)
-    ).find((summary) => summary.local_archive_id === params.localArchiveId);
+    const remaining = params.targetRecordId
+      ? (await getLocalArchiveDetail(params.localArchiveId, params.ownerContext, true))
+        ?.records.find((record) => record.id === params.targetRecordId &&
+          (isPendingCloudSyncStatus(record.sync.status) ||
+           record.images.some((image) => isPendingCloudSyncStatus(image.sync.status))))
+      : (await listPendingCloudSyncSummaries(params.ownerContext))
+        .find((summary) => summary.local_archive_id === params.localArchiveId);
     if (remaining && !lastError) {
       lastError = "还有新的本机改动待上传，请再次上传。";
     }
@@ -1315,6 +1411,25 @@ export async function syncAllPendingCloudArchives(params: {
     progress: PendingCloudSyncProgress
   ) => void;
 }): Promise<PendingCloudSyncResult[]> {
+  // Full-queue preparation writes IndexedDB. Verify the server-side Owner
+  // before that first write, not only inside each later archive upload.
+  const userId = cleanText(params.ownerContext?.userId);
+  const blocked = (error: string): PendingCloudSyncResult[] => [{
+    success: false, cloudArchiveId: null, archiveUpdated: false,
+    recordCount: 0, imageCount: 0, failedCount: 1, error,
+  }];
+  if (!userId) return blocked("请先登录，再上传本机改动。");
+  if (!isAndroidOnline()) return blocked("当前仍处于离线状态，请联网后重试。");
+  let verifiedUserId: string | null = null;
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    if (!error) verifiedUserId = data.user?.id || null;
+  } catch {
+    // An unavailable or timed-out identity check is not permission to queue.
+  }
+  if (verifiedUserId !== userId) {
+    return blocked("当前登录Owner与待上传资料不一致，队列保持不变。");
+  }
   await preparePendingCloudSyncQueue(params.ownerContext);
   const summaries = await listPendingCloudSyncSummaries(params.ownerContext);
   const results: PendingCloudSyncResult[] = [];

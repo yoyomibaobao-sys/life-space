@@ -214,13 +214,17 @@ export default function LocalArchiveDetailPage() {
 
     setLoading(true);
     try {
-      const { data } = await supabase.auth.getUser();
-      const ownerContext = data.user
+      const { data, error: authError } = await supabase.auth.getUser();
+      const ownerContext = !authError && data.user
         ? { userId: data.user.id, email: data.user.email || null }
         : null;
       setOwnerContext(ownerContext);
       setCategoryDepths(getLocalArchiveCategoryDepths(ownerContext?.userId));
-      await preparePendingCloudSyncQueue(ownerContext);
+      // This page only prepares its own project, after verified login.
+      // Guest/unverified reads must not change any Owner's local queue.
+      if (ownerContext?.userId) {
+        await preparePendingCloudSyncQueue(ownerContext, { targetArchiveId: archiveId });
+      }
       const [nextDetail, pendingSummaries, taxonomyItems] = await Promise.all([
         getLocalArchiveDetail(archiveId, ownerContext),
         listPendingCloudSyncSummaries(ownerContext),
