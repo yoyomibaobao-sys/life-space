@@ -120,6 +120,20 @@ import {
   type CloudToLocalSaveProgress,
 } from "@/lib/cloud-to-local-save";
 
+async function readArchiveWithDeadline<T>(request: PromiseLike<T>, timeoutMs = 20000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(request),
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("archive_request_timeout")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 export default function ArchiveDetail({
   params,
 }: {
@@ -148,6 +162,7 @@ function Content({ id }: { id: string }) {
   const recordCopy = t.record;
   const router = useRouter();
   const [archive, setArchive] = useState<ArchiveDetailArchive | null>(null);
+  const [archiveLoadState, setArchiveLoadState] = useState<"loading" | "ready" | "unavailable" | "error">("loading");
   const [species, setSpecies] = useState<PlantSpeciesLite | null>(null);
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [cycles, setCycles] = useState<ArchiveCycle[]>([]);
@@ -220,35 +235,52 @@ function Content({ id }: { id: string }) {
   const isLightboxOpen = lightboxImages.length > 0;
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
+      setArchive(null);
+      setRecords([]);
+      setCycles([]);
+      setLightboxImages([]);
+      setLightboxRecord(null);
       setOwnerMembershipLoaded(false);
       setOwnerMembership(null);
+      setArchiveLoadState("loading");
+      try {
       const {
-        data: { session },
-      } = await supabase.auth.getSession();
+        data: { session }, error: sessionError,
+      } = await readArchiveWithDeadline(supabase.auth.getSession());
+      if (cancelled) return;
+      if (sessionError) throw sessionError;
 
       const currentUserId = session?.user?.id ?? null;
       setMe(currentUserId);
       setMeEmail(session?.user?.email || null);
 
-      const { data: archiveData } = await supabase
+      const { data: archiveData, error: archiveError } = await readArchiveWithDeadline(supabase
         .from("archives")
         .select("*")
         .eq("id", id)
-        .maybeSingle();
-
-      if (!archiveData) return;
+        .maybeSingle());
+      if (cancelled) return;
+      if (archiveError) throw archiveError;
+      if (!archiveData) {
+        setArchiveLoadState("unavailable");
+        return;
+      }
+      setArchiveLoadState("ready");
 
       const isOwnerView = currentUserId === archiveData.user_id;
       setArchive(archiveData as ArchiveDetailArchive);
       if (isOwnerView && currentUserId) {
         const [savedLocalCopy, membershipResult] = await Promise.all([
-          findSavedLocalCopy(archiveData.id, {
+          readArchiveWithDeadline(findSavedLocalCopy(archiveData.id, {
             userId: currentUserId,
             email: session?.user?.email || null,
-          }).catch(() => null),
-          supabase.rpc("get_my_membership"),
+          }), 10000).catch(() => null),
+          readArchiveWithDeadline(supabase.rpc("get_my_membership"), 10000)
+            .catch((error) => ({ data: null, error })),
         ]);
+        if (cancelled) return;
         setLocalCopyId(savedLocalCopy?.id || null);
         if (membershipResult.error) {
           console.error("load archive owner membership error:", membershipResult.error);
@@ -265,7 +297,7 @@ function Content({ id }: { id: string }) {
       setArchiveSubcategoryLabel(null);
       setArchiveGroupLabel(null);
 
-      const [followerResult, categorySettingsResult] = await Promise.all([
+      const [followerResult, categorySettingsResult] = await readArchiveWithDeadline(Promise.all([
         supabase
           .from("archive_follows")
           .select("id", { count: "exact", head: true })
@@ -274,7 +306,8 @@ function Content({ id }: { id: string }) {
           console.error("load archive category settings error:", settingsError);
           return { ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS };
         }),
-      ]);
+      ]));
+      if (cancelled) return;
       setProjectFollowerCount(Number(followerResult.count || 0));
       setCategoryDepths(categorySettingsResult);
 
@@ -291,6 +324,7 @@ function Content({ id }: { id: string }) {
             .eq("user_id", archiveData.user_id)
             .order("created_at", { ascending: true }),
         ]);
+        if (cancelled) return;
         setOwnerSubTags((subTagResult.data || []) as SubTagItem[]);
         setOwnerGroupTags((groupTagResult.data || []) as GroupTagItem[]);
       } else {
@@ -304,6 +338,7 @@ function Content({ id }: { id: string }) {
           .select("name")
           .eq("id", archiveData.sub_tag_id)
           .maybeSingle();
+        if (cancelled) return;
         setArchiveSubcategoryLabel(subTagData?.name || null);
       }
 
@@ -313,6 +348,7 @@ function Content({ id }: { id: string }) {
           .select("name")
           .eq("id", archiveData.group_tag_id)
           .maybeSingle();
+        if (cancelled) return;
         setArchiveGroupLabel(groupTagData?.name || null);
       }
 
@@ -328,6 +364,7 @@ function Content({ id }: { id: string }) {
           .from("experience_cards")
           .select("id", { count: "exact", head: true })
           .eq("archive_id", archiveData.id);
+      if (cancelled) return;
 
       if (experienceCardCountError) {
         console.error(
@@ -355,6 +392,7 @@ saveRecentArchiveBrowse({
               p_archive_id: archiveData.id,
             }
           );
+          if (cancelled) return;
 
           if (!viewError) {
             window.sessionStorage.setItem(viewSessionKey, "1");
@@ -373,6 +411,7 @@ saveRecentArchiveBrowse({
           )
           .eq("id", archiveData.species_id)
           .maybeSingle();
+        if (cancelled) return;
         setSpecies((speciesData || null) as PlantSpeciesLite | null);
       } else {
         setSpecies(null);
@@ -383,6 +422,7 @@ saveRecentArchiveBrowse({
         .select("username, avatar_url")
         .eq("id", archiveData.user_id)
         .maybeSingle();
+      if (cancelled) return;
 
       setUsername(profile?.username || "");
       setOwnerAvatarUrl(profile?.avatar_url || null);
@@ -394,18 +434,29 @@ saveRecentArchiveBrowse({
           .eq("archive_id", archiveData.id)
           .eq("user_id", currentUserId)
           .maybeSingle();
+        if (cancelled) return;
 
         setIsProjectFollowed(Boolean(archiveFollow));
       } else {
         setIsProjectFollowed(false);
       }
 
-      const timeline = await loadCloudArchiveTimeline(archiveData.id, isOwnerView);
+      const timeline = await readArchiveWithDeadline(loadCloudArchiveTimeline(archiveData.id, isOwnerView));
+      if (cancelled) return;
       setCycles(timeline.cycles);
       setRecords(timeline.records);
+      } catch (error) {
+        if (cancelled) return;
+        console.warn("archive detail load failed", error);
+        setArchive(null);
+        setRecords([]);
+        setCycles([]);
+        setArchiveLoadState("error");
+      }
     }
 
-    load();
+    void load();
+    return () => { cancelled = true; };
   }, [id, reloadKey]);
 
 
@@ -625,6 +676,14 @@ saveRecentArchiveBrowse({
     });
   }, []);
 
+  if (archiveLoadState === "unavailable") return <ArchivePrivateState />;
+  if (archiveLoadState === "error") {
+    return <main style={{ padding: 20 }}>
+      <p>{language === "zh" ? "无法读取项目，请检查网络后重试。" : "Unable to load this project. Check your connection and retry."}</p>
+      <button type="button" onClick={() => setReloadKey((value) => value + 1)}>{language === "zh" ? "重试" : "Retry"}</button>
+      <Link href="/archive">{language === "zh" ? "返回我的空间" : "Back to My Space"}</Link>
+    </main>;
+  }
   if (
     !archive ||
     me === undefined ||
