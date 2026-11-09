@@ -231,34 +231,35 @@ test("deferring is persistent and later pending work stays in manual mode", asyn
   assert.equal(reopened[0].deferred_at, firstRead[0].deferred_at);
 });
 
-test("editing an imported cloud record queues only its changed fields and new photo", async () => {
+test("cloud record first edit queues fields and photo, then freezes pending fields", async () => {
   await fixture();
-  const updated = await dbModule.updateLocalRecordFields("imported-record", {
-    note: "离线修改后的文字",
-    image_files: [photo("added.gif")],
+  const changed = await dbModule.updateLocalRecordFields("imported-record", {
+    note: "离线修改后的文字", image_files: [photo("added.gif")],
   });
-  const firstOperationId = updated.sync.client_operation_id;
+  const id = changed.sync.client_operation_id;
   const detail = await dbModule.getLocalArchiveDetail("cloud-local-copy", owner);
-  const imported = detail.records.find((record) => record.id === "imported-record");
-  const addedImage = imported.images.find((image) => image.id !== "imported-image");
-  const summaries = await dbModule.listPendingCloudSyncSummaries(owner);
-
-  assert.equal(imported.sync.operation_kind, "update-record");
-  assert.equal(imported.sync.cloud_record_id, cloudRecordId);
-  assert.deepEqual(imported.sync.pending_fields, ["note"]);
-  assert.equal(addedImage.sync.operation_kind, "upload-image");
-  assert.equal(addedImage.sync.cloud_record_id, cloudRecordId);
-  assert.equal(addedImage.sync.depends_on_operation_id, null);
-  assert.equal(summaries[0].record_count, 1);
-  assert.equal(summaries[0].image_count, 1);
-
-  const updatedAgain = await dbModule.updateLocalRecordFields("imported-record", {
+  const row = detail.records.find((r) => r.id === "imported-record");
+  const added = row.images.find((x) => x.id !== "imported-image");
+  assert.equal(row.sync.operation_kind, "update-record");
+  assert.equal(row.sync.cloud_record_id, cloudRecordId);
+  assert.deepEqual(row.sync.pending_fields, ["note"]);
+  assert.equal(added.sync.operation_kind, "upload-image");
+  assert.equal(added.sync.cloud_record_id, cloudRecordId);
+  assert.equal(added.sync.depends_on_operation_id, null);
+  let pending = await dbModule.listPendingCloudSyncSummaries(owner);
+  assert.equal(pending[0].record_count, 1); assert.equal(pending[0].image_count, 1);
+  await assert.rejects(() => dbModule.updateLocalRecordFields("imported-record", {
     location: { label: "后院", source: "manual" },
-  });
-  assert.equal(updatedAgain.sync.client_operation_id, firstOperationId);
-  assert.deepEqual(updatedAgain.sync.pending_fields, ["note", "location"]);
+  }), /待上传记录只读/);
+  const kept = (await dbModule.getLocalArchiveDetail("cloud-local-copy", owner))
+    .records.find((r) => r.id === "imported-record");
+  assert.equal(kept.note, "离线修改后的文字");
+  assert.equal(kept.sync.client_operation_id, id);
+  assert.deepEqual(kept.sync.pending_fields, ["note"]);
+  assert.equal(kept.images.length, 2);
+  pending = await dbModule.listPendingCloudSyncSummaries(owner);
+  assert.equal(pending[0].record_count, 1); assert.equal(pending[0].image_count, 1);
 });
-
 test("cloud project edits track only cloud-backed fields while local grouping stays local", async () => {
   await fixture();
   await dbModule.updateLocalArchiveFields(
@@ -382,55 +383,33 @@ test("failed media keeps its operation identity and remains resumable", async ()
   assert.equal(retrying.sync.last_error, null);
 });
 
-test("an in-flight create cannot clear a newer record edit", async () => {
+test("in-flight record create is immutable and late receipt keeps original data", async () => {
   await fixture();
   const created = await dbModule.createLocalRecord({
-    archive_id: "cloud-local-copy",
-    note: "第一次离线保存",
+    archive_id: "cloud-local-copy", note: "第一次离线保存",
   });
-  const createOperationId = created.sync.client_operation_id;
-
+  const id = created.sync.client_operation_id;
   const uploading = await dbModule.updateLocalRecordCloudSyncOperation(
-    created.id,
-    createOperationId,
-    {
-      status: "uploading",
-      cloud_archive_id: cloudArchiveId,
-      cloud_record_id: createOperationId,
-    },
+    created.id, id, { status: "uploading", cloud_archive_id: cloudArchiveId, cloud_record_id: id },
   );
   assert.equal(uploading.sync.status, "uploading");
-  assert.equal(uploading.sync.cloud_record_id, createOperationId);
-
-  const edited = await dbModule.updateLocalRecordFields(created.id, {
-    note: "上传时又改了一次",
+  await assert.rejects(() => dbModule.updateLocalRecordFields(
+    created.id, { note: "上传中改动" }), /待上传记录只读/);
+  const pending = (await dbModule.getLocalArchiveDetail("cloud-local-copy", owner))
+    .records.find((r) => r.id === created.id);
+  assert.equal(pending.note, "第一次离线保存");
+  assert.equal(pending.sync.client_operation_id, id);
+  assert.equal(pending.sync.attempt_count, 1);
+  await dbModule.updateLocalRecordCloudSyncOperation(created.id, id, {
+    status: "synced", cloud_archive_id: cloudArchiveId, cloud_record_id: id,
   });
-  assert.equal(edited.sync.status, "pending-cloud-sync");
-  assert.equal(edited.sync.operation_kind, "update-record");
-  assert.notEqual(edited.sync.client_operation_id, createOperationId);
-  assert.equal(edited.sync.cloud_record_id, createOperationId);
-
-  await dbModule.updateLocalRecordCloudSyncOperation(
-    created.id,
-    createOperationId,
-    {
-      status: "synced",
-      cloud_archive_id: cloudArchiveId,
-      cloud_record_id: createOperationId,
-    },
-  );
-  const afterOldCompletion = await dbModule.getLocalArchiveDetail(
-    "cloud-local-copy",
-    owner,
-  );
-  const pendingEdit = afterOldCompletion.records.find(
-    (record) => record.id === created.id,
-  );
-  assert.equal(pendingEdit.sync.status, "pending-cloud-sync");
-  assert.equal(pendingEdit.sync.client_operation_id, edited.sync.client_operation_id);
-  assert.deepEqual(pendingEdit.sync.pending_fields, ["note"]);
+  const after = (await dbModule.getLocalArchiveDetail("cloud-local-copy", owner))
+    .records.find((r) => r.id === created.id);
+  assert.equal(after.note, "第一次离线保存");
+  assert.equal(after.sync.status, "synced");
+  assert.equal(after.sync.cloud_record_id, id);
+  assert.equal(after.sync.client_operation_id, null);
 });
-
 test("a completed queue clears its one-time prompt and starts fresh next time", async () => {
   await fixture();
   const created = await dbModule.createLocalRecord({
@@ -674,37 +653,32 @@ test("logout keeps pending user-created work and hides it from another owner", a
   );
 });
 
-test("F01: a new title edited during the first create survives the old receipt as a new pending update", async () => {
+test("F01: in-flight project create freezes title, Owner and privacy until receipt", async () => {
   await fixture();
   const initial = await dbModule.createLocalArchive({
     title: "before-upload", category: "system", system_name: "堆肥",
     local_owner_user_id: owner.userId, local_owner_email: owner.email,
     sync_destination: "pending-cloud", migration_visibility: "private",
   });
-  const originalId = initial.sync.client_operation_id;
+  const id = initial.sync.client_operation_id;
   await dbModule.updateLocalArchiveCloudSyncOperation(
-    initial.id, originalId, { status: "uploading", cloud_archive_id: originalId }, owner);
-  await dbModule.updateLocalArchiveFields(initial.id, { title: "edited-during-create" }, owner);
-  const mapped = await dbModule.persistLocalCloudArchiveMapping(
-    initial.id, originalId, originalId, owner, initial);
-  assert.equal(mapped.id, initial.id);
-  assert.equal(mapped.title, "edited-during-create");
-  assert.equal(mapped.source_cloud_archive_id, originalId);
-  assert.equal(mapped.sync.status, "pending-cloud-sync");
-  assert.equal(mapped.sync.operation_kind, "update-archive");
-  assert.deepEqual(mapped.sync.pending_fields, ["title"]);
-  assert.notEqual(mapped.sync.client_operation_id, originalId);
-  const oldReply = await dbModule.updateLocalArchiveCloudSyncOperation(
-    initial.id, originalId, { status: "synced", cloud_archive_id: originalId }, owner);
-  assert.equal(oldReply.sync.client_operation_id, mapped.sync.client_operation_id);
-  const again = await dbModule.persistLocalCloudArchiveMapping(
-    initial.id, originalId, originalId, owner, initial);
-  assert.equal(again.sync.client_operation_id, mapped.sync.client_operation_id);
-  const summaries = await dbModule.listPendingCloudSyncSummaries(owner);
-  assert.equal(summaries.length, 1);
-  assert.equal(summaries[0].archive_update_pending, true);
+    initial.id, id, { status: "uploading", cloud_archive_id: id }, owner);
+  await assert.rejects(() => dbModule.updateLocalArchiveFields(
+    initial.id, { title: "上传中改名" }, owner), /待上传项目只读/);
+  const before = await dbModule.getLocalArchiveDetail(initial.id, owner);
+  assert.equal(before.archive.title, "before-upload");
+  assert.equal(before.archive.sync.client_operation_id, id);
+  assert.equal(before.archive.sync.attempt_count, 1);
+  const mapped = await dbModule.persistLocalCloudArchiveMapping(initial.id, id, id, owner, initial);
+  assert.equal(mapped.title, "before-upload");
+  assert.equal(mapped.source_cloud_archive_id, id);
+  assert.equal(mapped.local_owner_user_id, owner.userId);
+  assert.equal(mapped.migration_visibility, "private");
+  const replay = await dbModule.persistLocalCloudArchiveMapping(initial.id, id, id, owner, initial);
+  assert.equal(replay.title, "before-upload");
+  assert.equal(replay.source_cloud_archive_id, id);
+  assert.equal(replay.migration_visibility, "private");
 });
-
 test("F01: a failed or late create receipt retains the same target ID and never changes chosen privacy", async () => {
   await fixture();
   const initial = await dbModule.createLocalArchive({
@@ -799,7 +773,7 @@ test("P0: wrong owner, unknown receipt and SAF originals are never canceled", as
   assert.ok(await dbModule.getLocalArchiveDetail(other.id, owner));
 });
 
-test("P0: a verified cloud project baseline discards only a never-attempted local field overlay", async () => {
+test("P0: confirmed cloud project discards only unattempted local title edit", async () => {
   await fixture();
   const initial = await dbModule.createLocalArchive({
     title: "original-cloud-title", category: "system", system_name: "堆肥",
@@ -808,25 +782,26 @@ test("P0: a verified cloud project baseline discards only a never-attempted loca
   const id = initial.sync.client_operation_id;
   await dbModule.updateLocalArchiveCloudSyncOperation(
     initial.id, id, { status: "uploading", cloud_archive_id: id }, owner);
-  await dbModule.updateLocalArchiveFields(initial.id, { title: "new-local-title" }, owner);
   const mapped = await dbModule.persistLocalCloudArchiveMapping(initial.id, id, id, owner, initial);
-  assert.equal(mapped.sync.attempt_count, 0, "the newly queued edit has not been uploaded");
-  const verified = {
-    id, user_id: owner.userId, title: "original-cloud-title", category: "system",
-    system_name: "堆肥", status: "active",
-  };
+  assert.equal(mapped.title, "original-cloud-title");
+  const updated = await dbModule.updateLocalArchiveFields(
+    initial.id, { title: "new-local-title" }, owner);
+  assert.equal(updated.sync.status, "pending-cloud-sync");
+  assert.equal(updated.sync.operation_kind, "update-archive");
+  assert.deepEqual(updated.sync.pending_fields, ["title"]);
+  assert.equal(updated.sync.attempt_count, 0);
+  const verified = { id, user_id: owner.userId, title: "original-cloud-title",
+    category: "system", system_name: "堆肥", status: "active" };
   await assert.rejects(() => dbModule.discardVerifiedPendingArchiveEdit(
     initial.id, { userId: "another-owner" }, verified));
-  const discarded = await dbModule.discardVerifiedPendingArchiveEdit(
-    initial.id, owner, verified);
+  const discarded = await dbModule.discardVerifiedPendingArchiveEdit(initial.id, owner, verified);
   assert.equal(discarded.title, "original-cloud-title");
   assert.equal(discarded.source_cloud_archive_id, id);
   assert.equal(discarded.sync.status, "synced");
   assert.deepEqual(discarded.sync.pending_fields, []);
   assert.equal((await dbModule.listPendingCloudSyncSummaries(owner)).length, 0);
 });
-
-test("P0: cloud edit already attempted or with unknown receipt never discards its overlay", async () => {
+test("P0: attempted cloud title edit with UNKNOWN response remains protected", async () => {
   await fixture();
   const initial = await dbModule.createLocalArchive({
     title: "original", category: "system", system_name: "堆肥",
@@ -835,23 +810,27 @@ test("P0: cloud edit already attempted or with unknown receipt never discards it
   const id = initial.sync.client_operation_id;
   await dbModule.updateLocalArchiveCloudSyncOperation(
     initial.id, id, { status: "uploading", cloud_archive_id: id }, owner);
-  await dbModule.updateLocalArchiveFields(initial.id, { title: "important-local-edit" }, owner);
   const mapped = await dbModule.persistLocalCloudArchiveMapping(initial.id, id, id, owner, initial);
+  assert.equal(mapped.title, "original");
+  const edited = await dbModule.updateLocalArchiveFields(
+    initial.id, { title: "important-local-edit" }, owner);
+  const editId = edited.sync.client_operation_id;
   await dbModule.updateLocalArchiveCloudSyncOperation(
-    initial.id, mapped.sync.client_operation_id,
-    { status: "uploading", cloud_archive_id: id }, owner);
+    initial.id, editId, { status: "uploading", cloud_archive_id: id }, owner);
   await dbModule.updateLocalArchiveCloudSyncOperation(
-    initial.id, mapped.sync.client_operation_id,
-    { status: "failed", last_error: "unknown receipt" }, owner);
-  const verified = { id, user_id: owner.userId, title: "original", category: "system",
-    system_name: "堆肥", status: "active" };
+    initial.id, editId, { status: "failed", last_error: "unknown receipt" }, owner);
+  await assert.rejects(() => dbModule.updateLocalArchiveFields(
+    initial.id, { title: "unsafe-later-edit" }, owner), /待上传项目只读/);
+  const verified = { id, user_id: owner.userId, title: "original",
+    category: "system", system_name: "堆肥", status: "active" };
   await assert.rejects(() => dbModule.discardVerifiedPendingArchiveEdit(
     initial.id, owner, verified));
   const kept = await dbModule.getLocalArchiveDetail(initial.id, owner);
   assert.equal(kept.archive.title, "important-local-edit");
   assert.equal(kept.archive.sync.status, "failed");
+  assert.equal(kept.archive.sync.client_operation_id, editId);
+  assert.equal(kept.archive.sync.attempt_count, 1);
 });
-
 test("W5 P0: authenticated cloud-record baseline only discards never-attempted note edits", async () => {
   await fixture();
   const before = await dbModule.getLocalArchiveDetail("cloud-local-copy", owner);

@@ -29,7 +29,7 @@ test("pending image retries keep deterministic paths and never delete uncertain 
   assert.doesNotMatch(executor, /storage\.from\("media"\)\.remove/);
 });
 
-test("Android reconnect prepares pending queue without uploading; web prompt remains separate", async () => {
+test("Android reconnect refreshes Owner data read-only without preparing pending uploads", async () => {
   const [prompt, layout, localDetail, workspace, offline] = await Promise.all([
     source("components/PendingCloudSyncPrompt.tsx"),
     source("app/layout.tsx"),
@@ -51,8 +51,12 @@ test("Android reconnect prepares pending queue without uploading; web prompt rem
   const reconnectEnd = offline.search(/useEffect\(\(\) => \{\r?\n\s+if \(screen\.kind !== "activity"/);
   assert.ok(reconnectStart >= 0 && reconnectEnd > reconnectStart);
   const reconnectEffect = offline.slice(reconnectStart, reconnectEnd);
-  assert.match(reconnectEffect, /preparePendingCloudSyncQueue/);
-  assert.doesNotMatch(reconnectEffect, /syncAllPendingCloudArchives|syncPendingCloudArchive/);
+  assert.doesNotMatch(reconnectEffect, /preparePendingCloudSyncQueue|syncAllPendingCloudArchives|syncPendingCloudArchive/,
+    "Network recovery must not prepare or upload pending data before verified manual action");
+  assert.match(reconnectEffect, /loadCloudList\(cloudUserId,\s*\{\s*readOnly:\s*true\s*\}\)/,
+    "Network recovery refreshes cloud history read-only");
+  assert.match(reconnectEffect, /loadList\(authenticatedOwnerContext\)/,
+    "Network recovery refreshes only verified Owner local list");
   assert.match(offline, /sync_destination/);
   assert.match(offline, /refreshCloudOfflineCaches/);
 });
