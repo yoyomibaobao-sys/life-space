@@ -206,7 +206,8 @@ export default function MyMarketPostsPage() {
           <section style={listStyle}>
             {items.map((item) => {
               const location = getCompactCardLocation({ fallback: item.location_text });
-              const timeText = formatMarketTime(item.created_at);
+              const timeText = formatMarketTime(item.published_at || item.created_at);
+              const updatedText = item.updated_at ? formatMarketTime(item.updated_at) : null;
 
               return (
                 <article key={item.id} style={cardStyle}>
@@ -248,7 +249,8 @@ export default function MyMarketPostsPage() {
                       <span style={descriptionStyle}>
                         {item.description || ""}
                         {item.description ? <span aria-hidden="true"> · </span> : null}
-                        <span style={timeStyle}>{timeText}</span>
+                        <span style={timeStyle}>{t.market.published_time}: {timeText}</span>
+                        {updatedText ? <span style={timeStyle}> · {t.market.last_updated_time}: {updatedText}</span> : null}
                       </span>
 
                       <span style={metaStyle}>

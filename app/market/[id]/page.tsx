@@ -246,9 +246,8 @@ export default function MarketDetailPage() {
           .select("id")
           .single();
 
-    setWorking(false);
-
     if (statusResult.error || (nextStatus === "ended" && statusResult.data !== true)) {
+      setWorking(false);
       console.error("update market status error:", statusResult.error);
       const message = String(statusResult.error?.message || "");
       if (message.includes("market_post_limit_reached")) {
@@ -261,10 +260,22 @@ export default function MarketDetailPage() {
       return;
     }
 
-    setItem({
-      ...item,
+    // The real market activation trigger enforces the quota and stamps
+    // published_at on reactivation. Read its actual timestamps back.
+    const { data: currentPost, error: readbackError } = await supabase
+      .from("market_posts")
+      .select("status, published_at, updated_at, ended_at")
+      .eq("id", item.id)
+      .eq("user_id", item.user_id)
+      .maybeSingle();
+    setWorking(false);
+    if (readbackError) console.error("market status readback error:", readbackError);
+
+    setItem((previous) => previous ? {
+      ...previous,
+      ...(currentPost || {}),
       status: nextStatus,
-    });
+    } : previous);
   }
 
   async function deletePost() {
@@ -392,7 +403,12 @@ export default function MarketDetailPage() {
                 ) : null}
               </div>
 
-              <span style={timeStyle}>{formatPreciseDateTime(item.created_at)}</span>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+                <span style={timeStyle}>{t.market.published_time}: {formatPreciseDateTime(item.published_at || item.created_at)}</span>
+                {item.updated_at ? (
+                  <span style={timeStyle}>{t.market.last_updated_time}: {formatPreciseDateTime(item.updated_at)}</span>
+                ) : null}
+              </div>
             </div>
 
             {!isMobileViewport ? <h1 style={titleStyle}>{item.title}</h1> : null}
