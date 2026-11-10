@@ -1,7 +1,7 @@
 import { formatCardDate } from "@/lib/date-time";
 import type { Language } from "@/lib/i18n";
 
-export type MembershipPlan = "trial" | "basic" | "large" | "seller" | "admin";
+export type MembershipPlan = "free" | "trial" | "basic" | "large" | "seller" | "admin";
 export type MembershipStatus = "trialing" | "active" | "past_due" | "expired" | "canceled";
 
 export type MyMembership = {
@@ -73,6 +73,8 @@ export function getMembershipPlanLabel(
 ) {
   if (language === "en") {
     switch (plan) {
+      case "free":
+        return "Registered user";
       case "trial":
         return "Cloud trial";
       case "basic":
@@ -88,6 +90,8 @@ export function getMembershipPlanLabel(
     }
   }
   switch (plan) {
+    case "free":
+      return "注册用户";
     case "trial":
       return "云体验";
     case "basic":
@@ -255,10 +259,12 @@ export function canCreateMembershipMarketPost(membership?: MyMembership | null) 
 }
 
 export function canAccessMembershipGuidance(membership?: MyMembership | null) {
-  // Paid Plus is currently represented by plan=basic and a server-issued
-  // paid_until. Never infer guide privileges from trial, write rights, or
-  // an old cached membership with no current paid term.
-  if (membership?.plan !== "basic" || membership.status !== "active" || !membership.paid_until) return false;
+  // B R08 paid plan/status and server write permission; retain C's current
+  // paid_until guard. Free cloud write rights never grant full Guide access.
+  if (membership?.can_create_content !== true ||
+      (membership.plan !== "basic" && membership.plan !== "large") ||
+      (membership.status !== "active" && membership.status !== "past_due") ||
+      !membership.paid_until) return false;
   const until = Date.parse(membership.paid_until);
   return Number.isFinite(until) && until > Date.now();
 }

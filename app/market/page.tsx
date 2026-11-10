@@ -365,7 +365,7 @@ export default function MarketPage() {
                       </div>
 
                       <span style={timeStyle}>
-                        {formatMarketTime(item.created_at)}
+                        {t.market.published_time}: {formatMarketTime(item.published_at || item.created_at)}
                       </span>
                     </div>
 

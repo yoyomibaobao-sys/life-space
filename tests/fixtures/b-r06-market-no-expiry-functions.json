@@ -1,0 +1,41 @@
+[
+  {
+    "signature": "public.get_user_market_post_limit(uuid)",
+    "source_live_md5": "2c608819d99bcf2c2adef57f4fa0edd1",
+    "source_R07_md5": "534c9edf4eeead2e6cacaa41661cb5cd",
+    "target_body_md5": "32ab8d78de306c93ce3d86e2ed13fdd2",
+    "target_definition_sha256": "c9c3f8d9740161eeede8c13a18e1dc34f77c00d17919f084c081f837e71de567",
+    "before": "CREATE OR REPLACE FUNCTION public.get_user_market_post_limit(p_user_id uuid)\n RETURNS integer\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nselect case when not exists(select 1 from auth.users u where u.id=p_user_id) then 0\n when exists(select 1 from public.user_memberships m where m.user_id=p_user_id and m.plan in ('basic','large','seller') and m.status not in ('canceled','expired') and m.paid_until>statement_timestamp()) then 30 else 5 end::integer;\n$function$\n",
+    "definition": "CREATE OR REPLACE FUNCTION public.get_user_market_post_limit(p_user_id uuid)\n RETURNS integer\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nselect case when not exists(select 1 from auth.users u where u.id=p_user_id) then 0\n when public.is_user_membership_active(p_user_id) then 30 else 5 end::integer;\n$function$\n",
+    "original_metadata": {
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+    }
+  },
+  {
+    "signature": "public.is_user_membership_active(uuid)",
+    "source_live_md5": "6ef20fd8469c4d5a6a118bcff9d174d8",
+    "source_R07_md5": "1e389697d73d6b2b9b2051de8f4469a6",
+    "target_body_md5": "cb89c1c5a18ece4f9886e1f2a4923238",
+    "target_definition_sha256": "222a7c36f929cd73e8b243002aa35ee1f10c5bdf8d134e4887fc929578fdd1cf",
+    "before": "CREATE OR REPLACE FUNCTION public.is_user_membership_active(p_user_id uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nselect p_user_id is not null and (\n public.is_app_admin(p_user_id) or exists(\n select 1 from public.user_memberships m\n where m.user_id=p_user_id and m.plan in ('basic','large','seller')\n and m.status not in ('canceled','expired')\n and m.paid_until>statement_timestamp()));\n-- Plus/explicit administrator gate ONLY. Free cloud eligibility is separate.\n$function$\n",
+    "definition": "CREATE OR REPLACE FUNCTION public.is_user_membership_active(p_user_id uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n-- Paid qualification only. Administrative authority is checked independently.\nselect coalesce(p_user_id is not null and exists(\n select 1 from public.user_memberships m\n where m.user_id=p_user_id and m.plan in ('basic','large','seller')\n   and m.paid_until>statement_timestamp()\n   and (m.status='active' or\n     (m.status='past_due' and exists(\n       select 1 from public.membership_payments mp\n       where mp.user_id=p_user_id\n         and mp.plan in ('basic','large','seller') and mp.status='confirmed'\n         and mp.service_started_at<=statement_timestamp()\n         and mp.service_ends_at>statement_timestamp())))),false);\n$function$\n",
+    "original_metadata": {
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+    }
+  },
+  {
+    "signature": "private.enforce_market_activation_limit()",
+    "source_live_md5": "def8c6a938d9c406793c1ecfde112d79",
+    "source_R07_md5": "281852964719881384dfe42faaf082c2",
+    "target_body_md5": "6019900da066a9907511779ff0d5724f",
+    "target_definition_sha256": "d54d6d746f79aa04155771fab73fa021265547c547c6d36f78f2131ea7807184",
+    "before": "CREATE OR REPLACE FUNCTION private.enforce_market_activation_limit()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare v_limit integer;v_count integer;v_now timestamptz;v_end timestamptz;\nbegin\n if tg_op='UPDATE' and new.user_id is distinct from old.user_id then raise exception 'market_post_owner_immutable'; end if;\n if new.status<>'active' or (tg_op='UPDATE' and old.status='active') then\n   if tg_op='UPDATE' then new.published_at:=old.published_at;new.membership_service_ends_at:=old.membership_service_ends_at;end if;\n   return new;\n end if;\n -- A direct table UPDATE already owns its post row. Never wait on Kp while holding it.\n -- Payment transactions wait normally; publication is explicitly retryable on contention.\n if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended('membership-payment:'||new.user_id::text,0)) then\n   raise exception using errcode='55P03',message='membership_update_in_progress_retry';\n end if;\n perform 1 from public.user_memberships m where m.user_id=new.user_id for update;\n v_now:=clock_timestamp();\n v_limit:=public.get_user_market_post_limit(new.user_id);\n if v_limit<=0 then raise exception 'membership_inactive';end if;\n select count(*)::integer into v_count from public.market_posts mp where mp.user_id=new.user_id and mp.status='active' and mp.id is distinct from new.id;\n if v_count>=v_limit then raise exception 'market_post_limit_reached';end if;\n select m.paid_until into v_end from public.user_memberships m where m.user_id=new.user_id and m.plan in ('basic','large','seller') and m.status not in ('canceled','expired') and m.paid_until>statement_timestamp();\n new.published_at:=v_now;new.membership_service_ends_at:=v_end;\n return new;\nend;\n$function$\n",
+    "definition": "CREATE OR REPLACE FUNCTION private.enforce_market_activation_limit()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare v_limit integer;v_count integer;v_now timestamptz;v_end timestamptz;\nbegin\n if tg_op='UPDATE' and new.user_id is distinct from old.user_id then raise exception 'market_post_owner_immutable'; end if;\n if new.status<>'active' or (tg_op='UPDATE' and old.status='active') then\n   if tg_op='UPDATE' then new.published_at:=old.published_at;new.membership_service_ends_at:=old.membership_service_ends_at;end if;\n   return new;\n end if;\n -- A direct table UPDATE already owns its post row. Never wait on Kp while holding it.\n -- Payment transactions wait normally; publication is explicitly retryable on contention.\n if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended('membership-payment:'||new.user_id::text,0)) then\n   raise exception using errcode='55P03',message='membership_update_in_progress_retry';\n end if;\n perform 1 from public.user_memberships m where m.user_id=new.user_id for update;\n v_now:=clock_timestamp();\n v_limit:=public.get_user_market_post_limit(new.user_id);\n if v_limit<=0 then raise exception 'membership_inactive';end if;\n select count(*)::integer into v_count from public.market_posts mp where mp.user_id=new.user_id and mp.status='active' and mp.id is distinct from new.id;\n if v_count>=v_limit then raise exception 'market_post_limit_reached';end if;\n select m.paid_until into v_end from public.user_memberships m where m.user_id=new.user_id and public.is_user_membership_active(new.user_id);\n new.published_at:=v_now;new.membership_service_ends_at:=v_end;\n return new;\nend;\n$function$\n",
+    "original_metadata": {
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}"
+    }
+  }
+]

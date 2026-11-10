@@ -159,7 +159,10 @@ export default function MarketDetailView({ payload, loading, working, online, on
                 ) : null}
               </div>
 
-              <span style={timeStyle}>{formatPreciseDateTime(item.created_at)}</span>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                <span style={timeStyle}>{t.market.published_time}: {formatPreciseDateTime(item.published_at || item.created_at)}</span>
+                {item.updated_at ? <span style={timeStyle}>{t.market.last_updated_time}: {formatPreciseDateTime(item.updated_at)}</span> : null}
+              </div>
             </div>
 
             {!isMobileViewport ? <h1 style={titleStyle}>{item.title}</h1> : null}

@@ -37,6 +37,8 @@ export type MarketPostRow = {
   status: MarketPostStatus;
   view_count: number | null;
   created_at: string;
+  /** Server-set on publish and re-publish; legacy records may be null. */
+  published_at?: string | null;
   updated_at: string | null;
   ended_at: string | null;
 };

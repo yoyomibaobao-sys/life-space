@@ -41,14 +41,25 @@ export default function MarketDetailController({ id, online, onBack, onDeleted, 
       ? await supabase.rpc("end_my_market_post", { p_market_post_id: item.id })
       : await supabase.from("market_posts").update({ status: "active" })
         .eq("id", item.id).eq("user_id", item.user_id).select("id").single();
-    setWorking(false);
     if (result.error || (nextStatus === "ended" && result.data !== true)) {
+      setWorking(false);
       const message = String(result.error?.message || "");
       window.alert(message.includes("market_post_limit_reached") ? t.market.post_limit_alert
         : message.includes("membership_inactive") ? t.market.membership_required_alert : t.market.status_update_failed);
       return;
     }
-    setPayload({ ...payload, item: { ...item, status: nextStatus } });
+    // B R06: publication timestamps come from the server activation trigger.
+    const { data: currentPost, error: readbackError } = await supabase
+      .from("market_posts")
+      .select("status, published_at, updated_at, ended_at")
+      .eq("id", item.id)
+      .eq("user_id", item.user_id)
+      .maybeSingle();
+    setWorking(false);
+    if (readbackError) console.error("market status readback error:", readbackError);
+    setPayload((previous) => previous?.item?.id === item.id && previous.currentUserId === item.user_id
+      ? { ...previous, item: { ...previous.item, ...(currentPost || {}), status: nextStatus } }
+      : previous);
   }
 
   async function deletePost() {
