@@ -1,0 +1,138 @@
+[
+  {
+    "canonical": "public.admin_approve_membership_refund_json(uuid,text)",
+    "before_md5": "19ea971c5afae09c4a623f74f80caaf2",
+    "after_md5": "1ce7e49adf16b263cace60b8a50348e1",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "removed_update_count": 1
+  },
+  {
+    "canonical": "public.admin_complete_membership_refund_json(uuid,text,numeric)",
+    "before_md5": "c619b432cd2a77f17cfe6eaee18147e1",
+    "after_md5": "8db3c7532bee158b799e2a864cfb9f71",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "removed_update_count": 2
+  },
+  {
+    "canonical": "public.admin_confirm_membership_payment_json(uuid,text,numeric,text,text,text,text,timestamp with time zone,integer,bigint,integer)",
+    "before_md5": "a84a05ce84f2f9f68be18dc0444fb124",
+    "after_md5": "79e4f09be3fdc908bee707dd05d44f90",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "removed_update_count": 1
+  },
+  {
+    "canonical": "public.admin_confirm_submitted_membership_payment_json(uuid)",
+    "before_md5": "540edea15114433dbdde62e55fbbf46d",
+    "after_md5": "4e840846cb91b8326a753f2399e68960",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}",
+    "removed_update_count": 1
+  },
+  {
+    "canonical": "public.admin_reject_membership_refund_json(uuid,text)",
+    "before_md5": "79cae3fad5cee27139c9196ded6f553e",
+    "after_md5": "6bd2fabcf2f02abac1b5fa8522fda55e",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "removed_update_count": 1
+  },
+  {
+    "canonical": "public.admin_request_membership_payment_update_json(uuid,text)",
+    "before_md5": "f6577ece60b053bab42f50f4446d351e",
+    "after_md5": "4e79e62790dc3927cec77847aae7d3fb",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}",
+    "removed_update_count": 1
+  },
+  {
+    "canonical": "public.admin_update_membership_payment_status_json(uuid,text,text)",
+    "before_md5": "655ecda95d88e7ef43cf017e9990b954",
+    "after_md5": "f20e9c7bb12721273a06d9d1d8c33954",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "removed_update_count": 1
+  },
+  {
+    "canonical": "public.admin_update_user_membership(uuid,text,timestamp with time zone,bigint,integer)",
+    "before_md5": "89605be9982300458ff3b381a50f9efb",
+    "after_md5": "63bce281c52ac51dc981cc8d7cebd745",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "removed_update_count": 2
+  },
+  {
+    "canonical": "public.admin_update_user_membership_json(uuid,text,timestamp with time zone,bigint,integer)",
+    "before_md5": "3fa6dcd8e2c4b63f3443043fa3ee4d5d",
+    "after_md5": "e75c1821b53b3e553f934cb04d435adf",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "removed_update_count": 2
+  },
+  {
+    "canonical": "public.admin_update_user_membership_safe(uuid,text,timestamp with time zone,bigint,integer)",
+    "before_md5": "510f763e294573fca9d3a17eeac7dbc6",
+    "after_md5": "27efcfbf2d04317802ab1da1a5038093",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "removed_update_count": 2
+  },
+  {
+    "canonical": "public.bind_paypal_membership_order_json(uuid,uuid,text)",
+    "before_md5": "9eb92692263995dcd973dfc6beacf2e0",
+    "after_md5": "75bfd27a9fec8afcaf57e07a0cb9eab4",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "removed_update_count": 1
+  },
+  {
+    "canonical": "public.cancel_membership_payment_order_json(uuid)",
+    "before_md5": "3e238f30b6664255367bde3f90a9f7b2",
+    "after_md5": "77a735f9cbc98e638e57b333ee6081ab",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}",
+    "removed_update_count": 1
+  },
+  {
+    "canonical": "public.confirm_paypal_membership_payment_json(uuid,text,text,timestamp with time zone)",
+    "before_md5": "0aa2a2ce22539d0f39c7c8db88c2559e",
+    "after_md5": "33b309d2756120b99da8fb25e10e065a",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "removed_update_count": 1
+  },
+  {
+    "canonical": "public.create_membership_payment_order_json(text,text)",
+    "before_md5": "534b20367b60263be02eb5b3a8cf6a6e",
+    "after_md5": "78ae57afeae9da3e28b7219240bdbae0",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}",
+    "removed_update_count": 1
+  },
+  {
+    "canonical": "public.get_my_open_membership_payment_order_json()",
+    "before_md5": "526212e5d20069a527803c38df8125a7",
+    "after_md5": "fdda2083fde077ec01413915345f40ef",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}",
+    "removed_update_count": 1
+  },
+  {
+    "canonical": "public.request_membership_refund_json(uuid,text)",
+    "before_md5": "13fc694875082292bf8791d0beacecec",
+    "after_md5": "331295643060ed359555312963b2f354",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "removed_update_count": 1
+  },
+  {
+    "canonical": "public.submit_membership_payment_order_json(uuid,text,text)",
+    "before_md5": "e2f35fbf3dd8f7f6e1b39488797e8222",
+    "after_md5": "6a83e757212a60e0e365f3577ae6de0e",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}",
+    "removed_update_count": 1
+  }
+]
