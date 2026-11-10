@@ -1,7 +1,7 @@
 import { formatCardDate } from "@/lib/date-time";
 import type { Language } from "@/lib/i18n";
 
-export type MembershipPlan = "trial" | "basic" | "large" | "seller" | "admin";
+export type MembershipPlan = "free" | "trial" | "basic" | "large" | "seller" | "admin";
 export type MembershipStatus = "trialing" | "active" | "past_due" | "expired" | "canceled";
 
 export type MyMembership = {
@@ -73,6 +73,8 @@ export function getMembershipPlanLabel(
 ) {
   if (language === "en") {
     switch (plan) {
+      case "free":
+        return "Registered user";
       case "trial":
         return "Cloud trial";
       case "basic":
@@ -88,6 +90,8 @@ export function getMembershipPlanLabel(
     }
   }
   switch (plan) {
+    case "free":
+      return "注册用户";
     case "trial":
       return "云体验";
     case "basic":
@@ -230,7 +234,10 @@ export function canCreateMembershipMarketPost(membership?: MyMembership | null) 
 }
 
 export function canAccessMembershipGuidance(membership?: MyMembership | null) {
-  return membership?.can_create_content === true;
+  // Free users may write within their cloud quota; full Guide access is paid.
+  return membership?.can_create_content === true
+    && (membership.plan === "basic" || membership.plan === "large")
+    && (membership.status === "active" || membership.status === "past_due");
 }
 
 export function getCreateContentBlockedText(
