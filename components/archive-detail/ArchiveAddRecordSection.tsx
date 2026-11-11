@@ -17,6 +17,7 @@ export default function ArchiveAddRecordSection({
   initialFiles,
   initialCapturedAt,
   initialNote,
+  publicationAccess,
 }: {
   archiveId: string;
   archiveCategory?: string | null;
@@ -29,6 +30,7 @@ export default function ArchiveAddRecordSection({
   initialFiles?: File[];
   initialCapturedAt?: (string | null)[];
   initialNote?: string;
+  publicationAccess?: Parameters<typeof AddRecord>[0]["publicationAccess"];
 }) {
   const { t } = useLanguage();
 
@@ -51,6 +53,7 @@ export default function ArchiveAddRecordSection({
         initialFiles={initialFiles}
         initialCapturedAt={initialCapturedAt}
         initialNote={initialNote}
+        publicationAccess={publicationAccess}
       />
     </ArchiveRecordComposer>
   );

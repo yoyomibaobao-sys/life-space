@@ -38,8 +38,8 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(buildScript, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(buildScript, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
   assert.match(source, /listVisibleLocalArchiveSummaries/);
-  assert.match(source, /inferSingleLocalArchiveOwnerContext/);
-  assert.match(source, /rememberLocalOwnerContext/);
+  assert.match(source, /resolveAndroidReadOwner\(auth\)/);
+  assert.doesNotMatch(source, /inferSingleLocalArchiveOwnerContext/);
   assert.match(source, /createLocalArchive/);
   assert.match(source, /createLocalRecord/);
   assert.match(source, /updateLocalArchiveFields/);
@@ -60,8 +60,8 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(sharedWorkspace, /<ConnectivityNotice/);
   assert.match(source, /useAndroidConnectivity/);
   assert.match(source, /refreshCloudOfflineCaches/);
-  assert.match(source, /syncAllPendingCloudArchives/);
-  assert.match(source, /syncPendingCloudArchive/);
+  assert.match(source, /syncAndroidAllPendingCloudArchives/);
+  assert.match(source, /syncAndroidPendingCloudArchive/);
   assert.match(source, /listPendingCloudSyncSummaries/);
   assert.match(source, /useAndroidAuthState/);
   assert.match(read("lib/android-auth-state.ts"), /auth\.getSession/);
@@ -76,7 +76,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /label: copy\.cloud/);
   assert.match(source, /<ArchiveWorkspaceTemplate/);
   assert.match(source, /w5WorkspaceSources\(auth\.status\)/);
-  assert.match(source, /auth === "signed-in" \? \["cloud", "pending"\] : \["cloud"\]/);
+  assert.match(source, /auth === "signed-in" \|\| auth === "offline-owner-read"\s*\? \["cloud", "pending"\] : \["cloud"\]/);
   assert.match(source, /activeSource=\{sourceFilter\}/);
   assert.match(source, /<ArchiveTaxonomyPanel/);
   assert.match(sharedTaxonomy, /archiveCategoryOptions\.map/);
@@ -99,14 +99,15 @@ test("online Android hides standalone local controls but preserves existing loca
   assert.match(profile, /onLocalSpaceVisibilityChange \?/);
 });
 
-test("offline shell safely recovers one local owner when browser session state is unavailable", () => {
+test("offline shell requires a verified device Owner before reading private local rows", () => {
   const db = read("lib/local-offline-db.ts");
   const source = read("mobile-offline-src/main.tsx");
 
   assert.match(db, /export async function inferSingleLocalArchiveOwnerContext/);
   assert.match(db, /if \(owners\.size > 1\) return null/);
-  assert.match(source, /if \(!nextOwner && !wasLocalOwnerExplicitlySignedOut\(\)\)[\s\S]*inferSingleLocalArchiveOwnerContext/);
-  assert.match(source, /rememberLocalOwnerContext/);
+  assert.match(source, /resolveAndroidReadOwner\(auth\)/);
+  assert.match(source, /readOwnerRef\.current[\s\S]*?if \(!privateContext\) \{/);
+  assert.doesNotMatch(source, /inferSingleLocalArchiveOwnerContext|rememberLocalOwnerContext/);
 });
 
 test("explicit sign-out cannot restore another account from local projects", () => {

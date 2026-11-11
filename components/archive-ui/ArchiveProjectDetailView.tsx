@@ -38,6 +38,8 @@ export type ArchiveProjectDetailCapabilities = {
   canFollow?: boolean;
   canWriteArchive: boolean;
   canAddRecord?: boolean;
+  // Retains only an already-authorized open editor; grants no action capability.
+  retainRecordComposer?: boolean;
   canManageCycle: boolean;
   canSaveToLocal?: boolean;
   canDeleteArchive?: boolean;
@@ -364,7 +366,7 @@ export default function ArchiveProjectDetailView({
 
         {activeTab === "experience" ? experienceContent : null}
 
-        {mode === "owner" && capabilities.canAddRecord && activeTab === "records"
+        {mode === "owner" && (capabilities.canAddRecord || capabilities.retainRecordComposer) && activeTab === "records"
           ? recordComposer
           : null}
 

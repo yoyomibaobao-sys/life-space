@@ -67,8 +67,10 @@ test("cloud record composer uses the native gallery without changing web picker 
   assert.ok(start >= 0 && end > start);
   const handler = addRecord.slice(start, end);
   assert.match(handler, /if \(!isAndroidRecordGallery\(\)\)[\s\S]*chooseInputRef\.current\?\.click\(\)/);
-  assert.match(handler, /await pickAndroidRecordPhotos\(\)/);
-  assert.match(handler, /appendFiles\(selected\)/);
+  assert.match(handler, /await pickAndroidRecordPhotos\(\{ requestId \}\)/);
+  assert.match(handler, /pendingPicker\.current = \{ requestId, ownerId, files: selected/);
+  assert.match(handler, /await acceptPendingPicker\(\)/);
+  assert.match(addRecord, /appendFiles\(result\.files\)/);
   assert.match(addRecord, /onClick=\{\(\) => \{ void chooseFromGallery\(\); \}\}/);
   assert.match(addRecord, /getBehaviorRestrictionErrorText/);
 });

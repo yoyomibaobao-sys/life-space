@@ -45,17 +45,18 @@ test("form requires country and one locality, not mandatory city, and displays d
   assert.match(form,/\{error \? <section className="notice warning"/);
 });
 
-test("offline cloud project route always uses cloud cache immediately except open media fullscreen",()=>{
-  assert.match(main,/const showLiveCloud = imageFullscreenOpen \? presentationOnline\.current\s*: !online \|\| connectivity\.status === "offline" \? false/);
-  assert.match(main,/getCloudOfflineCacheByCloudSource\(archiveId, authenticatedOwnerContext\)/);
-  assert.match(main,/resolveLocalArchiveDetail\(archive\.id, authenticatedOwnerContext\)/);
-  assert.match(main,/if \(status === "ready" && cached\) return <DeviceOwnedProjectDetail/);
+test("offline cloud project route displays only the verified Owner cache and suspends the existing editor",()=>{
+  assert.match(main,/const showVerifiedCloud = Boolean\(verifiedOwnerId && auth\.verification === "verified" &&\s*online && connectivity\.status === "online"\)/);
+  assert.match(main,/suspended=\{!showVerifiedCloud\}/);
+  assert.match(main,/getCloudOfflineCacheByCloudSource\(archiveId, readOwnerContext\)/);
+  assert.match(main,/resolveLocalArchiveDetail\(archive\.id, readOwnerContext\)/);
+  assert.match(main,/if \(status === "ready" && cached &&\s*cached\.archive\.local_owner_user_id === readOwnerContext\.userId\) return <DeviceOwnedProjectDetail/);
   assert.match(main,/onClick=\{\(\) => openDetail\(archive\.id\)\}/);
 });
 
 test("online Android legacy/new project routes cannot default into disabled S6 local-only",()=>{
   assert.match(main,/const newProjectDestination: CreationDestination \| null/);
-  assert.match(main,/screen\.destination === "pending-cloud" \|\| !online \? "pending-cloud" : "live-cloud"/);
+  assert.match(main,/screen\.destination === "pending-cloud" \|\| !online \|\| offlineOwnerRead \? "pending-cloud" : "live-cloud"/);
   assert.match(main,/destination=\{newProjectDestination \|\| "pending-cloud"\}/);
   assert.match(main,/const localSpaceEnabled = false/);
   assert.match(main,/sync_destination: owner\?\.userId && destination === "pending-cloud" \? "pending-cloud" : "local-only"/);
@@ -76,7 +77,8 @@ test("synced cache editing is closed in UI and database but historical legitimat
   assert.match(adapter,/return isPendingCloudSyncStatus\(record\.sync\?\.status\)/);
   assert.match(db,/if \(!allowInFlightReceipt\) \{\s*throw Error\("已同步云项目离线只读/);
   assert.match(db,/if \(!isPendingCloudSyncStatus\(record\.sync\?\.status\)\)/);
-  assert.match(main,/await preparePendingCloudSyncQueue/);
+  assert.doesNotMatch(main,/preparePendingCloudSyncQueue/);
+  assert.match(main,/await syncAndroidPendingCloudArchive/);
   assert.match(main,/async function uploadPending\(/);
 });
 

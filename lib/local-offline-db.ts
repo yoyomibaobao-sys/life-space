@@ -1953,7 +1953,7 @@ export async function listVisibleLocalArchiveSummaries(
       !(row.saf_local_space_id && classifyLegacySafArchive(row) !== "local-project" &&
         row.local_owner_user_id !== currentUserId))
     .map(normalizeLocalArchive);
-  if (!safConnected && normalizedArchives.length === 0) {
+  if (!ownerContext?.snapshotOnly && !safConnected && normalizedArchives.length === 0) {
     throw Error("Reconnect your LifeSpace data folder to read local projects.");
   }
   if (!ownerContext?.snapshotOnly) updateLocalUsageHints(

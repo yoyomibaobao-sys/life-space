@@ -46,16 +46,16 @@ test("Android reconnect refreshes Owner data read-only without preparing pending
   assert.match(layout, /<PendingCloudSyncPrompt \/>/);
   assert.match(localDetail, /syncPendingCloudArchive/);
   assert.match(workspace, /\?sync=1/);
-  assert.match(offline, /syncAllPendingCloudArchives/);
+  assert.match(offline, /syncAndroidAllPendingCloudArchives/);
   const reconnectStart = offline.indexOf("const recoveryKey =");
   const reconnectEnd = offline.search(/useEffect\(\(\) => \{\r?\n\s+if \(screen\.kind !== "activity"/);
   assert.ok(reconnectStart >= 0 && reconnectEnd > reconnectStart);
   const reconnectEffect = offline.slice(reconnectStart, reconnectEnd);
-  assert.doesNotMatch(reconnectEffect, /preparePendingCloudSyncQueue|syncAllPendingCloudArchives|syncPendingCloudArchive/,
+  assert.doesNotMatch(reconnectEffect, /preparePendingCloudSyncQueue|sync(?:Android)?(?:All)?PendingCloudArchive/,
     "Network recovery must not prepare or upload pending data before verified manual action");
   assert.match(reconnectEffect, /loadCloudList\(cloudUserId,\s*\{\s*readOnly:\s*true\s*\}\)/,
     "Network recovery refreshes cloud history read-only");
-  assert.match(reconnectEffect, /loadList\(authenticatedOwnerContext\)/,
+  assert.match(reconnectEffect, /refreshListSafely\(authenticatedOwnerContext\)/,
     "Network recovery refreshes only verified Owner local list");
   assert.match(offline, /sync_destination/);
   assert.match(offline, /refreshCloudOfflineCaches/);

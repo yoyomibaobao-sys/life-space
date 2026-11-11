@@ -23,7 +23,56 @@ type ConnectivityControllerOptions = {
   debounceMs?: number;
 };
 
-export const LIFESPACE_HEALTH_URL = "https://life-space.uk/api/health";
+const PRODUCTION_SUPABASE_REF = "eidltoikfpnrzxruvawf";
+const ISOLATED_QA_SUPABASE_REF = "mablwxlipcgbmbnfdbkc";
+export const PRODUCTION_HEALTH_URL = "https://life-space.uk/api/health";
+export const ISOLATED_QA_HEALTH_URL =
+  "https://lifespace-site-media-qa-20261028.lifespace-assets-isolated-lab.workers.dev/api/health";
+
+// The Android native health request must follow its bundled Supabase environment.
+// An unrecognized or absent project must NEVER fall back to production health.
+export function resolveAndroidHealthUrl(supabaseUrl?: string | null): string | null {
+  if (!supabaseUrl) return null;
+  try {
+    const parsed = new URL(supabaseUrl);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password ||
+        parsed.port || parsed.pathname !== "/" || parsed.search || parsed.hash) return null;
+    if (parsed.hostname === `${PRODUCTION_SUPABASE_REF}.supabase.co`) {
+      return PRODUCTION_HEALTH_URL;
+    }
+    if (parsed.hostname === `${ISOLATED_QA_SUPABASE_REF}.supabase.co`) {
+      return ISOLATED_QA_HEALTH_URL;
+    }
+  } catch {
+    // Invalid or unknown source cannot prove service availability.
+  }
+  return null;
+}
+
+export const LIFESPACE_HEALTH_URL =
+  resolveAndroidHealthUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+
+export type AndroidWorkspaceRefreshState =
+  "idle" | "connecting" | "offline" | "connection-checked" | "success" | "cloud-failure";
+
+export function resolveAndroidWorkspaceNetworkState(
+  snapshot: Pick<AndroidConnectivitySnapshot, "transportStatus" | "serviceStatus">,
+  refresh: AndroidWorkspaceRefreshState,
+  cloudError = "",
+): AndroidWorkspaceRefreshState {
+  if (snapshot.transportStatus === "disconnected") return "offline";
+  // Health probing is not an offline verdict; a connected transport is checking.
+  if (refresh === "connecting" || snapshot.serviceStatus === "checking") return "connecting";
+  // Health 200 without verified session or private project GET means connection
+  // only; never silently hide that warning or call it a personal list refresh.
+  if (refresh === "connection-checked") return snapshot.serviceStatus === "reachable"
+    ? "connection-checked" : "cloud-failure";
+  if (refresh === "cloud-failure" || Boolean(cloudError) ||
+      snapshot.serviceStatus === "unreachable") return "cloud-failure";
+  if (refresh === "success") return "success";
+  return "idle";
+}
+
 const HEALTH_TIMEOUT_MS = 2500;
 
 function resolveBusinessStatus(
@@ -152,12 +201,16 @@ export async function probeLifeSpaceService(options: {
   isNative?: boolean;
   nativeRequest?: typeof CapacitorHttp.request;
   fetchImpl?: typeof fetch;
+  /** Explicit endpoint for isolated contract testing only; production uses bundled environment. */
+  healthUrl?: string;
 } = {}) {
   const isNative = options.isNative ?? Capacitor.isNativePlatform();
   try {
     if (isNative) {
+      const healthUrl = options.healthUrl || LIFESPACE_HEALTH_URL;
+      if (!healthUrl) return false; // fail closed, never probe production for unknown QA
       const response = await (options.nativeRequest || CapacitorHttp.request)({
-        url: LIFESPACE_HEALTH_URL,
+        url: healthUrl,
         method: "GET",
         headers: { Accept: "application/json", "Cache-Control": "no-cache" },
         disableRedirects: true,
@@ -166,14 +219,14 @@ export async function probeLifeSpaceService(options: {
         readTimeout: HEALTH_TIMEOUT_MS,
       });
       const responseUrl = response.url
-        ? new URL(response.url, LIFESPACE_HEALTH_URL)
-        : new URL(LIFESPACE_HEALTH_URL);
+        ? new URL(response.url, healthUrl)
+        : new URL(healthUrl);
       const data = typeof response.data === "string"
         ? JSON.parse(response.data)
         : response.data;
       return (
         response.status === 200 &&
-        responseUrl.href === LIFESPACE_HEALTH_URL &&
+        responseUrl.href === healthUrl &&
         Boolean(data && typeof data === "object" && (data as { ok?: unknown }).ok === true)
       );
     }
@@ -289,7 +342,7 @@ export function useAndroidConnectivityStatus() {
   return useSyncExternalStore(
     subscribeAndroidConnectivity,
     getAndroidConnectivitySnapshot,
-    () => ({
+    (): AndroidConnectivitySnapshot => ({
       transportStatus: "connected",
       serviceStatus: "reachable",
       status: "online",

@@ -16,6 +16,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ImageActionsPlugin.class);
         registerPlugin(RecordGalleryPlugin.class);
         registerPlugin(InstallHistoryPlugin.class);
+        registerPlugin(OfflineOwnerKeystorePlugin.class);
         registerPlugin(NativeSharePlugin.class);
         super.onCreate(savedInstanceState);
         WebView.setWebContentsDebuggingEnabled(true);

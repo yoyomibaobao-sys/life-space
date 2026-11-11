@@ -7,17 +7,19 @@ export type QuickAddDraft = {
   note: string;
 };
 
-export type AndroidAuthStatus = "checking" | "signed-out" | "signed-in";
+export type AndroidAuthStatus = "checking" | "signed-out" | "signed-in" | "offline-owner-read";
 export type WorkspaceSource = "all" | "cloud" | "local";
 
 /** The server-reported trial lifecycle, never the device clock, controls expired-trial access. */
 export function canReadAndroidCloudWorkspace(input: {
   auth: AndroidAuthStatus;
   userId: string | null;
+  offlineOwnerId?: string | null;
   membership: { plan: string; can_create_content: boolean | null } | null;
   trialAccess: { userId: string; lifecycle: string } | null;
 }): boolean {
   const { auth, userId, membership, trialAccess } = input;
+  if (auth === "offline-owner-read") return Boolean(userId && input.offlineOwnerId === userId);
   if (auth !== "signed-in" || !userId || !membership) return false;
   if (membership.can_create_content === true) return true;
   if (["basic", "large", "seller", "admin"].includes(membership.plan)) return true;
@@ -35,7 +37,9 @@ export function workspaceSourceOptions(
     : ["cloud"];
 }
 
-export function projectCreationDestinations(online: boolean, signedIn: boolean, localSpaceEnabled = true): CreationDestination[] {
+export function projectCreationDestinations(online: boolean, signedIn: boolean, localSpaceEnabled = true, offlineOwnerVerified = false): CreationDestination[] {
+  // This input is the independent Keystore-verified state, never remembered UID.
+  if (offlineOwnerVerified) return ["pending-cloud"];
   if (!signedIn) return localSpaceEnabled ? ["local-only"] : [];
   if (!localSpaceEnabled) return online ? ["live-cloud"] : ["pending-cloud"];
   return online ? ["live-cloud", "local-only"] : ["pending-cloud", "local-only"];

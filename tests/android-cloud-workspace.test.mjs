@@ -109,10 +109,10 @@ test("pending UI stays visible offline and both upload paths require a user clic
   const reconnectEnd = source.search(/useEffect\(\(\) => \{\r?\n\s+if \(screen\.kind !== "activity"/);
   assert.ok(reconnectStart >= 0 && reconnectEnd > reconnectStart);
   const reconnect = source.slice(reconnectStart, reconnectEnd);
-  assert.doesNotMatch(reconnect, /syncAllPendingCloudArchives|syncPendingCloudArchive/);
+  assert.doesNotMatch(reconnect, /preparePendingCloudSyncQueue|sync(?:Android)?(?:All)?PendingCloudArchive/);
   assert.match(source, /data-android-cloud-pending="true"/);
   assert.match(source, /sourceFilter === "cloud" \|\| sourceFilter === "pending"/);
-  assert.match(source, /data-android-pending-cards="true"/);
+  assert.match(source, /data-android-temporary-space="true"/);
   assert.match(source, /联网后可上传/);
   assert.match(source, /item\.creating[\s\S]*待创建云端/);
   assert.match(source, /item\.failed[\s\S]*待重试[\s\S]*待同步/);
@@ -121,7 +121,7 @@ test("pending UI stays visible offline and both upload paths require a user clic
   assert.match(source, /language === "zh" \? "上传" : "Upload"/);
   assert.match(source, /data-android-ended-projects="true"/);
   assert.match(source, /endedFilteredCloudArchives\.map\(renderCloudProjectCard\)[\s\S]*endedFilteredLocalArchives\.map\(renderLocalProjectCard\)/);
-  assert.match(source, /async function uploadPendingProject[\s\S]*syncPendingCloudArchive/);
-  assert.match(source, /async function uploadAllPending[\s\S]*syncAllPendingCloudArchives/);
-  assert.match(source, /sourceFilter !== "local" && authenticatedOwnerContext && filteredPending\.length/);
+  assert.match(source, /async function uploadPendingProject[\s\S]*syncAndroidPendingCloudArchive/);
+  assert.match(source, /async function uploadAllPending[\s\S]*syncAndroidAllPendingCloudArchives/);
+  assert.match(source, /readOwnerContext && sourceFilter === "pending" && filteredPending\.length/);
 });

@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
+import { getAndroidAuthSnapshot, isConfirmedInvalidAndroidSession } from "@/lib/android-auth-state";
 import InternalLink from "@/components/navigation/InternalLink";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getBehaviorRestrictionErrorText } from "@/lib/behavior-restriction-errors";
@@ -22,6 +23,10 @@ import {
 } from "@/lib/image-compression";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import {
+  bindRecoveryRecord, completeRecovery, eraseRecovery, markRecoveryUnknown,
+  readRecovery, stageRecovery, type RecoveryEntry,
+} from "@/lib/cloud-record-photo-recovery";
+import {
   cancelStorageUploadReservation,
   reconcileMediaUploadCommit,
   reserveStorageUpload,
@@ -38,7 +43,16 @@ import {
 } from "@/lib/archive-cycle-dates";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
-import { isAndroidRecordGallery, pickAndroidRecordPhotos } from "@/lib/android-record-gallery";
+import {
+  isAndroidRecordGallery,
+  pickAndroidRecordPhotos,
+  readRestoredAndroidRecordPhotos,
+  consumeCloudPickerResume,
+  clearCloudPickerResume,
+  peekCloudPickerResume,
+  saveCloudPickerResume,
+  type CloudPickerFields,
+} from "@/lib/android-record-gallery";
 import { toLocalDateTimeInputValue } from "@/lib/date-time";
 import {
   buildRecordPhotoGroups,
@@ -59,6 +73,13 @@ import {
 type RecordVisibility = "public" | "private";
 
 type Props = {
+  publicationAccess?: {
+    ownerId: string;
+    scope?: object;
+    state: "checking" | "allowed" | "unknown" | "denied";
+    isCurrent: () => boolean;
+    revalidate: () => Promise<boolean>;
+  };
   archiveId: string;
   archiveCategory?: string | null;
   archiveIsPublic: boolean;
@@ -92,6 +113,7 @@ export default function AddRecord({
   initialFiles = [],
   initialCapturedAt = [],
   initialNote = "",
+  publicationAccess,
 }: Props) {
   const { language, t } = useLanguage();
   const copy = t.record;
@@ -112,6 +134,10 @@ export default function AddRecord({
   const [storageUsedBytes, setStorageUsedBytes] = useState(0);
   const [membershipLoading, setMembershipLoading] = useState(true);
   const [membershipNotice, setMembershipNotice] = useState("");
+  const [restoreNotice, setRestoreNotice] = useState("");
+  const [submissionNeedsReview, setSubmissionNeedsReview] = useState(false);
+  const [recoveringPhoto, setRecoveringPhoto] = useState(false);
+  const [recoveryError, setRecoveryError] = useState("");
 
   const chooseInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -126,6 +152,86 @@ export default function AddRecord({
     // Initial files belong to this composer instance; the owner keeps the draft on failure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialFiles]);
+  // Only an interrupted native cloud picker is recoverable, once, on the next
+  // authenticated open of the same cloud project. This is not a drafts system.
+  const restoreCheckedRef = useRef(false);
+  const restoredVisibilityRef = useRef(false);
+  useEffect(() => {
+    if (restoreCheckedRef.current || !mobileMode || !isAndroidRecordGallery() ||
+      initialFiles.length > 0 || quickCaptureId) return;
+    let disposed = false;
+    void (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (disposed || restoreCheckedRef.current || !user || !membershipScope.current.live || membershipScope.current.revoked ||
+          (membershipScope.current.ownerId && user.id !== membershipScope.current.ownerId) ||
+          (publicationAccessRef.current && !publicationAccessRef.current.isCurrent())) return;
+      restoreCheckedRef.current = true;
+      const interrupted = consumeCloudPickerResume(user.id, archiveId);
+      if (!interrupted || disposed) return;
+      restoredVisibilityRef.current = true;
+      const restored = interrupted.fields;
+      setText(restored.text);
+      setTimeMode(restored.timeMode);
+      setCustomTime(restored.customTime);
+      setSplitByDate(restored.splitByDate);
+      setRecordVisibility(archiveIsPublic ? restored.visibility : "private");
+      setIsHelpRecord(restored.isHelpRecord);
+      setSelectedCycleId(restored.selectedCycleId ?? undefined);
+      setEndSelectedCycleAfterSave(restored.endSelectedCycleAfterSave);
+      if (interrupted.phase === "submitting-unknown" || interrupted.phase === "reconcile-only") {
+        setSubmissionNeedsReview(true);
+        setRestoreNotice(language === "zh"
+          ? "上次发布结果尚未确认，请先核对云端记录；不会自动再次发布。"
+          : "The last publication is unconfirmed. Check cloud records before trying again.");
+        return;
+      }
+      if (interrupted.phase === "selected" && interrupted.result?.requestId === interrupted.requestId) {
+        try {
+          const recovered = await readRestoredAndroidRecordPhotos(interrupted.result);
+          if (disposed || !membershipScope.current.live || membershipScope.current.revoked ||
+              membershipScope.current.archiveId !== archiveId ||
+              (membershipScope.current.ownerId && membershipScope.current.ownerId !== user.id) ||
+              (activePicker.current && activePicker.current !== interrupted.requestId)) return;
+          activePicker.current = interrupted.requestId;
+          pendingPicker.current = { requestId: interrupted.requestId, ownerId: user.id,
+            files: recovered.files, truncated: recovered.truncated };
+          await acceptPendingPicker();
+          setRestoreNotice(restored.previousPhotoCount > 0
+            ? (language === "zh" ? "编辑内容与本次选图已恢复；此前选过的照片需重新选择。" : "Editor and returned photos restored. Earlier photos need reselecting.")
+            : (language === "zh" ? "已恢复上次编辑内容和实际可读取的照片。" : "Editor and readable photos restored."));
+          if (recovered.truncated) showToast(copy.photo_batch_trimmed_prefix + " " + MAX_RECORD_PHOTOS_PER_ADD + " " + copy.photo_batch_trimmed_suffix);
+          return;
+        } catch {
+          // A restored count or URI never proves image bytes are readable.
+        }
+      }
+      if (interrupted.phase === "canceled" && restored.previousPhotoCount === 0) {
+        setRestoreNotice(language === "zh"
+          ? "已恢复编辑内容；上次选图已取消，没有新增照片。"
+          : "Editor restored. The previous photo selection was canceled.");
+        return;
+      }
+      setRestoreNotice(language === "zh"
+        ? "已恢复上次编辑内容；照片未能可靠恢复，请重新选择。"
+        : "The editor was restored, but photos could not be read. Select them again.");
+    })().catch(() => {
+      if (!disposed) setRestoreNotice(language === "zh"
+        ? "无法读取上次选图状态，请重新选择照片。" : "Could not restore the previous selection. Select photos again.");
+    });
+    return () => { disposed = true; };
+    // This only runs for the first mount of the cloud composer, never on edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [archiveId, mobileMode, quickCaptureId, initialFiles.length, publicationAccess?.state]);
+
+  function getPickerFields(): CloudPickerFields {
+    return {
+      text, timeMode, customTime,
+      visibility: recordVisibility, splitByDate, isHelpRecord,
+      selectedCycleId: selectedCycleId ?? null, endSelectedCycleAfterSave,
+      previousPhotoCount: files.length,
+    };
+  }
+
   const sortedActiveCycles = [...activeCycles].sort(
     (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
   );
@@ -158,7 +264,7 @@ export default function AddRecord({
   }, [activeCycleIdsKey, selectedCycleId]);
 
   const contentBlocked =
-    !membershipLoading && !canCreateMembershipContent(membership);
+    !canCreateMembershipContent(membership) || (publicationAccess !== undefined && publicationAccess.state !== "allowed");
   const selectedFileBytes = files.reduce((total, file) => total + file.size, 0);
   const storageLimitBytes = Number(membership?.storage_limit_bytes || 0);
   const storageRemainingBytes = getStorageRemainingBytes({
@@ -171,45 +277,197 @@ export default function AddRecord({
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
+      if (restoredVisibilityRef.current && archiveIsPublic) return;
       setRecordVisibility(archiveIsPublic ? "public" : "private");
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, [archiveIsPublic]);
 
-  useEffect(() => {
-    async function loadMembership() {
-      const { data: { user } } = await supabase.auth.getUser();
+  const membershipScope = useRef({ live: true, revoked: false, paused: false, epoch: 0, archiveId, ownerId: publicationAccess?.ownerId || "", boundary: publicationAccess?.scope, pausedAuthority: null as ReturnType<typeof getAndroidAuthSnapshot> | null });
+  const membershipRequest = useRef(0);
+  const publicationBusy = useRef(false);
+  const photoRecoveryBusy = useRef(false);
+  const galleryPickerBusy = useRef(false);
+  const membershipFlight = useRef<Promise<MyMembership | null> | null>(null);
+  const publicationAccessRef = useRef(publicationAccess);
+  publicationAccessRef.current = publicationAccess;
+  const [identityBlocked, setIdentityBlocked] = useState(false);
+  const [authPaused, setAuthPaused] = useState(false);
+  const membershipProof = useRef({ epoch: -1, allowed: false });
+  const pendingPicker = useRef<{ requestId: string; ownerId: string; files: File[]; truncated: boolean } | null>(null);
+  const activePicker = useRef<string | null>(null);
+  const writeAttempt = useRef<{ epoch: number; boundary: object | undefined; authority: ReturnType<typeof getAndroidAuthSnapshot> | null } | null>(null);
+  if (membershipScope.current.boundary !== publicationAccess?.scope) {
+    // Render-time fence: old asynchronous preparation cannot survive a parent
+    // identity/access generation, even before effects have had a chance to run.
+    membershipScope.current.boundary = publicationAccess?.scope;
+    membershipScope.current.epoch += 1;
+    membershipScope.current.paused = true;
+    membershipRequest.current += 1;
+    membershipFlight.current = null;
+    membershipProof.current.allowed = false;
+  }
+  const currentAuth = publicationAccess ? getAndroidAuthSnapshot() : null;
+  const confirmedIdentityRejection = Boolean(currentAuth && (currentAuth.explicitSignedOut ||
+    currentAuth.status === "signed-out" || currentAuth.verification === "invalid-session" ||
+    currentAuth.verification === "no-session" ||
+    (currentAuth.status === "signed-in" && currentAuth.sessionUserId !== membershipScope.current.ownerId)));
+  if (confirmedIdentityRejection || membershipScope.current.archiveId !== archiveId ||
+      (publicationAccess && membershipScope.current.ownerId && publicationAccess.ownerId !== membershipScope.current.ownerId)) membershipScope.current.revoked = true;
+  const editorPaused = authPaused || membershipScope.current.paused ||
+    Boolean(publicationAccess && !publicationAccess.isCurrent());
 
-      if (!user) {
-        setMembership(null);
-        setMembershipLoading(false);
-        return;
-      }
-
-      const [membershipResult, profileResult] = await Promise.all([
-        supabase.rpc("get_my_membership"),
-        supabase.from("profiles").select("storage_used").eq("id", user.id).maybeSingle(),
-      ]);
-
-      if (membershipResult.error) {
-        console.error("load membership error:", membershipResult.error);
-        setMembership(null);
-      } else {
-        setMembership(normalizeMembershipRpcResult(membershipResult.data));
-      }
-
-      if (profileResult.error) {
-        console.error("load profile storage error:", profileResult.error);
-        setStorageUsedBytes(0);
-      } else {
-        setStorageUsedBytes(Number(profileResult.data?.storage_used || 0));
-      }
-
-      setMembershipLoading(false);
+  const [membershipRetry, setMembershipRetry] = useState(0);
+  const membershipUnknown = !membershipLoading && (!membership || typeof membership.can_create_content !== "boolean");
+  function assertPublicationCurrent() {
+    const scope = membershipScope.current, attempt = writeAttempt.current;
+    const parent = publicationAccessRef.current;
+    if (!attempt || !scope.live || scope.revoked || scope.paused ||
+        scope.archiveId !== archiveId || scope.epoch !== attempt.epoch ||
+        parent?.scope !== attempt.boundary ||
+        (parent && (!parent.isCurrent() || parent.state !== "allowed" ||
+          getAndroidAuthSnapshot() !== attempt.authority))) {
+      throw new Error("publication_authority_changed");
     }
+  }
 
-    void loadMembership();
-  }, []);
+
+  const verifyMembership = useCallback((): Promise<MyMembership | null> => {
+    if (membershipFlight.current) return membershipFlight.current;
+    const scope = membershipScope.current;
+    const parent = publicationAccessRef.current;
+    if (!scope.live || scope.revoked || (parent && !parent.isCurrent())) return Promise.resolve(null);
+    const authority = parent ? getAndroidAuthSnapshot() : null;
+    if (authority && (authority === scope.pausedAuthority || authority.status !== "signed-in" ||
+        authority.verification !== "verified" || authority.explicitSignedOut ||
+        authority.sessionUserId !== scope.ownerId)) return Promise.resolve(null);
+    const epoch = scope.epoch;
+    const request = ++membershipRequest.current;
+    const accept = () => scope.live && !scope.revoked && scope.epoch === epoch &&
+      membershipRequest.current === request && scope.archiveId === archiveId &&
+      (!publicationAccessRef.current || (publicationAccessRef.current.isCurrent() &&
+        getAndroidAuthSnapshot() === authority));
+    setMembershipLoading(true);
+    setMembership(null);
+    membershipProof.current.allowed = false;
+    const promise = (async () => {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (!accept()) return null;
+        if (error) { if (isConfirmedInvalidAndroidSession(error)) { scope.revoked = true; setIdentityBlocked(true); } return null; }
+        if (!user || (scope.ownerId && scope.ownerId !== user.id) ||
+            (parent && parent.ownerId !== user.id)) {
+          scope.revoked = true;
+          scope.epoch += 1;
+          setIdentityBlocked(true);
+          return null;
+        }
+        scope.ownerId = user.id;
+        const [member, profile] = await Promise.all([
+          supabase.rpc("get_my_membership"),
+          supabase.from("profiles").select("storage_used").eq("id", user.id).maybeSingle(),
+        ]);
+        if (!accept()) return null;
+        const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+        if (!accept()) return null;
+        if (authError) { if (isConfirmedInvalidAndroidSession(authError)) { scope.revoked = true; setIdentityBlocked(true); } return null; }
+        if (currentUser?.id !== user.id) {
+          scope.revoked = true;
+          scope.epoch += 1;
+          setIdentityBlocked(true);
+          return null;
+        }
+        const next = member.error ? null : normalizeMembershipRpcResult(member.data);
+        membershipProof.current = { epoch, allowed: canCreateMembershipContent(next) };
+        if (parent && next?.can_create_content === false) {
+          scope.revoked = true;
+          pendingPicker.current = null;
+          activePicker.current = null;
+          setIdentityBlocked(true);
+        }
+        if (membershipProof.current.allowed) {
+          scope.paused = false;
+          scope.pausedAuthority = null;
+          setAuthPaused(false);
+        }
+        setMembership(next);
+        if (!profile.error) setStorageUsedBytes(Number(profile.data?.storage_used || 0));
+        return next;
+      } catch {
+        if (accept()) setMembership(null);
+        return null;
+      } finally {
+        if (scope.live && scope.epoch === epoch && membershipRequest.current === request) setMembershipLoading(false);
+      }
+    })();
+    membershipFlight.current = promise;
+    void promise.finally(() => { if (membershipFlight.current === promise) membershipFlight.current = null; });
+    return promise;
+  }, [archiveId]);
+
+  useEffect(() => {
+    const scope = membershipScope.current;
+    scope.live = true;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event !== "SIGNED_OUT" && (!session?.user?.id || !scope.ownerId || session.user.id === scope.ownerId)) return;
+      scope.epoch += 1;
+      membershipRequest.current += 1;
+      membershipFlight.current = null;
+      membershipProof.current.allowed = false;
+      const parent = publicationAccessRef.current;
+      const current = parent ? getAndroidAuthSnapshot() : null;
+      const terminal = !parent || (session?.user?.id && scope.ownerId && session.user.id !== scope.ownerId) ||
+        current?.explicitSignedOut || current?.status === "signed-out" ||
+        current?.verification === "invalid-session" || current?.verification === "no-session";
+      if (terminal) {
+        scope.revoked = true;
+        pendingPicker.current = null;
+        activePicker.current = null;
+        setIdentityBlocked(true);
+      } else {
+        scope.paused = true;
+        scope.pausedAuthority = current;
+        setAuthPaused(true);
+      }
+      setMembership(null);
+      setMembershipLoading(false);
+    });
+    return () => {
+      scope.live = false;
+      scope.epoch += 1;
+      pendingPicker.current = null;
+      activePicker.current = null;
+      membershipRequest.current += 1;
+      subscription.unsubscribe();
+    };
+  }, [archiveId]);
+
+  useEffect(() => {
+    let active = true;
+    let timer: number | undefined;
+    let attempts = 0;
+    const run = async () => {
+      attempts += 1;
+      const next = await verifyMembership();
+      if (!active || membershipScope.current.revoked || typeof next?.can_create_content === "boolean") return;
+      // At most three sequential checks per mount or explicit retry; no polling.
+      if (attempts < 3) timer = window.setTimeout(() => { void run(); }, attempts * 500);
+    };
+    void run();
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [verifyMembership, membershipRetry, publicationAccess?.state, publicationAccess?.scope]);
+
+  async function retryMembership() {
+    if (membershipLoading || membershipScope.current.revoked) return;
+    try {
+      const parent = publicationAccessRef.current;
+      if (parent && !(await parent.revalidate())) return;
+      if (!membershipScope.current.live || membershipScope.current.revoked) return;
+      setMembershipRetry((value) => value + 1);
+    } catch {
+      // Preserve the editor; a failed read grants no permission.
+    }
+  }
 
   useEffect(() => {
     if (!quickCaptureId || loadedQuickCaptureIdRef.current === quickCaptureId) {
@@ -296,19 +554,92 @@ export default function AddRecord({
     setFilePreviews((prev) => [...prev, ...previews]);
   }
 
+  async function acceptPendingPicker() {
+    const result = pendingPicker.current;
+    const scope = membershipScope.current;
+    const parent = publicationAccessRef.current;
+    if (!result || !scope.live || scope.revoked || scope.paused ||
+        scope.archiveId !== archiveId || scope.ownerId !== result.ownerId ||
+        activePicker.current !== result.requestId ||
+        !membershipProof.current.allowed || membershipProof.current.epoch !== scope.epoch ||
+        (parent && (!parent.isCurrent() || parent.state !== "allowed"))) return;
+    const epoch = scope.epoch;
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (!scope.live || scope.revoked || scope.paused || scope.epoch !== epoch ||
+        pendingPicker.current !== result || activePicker.current !== result.requestId ||
+        (publicationAccessRef.current && !publicationAccessRef.current.isCurrent())) return;
+    if (error) {
+      if (isConfirmedInvalidAndroidSession(error)) { scope.revoked = true; setIdentityBlocked(true); }
+      return;
+    }
+    if (user?.id !== result.ownerId) {
+      scope.revoked = true;
+      pendingPicker.current = null;
+      activePicker.current = null;
+      setIdentityBlocked(true);
+      return;
+    }
+    pendingPicker.current = null;
+    activePicker.current = null;
+    appendFiles(result.files);
+    if (result.truncated) showToast(copy.photo_batch_trimmed_prefix + " " + MAX_RECORD_PHOTOS_PER_ADD + " " + copy.photo_batch_trimmed_suffix);
+  }
+
+  useEffect(() => {
+    void acceptPendingPicker().catch(() => undefined);
+    // In-memory returned bytes can only join their original, reverified instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [membership, authPaused, publicationAccess?.state, publicationAccess?.scope]);
+
   async function chooseFromGallery() {
+    const scope = membershipScope.current;
+    const parent = publicationAccessRef.current;
+    if (!scope.live || scope.revoked || scope.paused ||
+        (parent && (!parent.isCurrent() || parent.state !== "allowed"))) return;
+    const epoch = scope.epoch;
     if (!isAndroidRecordGallery()) {
       chooseInputRef.current?.click();
       return;
     }
+    if (submissionNeedsReview || galleryPickerBusy.current || pendingPicker.current) return;
+    galleryPickerBusy.current = true;
+    let ownerId = "";
+    let requestId = "";
     try {
-      const { files: selected, truncated } = await pickAndroidRecordPhotos();
-      appendFiles(selected);
-      if (truncated) {
-        showToast(copy.photo_batch_trimmed_prefix + " " + MAX_RECORD_PHOTOS_PER_ADD + " " + copy.photo_batch_trimmed_suffix);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!scope.live || scope.revoked || scope.paused || scope.epoch !== epoch ||
+          (parent && !parent.isCurrent()) || !user || (scope.ownerId && user.id !== scope.ownerId)) {
+        showToast(t.please_login);
+        return;
       }
+      // An unresolved remote write must not be hidden by starting a new picker.
+      const pendingPublication = peekCloudPickerResume(user.id, archiveId);
+      if (pendingPublication?.phase === "submitting-unknown" || pendingPublication?.phase === "reconcile-only") {
+        setSubmissionNeedsReview(true);
+        setRestoreNotice(language === "zh"
+          ? "云端发布结果仍待核账，暂不能开始新的选择或发布。"
+          : "Cloud publication is unconfirmed. Reconcile before selecting or publishing again.");
+        return;
+      }
+      ownerId = user.id;
+      requestId = crypto.randomUUID();
+      activePicker.current = requestId;
+      // localStorage.setItem is synchronous: finish the small editor snapshot
+      // BEFORE opening another Activity. Failure leaves the editor untouched.
+      saveCloudPickerResume({
+        version: 1, ownerId, archiveId, requestId,
+        phase: "picking", fields: getPickerFields(),
+      });
+      const { files: selected, truncated } = await pickAndroidRecordPhotos({ requestId });
+      if (!scope.live || scope.revoked || scope.archiveId !== archiveId ||
+          scope.ownerId !== ownerId || activePicker.current !== requestId) return;
+      pendingPicker.current = { requestId, ownerId, files: selected, truncated };
+      await acceptPendingPicker();
     } catch {
-      showToast(language === "zh" ? "无法读取图库照片。" : "Unable to read gallery photos.");
+      showToast(language === "zh" ? "无法读取图库照片或保护选图状态。" : "Unable to read or protect selected photos.");
+    } finally {
+      galleryPickerBusy.current = false;
+      if (ownerId && requestId) clearCloudPickerResume(ownerId, archiveId, requestId);
     }
   }
 
@@ -356,6 +687,7 @@ export default function AddRecord({
   }) {
     const note = params.note.trim();
 
+    assertPublicationCurrent();
     const { data: record, error } = await supabase.rpc("create_record_with_location", {
       p_archive_id: params.archiveId, p_cycle_id: effectiveCycleId || null,
       p_note: note, p_record_time: params.recordTimeISO, p_visibility: params.visibility,
@@ -373,6 +705,7 @@ export default function AddRecord({
   }
 
   async function refreshStorageUsed(userId: string) {
+    assertPublicationCurrent();
     const { data, error } = await supabase
       .from("profiles")
       .select("storage_used")
@@ -410,6 +743,7 @@ export default function AddRecord({
       ? `${userId}/${recordId}/thumbs/${uploadKey}-${thumbSafeName}`
       : null;
 
+    assertPublicationCurrent();
     const reserveResult = await reserveStorageUpload({
       targetType: "media",
       targetId: targetMediaId,
@@ -453,6 +787,7 @@ export default function AddRecord({
 
     setStorageUsedBytes(reserveResult.storage_used);
 
+    assertPublicationCurrent();
     const { error: uploadError } = await uploadMediaStorageObject(
       fileName,
       uploadFile,
@@ -463,9 +798,11 @@ export default function AddRecord({
 
     if (uploadError) {
       console.error("媒体上传失败", uploadError);
+      assertPublicationCurrent();
       await supabase.storage
         .from("media")
         .remove([fileName, thumbName].filter((path): path is string => Boolean(path)));
+      assertPublicationCurrent();
       const cancelResult = await cancelStorageUploadReservation(reservation);
       setStorageUsedBytes(cancelResult.storage_used);
       if (await isStorageUploadMaintenance()) {
@@ -479,6 +816,7 @@ export default function AddRecord({
     let uploadedThumbBytes = 0;
 
     if (thumbFile && thumbName) {
+      assertPublicationCurrent();
       const { error: thumbUploadError } = await uploadMediaStorageObject(
         thumbName,
         thumbFile,
@@ -489,6 +827,7 @@ export default function AddRecord({
 
       if (thumbUploadError) {
         console.error("缩略图上传失败", thumbUploadError);
+        assertPublicationCurrent();
         await supabase.storage.from("media").remove([thumbName]);
       } else {
         uploadedThumbPath = thumbName;
@@ -519,6 +858,7 @@ export default function AddRecord({
         ? { upload_reservation_id: reservation.reservation_id }
         : {}),
     };
+    assertPublicationCurrent();
     let mediaInsertResult = await supabase
       .from("media")
       .insert([mediaPayload])
@@ -532,6 +872,7 @@ export default function AddRecord({
         "captured_at"
       )
     ) {
+      assertPublicationCurrent();
       mediaInsertResult = await supabase
         .from("media")
         .insert([withoutCapturedAt(mediaPayload)])
@@ -544,14 +885,17 @@ export default function AddRecord({
 
     if (mediaError || !mediaId) {
       console.error("media 写入失败", mediaError);
+      assertPublicationCurrent();
       const reconciliation = await reconcileMediaUploadCommit({ storagePath: fileName });
 
       if (reconciliation.status === "found") {
         mediaId = reconciliation.mediaId;
       } else if (reconciliation.status === "missing") {
+        assertPublicationCurrent();
         await supabase.storage
           .from("media")
           .remove([fileName, uploadedThumbPath].filter((path): path is string => Boolean(path)));
+        assertPublicationCurrent();
         const cancelResult = await cancelStorageUploadReservation(reservation);
         setStorageUsedBytes(cancelResult.storage_used);
         return 0;
@@ -561,6 +905,7 @@ export default function AddRecord({
       }
     }
 
+    assertPublicationCurrent();
     const settleResult = await settleStorageUploadReservation({
       reservation,
       targetType: "media",
@@ -572,10 +917,74 @@ export default function AddRecord({
     return actualBytes;
   }
 
+  async function recoverConfirmedRecordPhoto() {
+    if (photoRecoveryBusy.current || !submissionNeedsReview ||
+        !mobileMode || !isAndroidRecordGallery()) return;
+    photoRecoveryBusy.current = true;
+    setRecoveringPhoto(true);
+    setRecoveryError("");
+    let journal: RecoveryEntry | null = null;
+    try {
+      const parent = publicationAccessRef.current;
+      if (!membershipScope.current.live || membershipScope.current.revoked ||
+          membershipScope.current.paused || (parent && !(await parent.revalidate()))) {
+        throw new Error("recovery_owner_authority_not_verified");
+      }
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user || (parent && (!parent.isCurrent() || parent.ownerId !== user.id)) ||
+          user.id !== membershipScope.current.ownerId) {
+        throw new Error("recovery_session_owner_mismatch");
+      }
+      const marker = peekCloudPickerResume(user.id, archiveId);
+      if (!marker || !["submitting-unknown", "reconcile-only"].includes(marker.phase) ||
+          !marker.requestId) throw new Error("recovery_original_request_missing");
+      const candidate = await readRecovery(user.id, archiveId, marker.requestId);
+      // Only the original create RPC can populate this request-scoped proof.
+      if (!candidate?.recordId || candidate.recordProof !== "create-receipt") {
+        setRecoveryError(language === "zh"
+          ? "当前无法确认补图目标。已保留附件及待核状态，请核对原发布结果。"
+          : "The original record cannot be confirmed. Attachments and the pending review are preserved.");
+        return;
+      }
+      journal = candidate;
+      const verified = await completeRecovery(journal);
+      if (verified.phase !== "media-confirmed") throw new Error("recovery_not_fully_confirmed");
+      clearCloudPickerResume(user.id, archiveId, marker.requestId);
+      await eraseRecovery(user.id, archiveId, marker.requestId);
+      setSubmissionNeedsReview(false);
+      setRestoreNotice(language === "zh"
+        ? "已核对原云端记录并仅补传缺失图片，没有重复创建记录。"
+        : "Original cloud record verified; only the missing photo was uploaded.");
+      setText("");
+      clearSelectedFiles();
+      await onRecordCreated?.();
+    } catch (cause) {
+      if (journal) await markRecoveryUnknown(journal, cause).catch(() => undefined);
+      const unconfirmed = !journal || (cause instanceof Error &&
+        ["recovery_record_owner_denied", "recovery_auth_owner_mismatch",
+          "recovery_record_id_not_confirmed"].includes(cause.message));
+      setRecoveryError(unconfirmed
+        ? (language === "zh" ? "当前无法确认补图目标。已保留附件及待核状态。"
+          : "The original record cannot be confirmed. Attachments and the pending review are preserved.")
+        : (language === "zh" ? "补图尚未确认，已保留附件，可重试核对。"
+          : "Photo recovery is unconfirmed. Attachments were preserved for retry."));
+    } finally {
+      photoRecoveryBusy.current = false;
+      setRecoveringPhoto(false);
+    }
+  }
+
   async function handleAdd() {
-    if (loading) return;
+    if (publicationBusy.current || loading || membershipLoading || contentBlocked || submissionNeedsReview || membershipScope.current.revoked || membershipScope.current.paused ||
+        (publicationAccessRef.current && !publicationAccessRef.current.isCurrent())) return;
     if (!text.trim() && files.length === 0) return;
 
+    // Fence same-render duplicate clicks while asynchronous permission checks run.
+    publicationBusy.current = true;
+    writeAttempt.current = { epoch: membershipScope.current.epoch,
+      boundary: publicationAccessRef.current?.scope,
+      authority: publicationAccessRef.current ? getAndroidAuthSnapshot() : null };
+    try {
     if (files.length > 0 && (await isStorageUploadMaintenance())) {
       setMembershipNotice(copy.maintenance_record_not_saved);
       showToast(copy.maintenance_record_not_saved);
@@ -601,14 +1010,44 @@ export default function AddRecord({
     }
 
     setLoading(true);
+    let submissionRequestId: string | null = null;
+    let submissionOwnerId: string | null = null;
+    let stagedSinglePhoto: RecoveryEntry | null = null;
 
     try {
       const {
-        data: { user },
+        data: { user }, error: publicationIdentityError,
       } = await supabase.auth.getUser();
 
-      if (!user) {
+      if (publicationIdentityError || !user) {
+        setMembership(null);
+        setMembershipLoading(false);
+        if (!publicationIdentityError || isConfirmedInvalidAndroidSession(publicationIdentityError)) {
+          membershipScope.current.revoked = true;
+          membershipScope.current.epoch += 1;
+          setIdentityBlocked(true);
+        }
         showToast(t.please_login);
+        setLoading(false);
+        return;
+      }
+
+      assertPublicationCurrent();
+      if (membershipScope.current.revoked || user.id !== membershipScope.current.ownerId ||
+          (publicationAccessRef.current && user.id !== publicationAccessRef.current.ownerId)) {
+        setLoading(false);
+        return;
+      }
+      const publicationEpoch = membershipScope.current.epoch;
+
+      // The persisted uncertainty gate also applies during the brief window
+      // before the recovery useEffect has set React button state.
+      if (mobileMode && isAndroidRecordGallery() &&
+          ["submitting-unknown", "reconcile-only"].includes(peekCloudPickerResume(user.id, archiveId)?.phase || "")) {
+        setSubmissionNeedsReview(true);
+        setRestoreNotice(language === "zh"
+          ? "发布结果未确认，请先核对云端记录，不能重复发布。"
+          : "Publication is unconfirmed. Check cloud records before resubmitting.");
         setLoading(false);
         return;
       }
@@ -620,6 +1059,7 @@ export default function AddRecord({
       let uploadedBytes = 0;
       let archiveHelpStateUpdated = false;
       let createdRecordCount = 0;
+      let uploadedPhotoCount = 0;
       let cycleEndRecordTime: string | null = null;
       const preparedPhotos =
         files.length > 0 ? await prepareSelectedPhotos() : [];
@@ -649,16 +1089,69 @@ export default function AddRecord({
         }
       }
 
-      if (finalStatusTag === "help" && finalVisibility !== "public") {
-        const confirmed = confirm(
-          copy.help_public_confirm
-        );
+      if (finalStatusTag === "help" && finalVisibility !== "public" &&
+          !confirm(copy.help_public_confirm)) {
+        setLoading(false);
+        return;
+      }
 
-        if (!confirmed) {
+      // Revalidate immediately before the first mutation, after photo preparation.
+      const freshMembership = await verifyMembership();
+      const parent = publicationAccessRef.current;
+      if (!canCreateMembershipContent(freshMembership) ||
+          (parent && !(await parent.revalidate())) ||
+          membershipScope.current.revoked || !membershipScope.current.live ||
+          membershipScope.current.epoch !== publicationEpoch ||
+          user.id !== membershipScope.current.ownerId || (parent && !parent.isCurrent())) {
+        setLoading(false);
+        return;
+      }
+      const { data: { user: publicationUser }, error: publicationAuthError } = await supabase.auth.getUser();
+      if (isConfirmedInvalidAndroidSession(publicationAuthError) || (!publicationAuthError && publicationUser?.id !== user.id)) {
+        membershipScope.current.revoked = true;
+        membershipScope.current.epoch += 1;
+        setIdentityBlocked(true);
+      }
+      if (publicationAuthError || publicationUser?.id !== user.id ||
+          membershipScope.current.epoch !== publicationEpoch || membershipScope.current.revoked ||
+          !membershipScope.current.live || (parent && !parent.isCurrent())) {
+        setLoading(false);
+        return;
+      }
+
+      assertPublicationCurrent();
+
+      // This is not a queued record: it only fences a *user-initiated* cloud
+      // publish whose HTTP result might become unknown after process death.
+      // It must be committed before the first cloud mutation.
+      if (mobileMode && isAndroidRecordGallery()) {
+        try {
+          const requestId = crypto.randomUUID();
+          // The single-record/single-photo path is durable before RPC create.
+          // Unsupported images now fail *before* any record can be created.
+          if (photoGroups.length === 1 && photoGroups[0].photos.length === 1 &&
+              files.length === 1) {
+            stagedSinglePhoto = await stageRecovery({
+              ownerId: user.id, archiveId, requestId, note: text.trim(),
+              files: [photoGroups[0].photos[0].file],
+            });
+          }
+          saveCloudPickerResume({
+            version: 1, ownerId: user.id, archiveId,
+            requestId, phase: "submitting-unknown",
+            fields: getPickerFields(),
+          });
+          submissionOwnerId = user.id;
+          submissionRequestId = requestId;
+        } catch {
+          showToast(language === "zh" ? "无法保护本次发布状态，请稍后再试。" : "Unable to protect this publication state. Try later.");
           setLoading(false);
           return;
         }
+      }
 
+      if (finalStatusTag === "help" && finalVisibility !== "public") {
+        assertPublicationCurrent();
         const { data: publicationResult, error: archiveError } = await supabase.rpc(
           "make_my_archive_public",
           { p_archive_id: archiveId }
@@ -670,6 +1163,7 @@ export default function AddRecord({
           return;
         }
 
+        assertPublicationCurrent();
         const { error: helpStateError } = await supabase
           .from("archives")
           .update({ help_status: "open", help_updated_at: new Date().toISOString() })
@@ -687,6 +1181,7 @@ export default function AddRecord({
       }
 
       if (finalStatusTag === "help" && !archiveHelpStateUpdated) {
+        assertPublicationCurrent();
         await supabase
           .from("archives")
           .update({ help_status: "open", help_updated_at: new Date().toISOString() })
@@ -708,13 +1203,24 @@ export default function AddRecord({
           if (!record) continue;
           createdRecordCount += 1;
 
+          if (stagedSinglePhoto) {
+            stagedSinglePhoto = await bindRecoveryRecord(stagedSinglePhoto, record);
+            const completed = await completeRecovery(stagedSinglePhoto);
+            uploadedPhotoCount += completed.photos.length;
+            uploadedBytes += completed.photos.reduce(
+              (total, photo) => total + photo.image.size + (photo.thumbnail?.size || 0), 0);
+            continue;
+          }
+
           for (const photo of group.photos) {
-            uploadedBytes += await uploadMedia(
+            const bytes = await uploadMedia(
               record.id,
               user.id,
               photo.file,
               photo.capturedAt,
             );
+            uploadedBytes += bytes;
+            if (bytes > 0) uploadedPhotoCount += 1;
           }
         }
       } else {
@@ -749,6 +1255,7 @@ export default function AddRecord({
         cycleEndRecordTime &&
         createdRecordCount > 0
       ) {
+        assertPublicationCurrent();
         const { data: endedCycle, error: cycleEndError } = await supabase
           .from("archive_cycles")
           .update({
@@ -767,6 +1274,25 @@ export default function AddRecord({
         }
       }
 
+      // Never discard or blindly retry a potentially partial cloud publish.
+      // The original picker recovery marker is not an upload queue entry.
+      if (submissionRequestId && (createdRecordCount !== (photoGroups.length || 1) ||
+          uploadedPhotoCount !== files.length || cycleEndFailed)) {
+        setSubmissionNeedsReview(true);
+        setRestoreNotice(language === "zh"
+          ? "部分发布结果尚未确认，请先查看云端记录，不要重复发布。"
+          : "Some publication results are unconfirmed. Check cloud records before retrying.");
+        setLoading(false);
+        return;
+      }
+      if (submissionOwnerId && submissionRequestId) {
+        clearCloudPickerResume(submissionOwnerId, archiveId, submissionRequestId);
+        if (stagedSinglePhoto) {
+          await eraseRecovery(submissionOwnerId, archiveId, submissionRequestId).catch(() => undefined);
+        }
+      }
+
+      assertPublicationCurrent();
       setText("");
       clearSelectedFiles();
       setCustomTime("");
@@ -785,15 +1311,44 @@ export default function AddRecord({
       }
     } catch (err) {
       console.log(err);
+      if (stagedSinglePhoto) {
+        await markRecoveryUnknown(stagedSinglePhoto, err).catch(() => undefined);
+      }
+      if (submissionRequestId) {
+        setSubmissionNeedsReview(true);
+        setRestoreNotice(language === "zh"
+          ? "发布结果未知，必须先核对云端记录，不能自动重试。"
+          : "Publication outcome unknown. Check cloud records before retrying.");
+      }
       showToast(t.error);
     }
 
     setLoading(false);
+    } finally {
+      publicationBusy.current = false;
+      writeAttempt.current = null;
+    }
   }
 
+  if (identityBlocked || membershipScope.current.revoked || membershipScope.current.archiveId !== archiveId ||
+      (publicationAccess && membershipScope.current.ownerId && publicationAccess.ownerId !== membershipScope.current.ownerId)) return <p role="alert">{language === "zh" ? "请重新验证当前账号。" : "Verify the current account again."}</p>;
+
   return (
-    <div style={{ marginBottom: "20px" }}>
-      {contentBlocked ? (
+    <div hidden={editorPaused} aria-hidden={editorPaused || undefined}
+      data-cloud-editor-paused={editorPaused ? "true" : "false"}
+      style={{ marginBottom: "20px", display: editorPaused ? "none" : undefined }}
+      onClickCapture={(event) => { if (membershipScope.current.paused || membershipScope.current.revoked || (publicationAccessRef.current && !publicationAccessRef.current.isCurrent())) { event.preventDefault(); event.stopPropagation(); } }}
+      onSubmitCapture={(event) => { if (membershipScope.current.paused || membershipScope.current.revoked || (publicationAccessRef.current && !publicationAccessRef.current.isCurrent())) { event.preventDefault(); event.stopPropagation(); } }}>
+      {membershipUnknown || (publicationAccess && publicationAccess.state !== "allowed" && publicationAccess.state !== "denied") ? (
+        <p role="status">
+          {language === "zh" ? "权益暂未核验，编辑内容已保留，暂不能发布。" : "Entitlement is unverified. Your editor is retained; publishing is paused."}{" "}
+          <button type="button" onClick={() => { void retryMembership(); }} disabled={membershipLoading}>
+            {language === "zh" ? "重新验证" : "Verify again"}
+          </button>
+        </p>
+      ) : null}
+      {contentBlocked && !membershipLoading && !membershipUnknown &&
+        (!publicationAccess || publicationAccess.state === "allowed" || publicationAccess.state === "denied") ? (
         <div
           style={{
             marginBottom: 12,
@@ -1090,9 +1645,34 @@ export default function AddRecord({
         </label>
       )}
 
+      {restoreNotice ? <p role="status" style={{ marginTop: 12, color: "#805d26", lineHeight: 1.6 }}>
+        {restoreNotice}
+      </p> : null}
+
+      {mobileMode && submissionNeedsReview && isAndroidRecordGallery() ? (
+        <section data-r21-photo-recovery="media-only" style={{ marginTop: 12, padding: 12, border: "1px solid #bdbb88", borderRadius: 10 }}>
+          <strong>{language === "zh" ? "核对原记录并恢复缺失图片" : "Reconcile the original record and missing photo"}</strong>
+          <p style={{ fontSize: 13, lineHeight: 1.6 }}>
+            {language === "zh"
+              ? "不会新建第二条记录。仅在原记录身份、归属和已有图片均可核实时，才补传缺失图片。"
+              : "No new record is created. The original record, its ownership and existing media must be verified before uploading a missing photo."}
+          </p>
+          <button type="button" onClick={() => { void recoverConfirmedRecordPhoto(); }}
+            disabled={recoveringPhoto || membershipLoading || contentBlocked}
+            style={{ display: "block", marginTop: 10, padding: "10px 14px" }}>
+            {recoveringPhoto
+              ? (language === "zh" ? "正在核对并补传..." : "Reconciling...")
+              : (language === "zh" ? "核对后只补传图片" : "Reconcile and upload photo only")}
+          </button>
+          {recoveryError ? <p role="alert" data-r21-recovery-error="true" style={{ color: "#a33622" }}>
+            {recoveryError}
+          </p> : null}
+        </section>
+      ) : null}
+
       <button
         onClick={handleAdd}
-        disabled={loading || membershipLoading || contentBlocked || uploadWouldExceedStorage}
+        disabled={loading || membershipLoading || contentBlocked || uploadWouldExceedStorage || submissionNeedsReview}
         style={{
           marginTop: "12px",
           padding: "10px 16px",
@@ -1100,7 +1680,7 @@ export default function AddRecord({
           border: "1px solid #ddd",
           background: "#fff",
           cursor:
-            loading || membershipLoading || contentBlocked || uploadWouldExceedStorage
+            loading || membershipLoading || contentBlocked || uploadWouldExceedStorage || submissionNeedsReview
               ? "not-allowed"
               : "pointer",
         }}

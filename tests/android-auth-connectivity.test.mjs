@@ -59,8 +59,8 @@ async function loadModule(entry, stubs = {}) {
 async function loadAuthModule() {
   return loadModule("lib/android-auth-state.ts", {
     react: "export const useSyncExternalStore = () => {};",
-    "@/lib/supabase": "export const supabase = { auth: { getSession: async () => ({ data: { session: null }, error: null }), getUser: async () => ({ data: { user: null }, error: null }), signOut: async () => {}, onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }) } };",
-    "@/lib/local-owner-context": "export const loadRememberedLocalOwnerContext = () => null; export const wasLocalOwnerExplicitlySignedOut = () => false; export const rememberLocalOwnerContext = () => {}; export const markLocalOwnerExplicitlySignedOut = () => {}; export const clearLocalOwnerExplicitSignOut = () => {};",
+    "@/lib/supabase": "export const supabase = { auth: { getSession: async () => ({ data: { session: null }, error: null }), getUser: async () => ({ data: { user: null }, error: null }), signOut: async () => {}, onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }) } }; export const commitVerifiedAndroidStartupSession = async () => true; export const clearAndroidStartupSessionOnExplicitLogout = async () => {};",
+    "@/lib/local-owner-context": "export const loadRememberedLocalOwnerContext = () => null; export const wasLocalOwnerExplicitlySignedOut = () => false; export const rememberLocalOwnerContext = () => {}; export const markLocalOwnerExplicitlySignedOut = () => {}; export const clearLocalOwnerExplicitSignOut = () => {}; export const readTrustedOfflineOwner = async () => null; export const sealTrustedOfflineOwner = async () => null; export const revokeTrustedOfflineOwner = async () => {};",
     "@/lib/cloud-offline-cache-session": "export const clearCloudOfflineCacheOnExplicitLogout = async () => {};",
     "@/lib/android-connectivity": "export const getAndroidConnectivitySnapshot = () => ({ status: 'offline' }); export const subscribeAndroidConnectivity = () => () => {};",
   });
@@ -71,6 +71,7 @@ function createAuthHarness(module, {
   rememberedOwner = null,
   explicit = false,
   online = false,
+  proof = null,
 } = {}) {
   let sessionUser = user;
   let serviceOnline = online;
@@ -114,6 +115,7 @@ function createAuthHarness(module, {
     clearExplicitSignOut: () => {
       explicitlySignedOut = false;
     },
+    offlineOwner: { read: async () => proof, seal: async () => null, revoke: async () => {} },
     clearCloudCache: async () => {
       cacheClearCalls += 1;
     },
@@ -172,10 +174,11 @@ test("authenticated owner requires signed-in session and exact owner match", asy
   );
 });
 
-test("signed-in remains signed-in across offline and online revalidation", async () => {
+test("outage exposes only proof-backed local Owner until online revalidation", async () => {
   const module = await loadAuthModule();
   const user = { id: "owner", email: "owner@example.test" };
-  const harness = createAuthHarness(module, { user, online: true });
+  const proof = { userId: user.id };
+  const harness = createAuthHarness(module, { user, online: true, proof });
   const statuses = [];
   const unsubscribe = harness.controller.subscribe(() => {
     statuses.push(harness.controller.getSnapshot().status);
@@ -185,8 +188,10 @@ test("signed-in remains signed-in across offline and online revalidation", async
 
   harness.setOnline(false);
   harness.emit("SIGNED_OUT", null);
-  assert.equal(harness.controller.getSnapshot().status, "signed-in");
-  assert.equal(harness.controller.getSnapshot().sessionUserId, "owner");
+  await harness.controller.revalidate();
+  assert.equal(harness.controller.getSnapshot().status, "offline-owner-read");
+  assert.equal(harness.controller.getSnapshot().sessionUserId, null);
+  assert.deepEqual(module.resolveAndroidReadOwner(harness.controller.getSnapshot()), proof);
 
   harness.setSessionUser(user);
   harness.setOnline(true);
@@ -202,7 +207,8 @@ test("offline explicit logout survives reconnect and clears cache without restor
   const user = { id: "owner", email: "owner@example.test" };
   const harness = createAuthHarness(module, { user, online: false });
   await harness.controller.initialize();
-  assert.equal(harness.controller.getSnapshot().status, "signed-in");
+  assert.equal(harness.controller.getSnapshot().status, "checking");
+  assert.equal(harness.controller.getSnapshot().sessionUserId, null);
   await harness.controller.explicitLogout();
   assert.equal(harness.controller.getSnapshot().status, "signed-out");
   assert.equal(harness.controller.getSnapshot().explicitSignedOut, true);
@@ -224,7 +230,9 @@ test("explicit logout then unified login clears signed-out and restores authenti
   await harness.controller.explicitLogout();
   assert.equal(harness.controller.getSnapshot().explicitSignedOut, true);
   assert.equal(harness.controller.getSnapshot().status, "signed-out");
-  harness.controller.completeLogin(owner);
+  harness.setSessionUser(owner);
+  harness.controller.beginLogin();
+  await harness.controller.completeLogin(owner);
   assert.equal(harness.controller.getSnapshot().explicitSignedOut, false);
   assert.equal(harness.controller.getSnapshot().status, "signed-in");
   assert.equal(auth.resolveAuthenticatedOwnerContext(harness.controller.getSnapshot(), { userId: owner.id })?.userId, owner.id);
@@ -294,6 +302,72 @@ test("pending queues stay owner scoped and local-only archives survive cache cle
   assert.equal((await db.listPendingCloudSyncSummaries(ownerB)).length, 0);
   delete globalThis.indexedDB;
   delete globalThis.window;
+});
+
+test("snapshot-only empty local list is valid without a SAF connection", async () => {
+  const previousIndexedDB = globalThis.indexedDB;
+  const previousWindow = globalThis.window;
+  globalThis.indexedDB = new IDBFactory();
+  globalThis.window = { indexedDB: globalThis.indexedDB };
+  try {
+    const db = await loadModule("lib/local-offline-db.ts");
+    const result = await db.listVisibleLocalArchiveSummaries(
+      { userId: "owner-a", snapshotOnly: true },
+      { includePendingCloud: true },
+    );
+    assert.deepEqual(result.archives, []);
+    assert.equal(result.safFolderDisconnected, true);
+  } finally {
+    if (previousIndexedDB === undefined) delete globalThis.indexedDB;
+    else globalThis.indexedDB = previousIndexedDB;
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test("snapshot-only non-empty local cache stays owner scoped across A and B", async () => {
+  const previousIndexedDB = globalThis.indexedDB;
+  const previousWindow = globalThis.window;
+  globalThis.indexedDB = new IDBFactory();
+  globalThis.window = { indexedDB: globalThis.indexedDB };
+  try {
+    const db = await loadModule("lib/local-offline-db.ts");
+    const archive = await db.createLocalArchive({
+      title: "R26 owner A sample",
+      category: "other",
+      local_owner_user_id: "owner-a",
+      sync_destination: "pending-cloud",
+    });
+    await db.createLocalRecord({
+      archive_id: archive.id,
+      note: "R26 private pending sample",
+    });
+    const a = await db.listVisibleLocalArchiveSummaries(
+      { userId: "owner-a", snapshotOnly: true },
+      { includePendingCloud: true },
+    );
+    const b = await db.listVisibleLocalArchiveSummaries(
+      { userId: "owner-b", snapshotOnly: true },
+      { includePendingCloud: true },
+    );
+    assert.deepEqual(a.archives.map((row) => row.id), [archive.id]);
+    assert.deepEqual(b.archives, []);
+    const aPending = await db.listPendingCloudSyncSummaries({
+      userId: "owner-a",
+      snapshotOnly: true,
+    });
+    const bPending = await db.listPendingCloudSyncSummaries({
+      userId: "owner-b",
+      snapshotOnly: true,
+    });
+    assert.equal(aPending.length, 1);
+    assert.equal(bPending.length, 0);
+  } finally {
+    if (previousIndexedDB === undefined) delete globalThis.indexedDB;
+    else globalThis.indexedDB = previousIndexedDB;
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
 });
 
 test("transport and LifeSpace service reachability jointly determine online", async () => {
@@ -390,13 +464,14 @@ test("native health probe uses the production endpoint and validates its contrac
   let requestOptions = null;
   const reachable = await connectivity.probeLifeSpaceService({
     isNative: true,
+    healthUrl: connectivity.resolveAndroidHealthUrl("https://eidltoikfpnrzxruvawf.supabase.co"),
     nativeRequest: async (options) => {
       requestOptions = options;
       return {
         status: 200,
         data: { ok: true },
         headers: {},
-        url: connectivity.LIFESPACE_HEALTH_URL,
+        url: connectivity.PRODUCTION_HEALTH_URL,
       };
     },
   });
@@ -418,12 +493,12 @@ test("health endpoint is public, side-effect free and non-cacheable", async () =
 
 test("CloudLogin eligibility and screen stability follow auth and connectivity states", () => {
   const shell = read("mobile-offline-src/main.tsx");
-  assert.match(shell, /sourceFilter === "cloud" && auth\.status !== "checking"/);
-  assert.match(shell, /openCloudLogin\(trialLoginTo/);
+  assert.match(shell, /sourceFilter === "cloud" && !offlineOwnerRead && auth\.status !== "checking"/);
+  assert.match(shell, /Free 云空间（30 MB）/);
   assert.match(shell, /openCloudLogin\("membership-payment"\)/);
   assert.match(shell, /auth\.status === "checking"[\s\S]*copy\.cloudLoading/);
   assert.doesNotMatch(shell, /online && !cloudUserId[\s\S]{0,120}<CloudLogin/);
-  assert.match(shell, /const online = useAndroidConnectivity\(\)/);
+  assert.match(shell, /const online = serviceConnectivity\.status === "online"/);
   const networkEffect = shell.match(
     /useEffect\(\(\) => \{\s*if \(online\) return;([\s\S]*?)\n  \}, \[online\]\);/,
   )?.[1] || "";
@@ -437,7 +512,7 @@ test("CloudLogin eligibility and screen stability follow auth and connectivity s
 test("Android login keeps its form mounted during a pending request and reports invalid credentials", async () => {
   const shell = read("mobile-offline-src/main.tsx");
   const login = shell.slice(shell.indexOf("function CloudLogin("), shell.indexOf("function ProjectForm("));
-  assert.doesNotMatch(login, /beginAndroidAuthLogin|failAndroidAuthLogin/);
+  assert.match(login, /beginAndroidAuthLogin\(\)[\s\S]*if \(!serverLoginSucceeded\) failAndroidAuthLogin\(\)/);
   assert.match(login, /setSubmitting\(true\)[\s\S]*await loginBundledWithTurnstile/);
   assert.match(login, /completeAndroidAuthLogin\(user\)/);
   assert.match(login, /role="alert"/);
@@ -448,9 +523,11 @@ test("Android login keeps its form mounted during a pending request and reports 
   const harness = createAuthHarness(auth, { online: true });
   await harness.controller.initialize();
   assert.equal(harness.controller.getSnapshot().status, "signed-out");
-  // CloudLogin holds its own submitting state; the global status stays signed-out until success.
-  assert.equal(harness.controller.getSnapshot().status, "signed-out");
-  harness.controller.completeLogin({ id: "new-user", email: "new@example.test" });
+  const newUser = { id: "new-user", email: "new@example.test" };
+  harness.controller.beginLogin();
+  assert.equal(harness.controller.getSnapshot().status, "checking");
+  harness.setSessionUser(newUser);
+  await harness.controller.completeLogin(newUser);
   assert.equal(harness.controller.getSnapshot().status, "signed-in");
 
   const session = await loadModule("lib/android-auth-session.ts", {
@@ -502,34 +579,14 @@ test("authenticated owner hard-gates sync, pending creation and private cache ro
     shell,
     /authenticatedOwnerContext\.userId !== cloudUserId[\s\S]*?return;/,
   );
-  assert.match(
-    shell,
-    /preparePendingCloudSyncQueue\(authenticatedOwnerContext\)[\s\S]*?loadList\(authenticatedOwnerContext\)/,
-  );
-  assert.match(
-    shell,
-    /projectCreationDestinations\(online, auth\.status === "signed-in", localSpaceEnabled\)/,
-  );
-  assert.match(
-    shell,
-    /\.\.\.\(authenticatedOwnerContext \? cloudCaches : \[\]\)/,
-  );
-  assert.match(
-    shell,
-    /if \(!authenticatedOwnerContext\) \{\s*showToast\(copy\.cloudSignIn\);[\s\S]*?getCloudOfflineCacheByCloudSource\(routed\.id, authenticatedOwnerContext\)/,
-  );
-  assert.match(
-    shell,
-    /function CloudProjectRuntime\(\{ archiveId, online, authenticatedOwnerContext/,
-  );
-  assert.match(
-    shell,
-    /if \(!authenticatedOwnerContext\?\.userId\) return <ArchiveProjectDetailStatus[\s\S]*?请登录后查看云端项目/,
-  );
-  assert.match(
-    shell,
-    /localArchiveHasPendingCloudWork\([\s\S]*?if \(requiresAuthenticatedOwner && !authenticatedOwnerContext\)/,
-  );
+  assert.doesNotMatch(shell, /preparePendingCloudSyncQueue/);
+  assert.match(shell, /syncAndroidPendingCloudArchive\(\{\s*localArchiveId, targetRecordId: recordId/);
+  assert.match(shell, /syncAndroidAllPendingCloudArchives\(\{ ownerContext: authenticatedOwnerContext/);
+  assert.match(shell, /projectCreationDestinations\(online, auth\.status === "signed-in", localSpaceEnabled, offlineOwnerRead\)/);
+  assert.match(shell, /getCloudOfflineCacheByCloudSource\(archiveId, readOwnerContext\)/);
+  assert.match(shell, /if \(!readOwnerContext\?\.userId\) return <ArchiveProjectDetailStatus/);
+  assert.match(shell, /cached\.archive\.local_owner_user_id === readOwnerContext\.userId/);
+  assert.match(shell, /resolveAuthenticatedOwnerContext\(auth, ownerContext\)/);
 });
 
 test("signed-out archive routing keeps local-only detail but excludes private cache", () => {

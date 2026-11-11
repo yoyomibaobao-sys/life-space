@@ -1,4 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
+import {
+  createAndroidSafeStartupStorage, isNativeAndroidAuthStartup,
+} from "@/lib/android-safe-startup-storage";
 
 // Capture only callback metadata before the SDK consumes its session fragment.
 // Never persist or log the email token / access-token URL.
@@ -14,6 +17,18 @@ export const initialAuthCallback = (() => {
   };
 })();
 
+const androidStartupStorage = isNativeAndroidAuthStartup()
+  ? createAndroidSafeStartupStorage(process.env.NEXT_PUBLIC_SUPABASE_URL!)
+  : null;
+
+export async function commitVerifiedAndroidStartupSession(ownerId: string) {
+  return androidStartupStorage?.commitVerifiedSession(ownerId) ?? true;
+}
+
+export async function clearAndroidStartupSessionOnExplicitLogout() {
+  await androidStartupStorage?.clearOnExplicitLogout();
+}
+
 export const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   (
@@ -25,6 +40,7 @@ export const supabase = createClient(
       persistSession: true,       // 持久登录
       autoRefreshToken: true,     // 自动续期
       detectSessionInUrl: true,   // 支持邮箱验证跳转
+      ...(androidStartupStorage ? { storage: androidStartupStorage } : {}),
     },
   }
 );
