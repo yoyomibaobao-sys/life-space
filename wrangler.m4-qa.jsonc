@@ -1,0 +1,60 @@
+{
+  "name": "lifespace-site-media-qa-20261028",
+  "account_id": "174083788fe5f2d140630bd1036da2e0",
+  "main": "./dist/server/index.js",
+  "no_bundle": true,
+  "compatibility_date": "2026-10-28",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist/qa-client",
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    "run_worker_first": false
+  },
+  "services": [
+    {
+      "binding": "R2_BUSINESS_MEDIA_SERVICE",
+      "service": "lifespace-business-media-qa-20261028"
+    }
+  ],
+  "vars": {
+    "R2_BUSINESS_MEDIA_MODE": "isolated",
+    "M4_QA_CONTROL_UI_ENABLED": "true",
+    "PAYPAL_ENABLED": "false",
+    "PAYPAL_ENV": "sandbox",
+    "NEXT_PUBLIC_PAYPAL_ENABLED": "false",
+    "SEARCH_INDEXING_ENABLED": "false",
+    "SUPABASE_URL": "https://mablwxlipcgbmbnfdbkc.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://mablwxlipcgbmbnfdbkc.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_vWvTCSwUQw1E_mZKRwd7TA_qbOmw2dG",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hYmx3eGxpcGNnYm1ibmZkYmtjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMjg3MDEsImV4cCI6MjEwNjgwNDcwMX0.Cy-JSXhIlq6P7sfo2JDSmhDDCxbJxY6pUxarOtt9BCk",
+    "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hYmx3eGxpcGNnYm1ibmZkYmtjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMjg3MDEsImV4cCI6MjEwNjgwNDcwMX0.Cy-JSXhIlq6P7sfo2JDSmhDDCxbJxY6pUxarOtt9BCk",
+    "NEXT_PUBLIC_SITE_URL": "https://lifespace-site-media-qa-20261028.lifespace-assets-isolated-lab.workers.dev",
+    "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAAFqJ3d2IV5Ai0cS6"
+  },
+  "triggers": {
+    "crons": []
+  },
+  "observability": {
+    "enabled": false
+  },
+  "cache": {
+    "enabled": true,
+    "cross_version_cache": false
+  },
+  "ratelimits": [
+    {
+      "name": "R2_MEDIA_MIRROR_RATE_LIMITER",
+      "namespace_id": "2026110201",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    }
+  ],
+  "keep_vars": true
+}
