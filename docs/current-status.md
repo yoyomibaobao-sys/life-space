@@ -326,3 +326,12 @@
 - **最小补丁：**只修改tests/admin-trial-cleanup-path-hold-race.test.mjs：启动每个会话后立即监听并保留退出码及输出，轮询完成后Promise.all读取两个已保存结果。增加1项真实子进程提前关闭的回归用例。原并发数据库／Storage拒绝删除等全部断言、SQL、等待参数和工作流超时保持不变；未改SAF、业务、UI、迁移或发布配置。
 - **验证：**修复前Windows隔离CI参数副本761/761通过、两项SAF文件51/51正常退出；Linux Node24.21.0的同两文件51/51、约2.9秒通过。Linux完整诊断759/761，两个环境失败分别为无Docker引擎、未配置测试期望的Java路径，保留原始日志，不冒充绿色CI。修复后Windows隔离副本完整762/762，失败0、取消0、跳过0，约58.9秒；其中包含原761项和新增退出竞态回归，137项SAF覆盖保持。TypeScript --noEmit --incremental false通过。隔离副本构建、测试生成物均在新Temp中，未覆盖原工作树的mobile-shell产物。必要的修复提交／推送前后须核对远端HEAD，下一步只触发一次参数明确的RC22候选构建，签名与Artifact尚待实际验证。
 - **保护：**本轮未调用ADB、不启动或安装手机App，不接触SAF、照片、私有pending或正式／QA云资料；沿用此前已通过的保护快照，不把历史快照写成新扫描。没有生产迁移、Cloudflare／R2／PayPal操作，PR #95保持Draft。正式覆盖升级、私有缓存／pending保留、RC22实际恢复及Android11+仍未验证。
+
+### LifeSpace｜112 受控媒体镜像入口统一源码接入（2026-11-12，北京时间）
+
+- **基线与提交：**在 `development/lifespace-unified-r01` 独立检出中，以 `0a0c7c458eee150e522930f90593e209fd5a1a95` 为修改前 HEAD；源码提交 `637745ab4d63fcec0633135b451dbe620466bf44`。只提交本任务 12 个文件，未纳入 Android Gradle、`mobile-shell/index.html` 和 `.wp10-delivery/` 等既有无关修改。
+- **源码接入：**统一 Worker 接入严格 QA Origin／isolated flag／GET-only 控制页面和同源镜像 POST 路由；客户端每次 POST 前使用现有 SDK 在线验证 Owner A 与同一 Session，POST 使用实际 mediaId 和 full／thumb。服务端继续执行 Owner／业务引用校验，并保留 HMAC、时间戳、Nonce、R2 条件写与冲突读回合同。full 失败或 UNKNOWN 不会继续发 thumb POST，也不自动重试。
+- **回执脱敏：**每种尺寸分别记录源字节 SHA-256、MIME、大小和前后状态；路径改为 SHA-256 指纹，Owner 只记录核验布尔结果，不输出路径、Owner UUID、recordId 或认证凭据。明确标注 SDK 缓存状态未验证、对象版本元数据不可用及客户端未执行独立 R2 读回。
+- **验证：**定向隔离测试 38/38 PASS；TypeScript 检查 PASS；QA 配置下 Vinext 构建 PASS；QA-only 客户端构建 PASS，197,476 bytes，SHA-256 `81526d92b97c26679bce75328a0a8fe013c58b7819e2241d03b7049066731ec5`。生产 `dist/client` 未修改。
+- **边界：**未打开 QA 页面、未执行真实认证、未发送真实镜像 HTTP 请求、未写 R2、未部署；未执行 113／115。38 项均为隔离模拟，不能代替真实 R2 读回。QA 配置绑定既有独立 media Worker service，本轮未部署或线上核验该独立服务。
+- **报告：**`docs/release/LifeSpace-112-Media-Gateway-Integration-R01.md`。完成本轮源码与隔离验证后 STOP，等待 D 组按合法会话交接执行独立只读 R2 读回。
