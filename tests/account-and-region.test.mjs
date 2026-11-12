@@ -62,6 +62,30 @@ test("email redirects always use the official domain with safe internal return p
   assert.equal(new URL(auth.buildAuthEmailRedirect("signup", "/membership#cloud-trial")).searchParams.get("returnTo"), "/membership#cloud-trial");
 });
 
+test("027 auth email redirect rejects QA-to-production and mismatched callback environments", () => {
+  const oldUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const oldOrigin = process.env.NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN;
+  try {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://mablwxlipcgbmbnfdbkc.supabase.co";
+    delete process.env.NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN;
+    assert.throws(() => auth.buildAuthEmailRedirect("signup"), /qa_auth_redirect_origin_missing/);
+    process.env.NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN = "https://life-space.uk";
+    assert.throws(() => auth.buildAuthEmailRedirect("recovery"), /qa_auth_redirect_to_production_rejected/);
+    process.env.NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN = "https://qa.example.org";
+    assert.equal(new URL(auth.buildAuthEmailRedirect("signup", "/archive")).origin, "https://qa.example.org");
+    process.env.NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN = "http://qa.example.org";
+    assert.throws(() => auth.buildAuthEmailRedirect("signup"), /invalid_auth_redirect_origin/);
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://eidltoikfpnrzxruvawf.supabase.co";
+    process.env.NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN = "https://qa.example.org";
+    assert.throws(() => auth.buildAuthEmailRedirect("recovery"), /production_auth_redirect_mismatch/);
+  } finally {
+    if (oldUrl === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    else process.env.NEXT_PUBLIC_SUPABASE_URL = oldUrl;
+    if (oldOrigin === undefined) delete process.env.NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN;
+    else process.env.NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN = oldOrigin;
+  }
+});
+
 test("coarse project region never inherits a profile street address or record GPS", () => {
   const input = { country_code:"CN", country_name:"中国", region_name:"浙江", city_name:"宁波", location:"某路99号", latitude:29.8, longitude:121.5 };
   assert.deepEqual(regions.normalizePlantingRegion(input), {country_code:"CN",country_name:"中国",region_name:"浙江",city_name:"宁波"});

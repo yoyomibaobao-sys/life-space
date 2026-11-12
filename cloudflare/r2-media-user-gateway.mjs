@@ -129,7 +129,8 @@ async function resolveBusinessMedia(admin, input, viewerId) {
   const { businessType, businessId, variant } = input;
   let ownerId = null;
   let path = null;
-  let expectedBytes = null;
+  let accountedBytes = null;
+  let mediaPaths = null;
   let publicReadable = false;
 
   if (businessType === "media") {
@@ -146,8 +147,10 @@ async function resolveBusinessMedia(admin, input, viewerId) {
     if (!ownerId || record.user_id !== ownerId || archive.user_id !== ownerId) return null;
     publicReadable = archive.is_public === true && record.visibility === "public";
     path = choosePath(media.storage_path, media.thumb_path, variant);
-    if (variant === "full" && Number.isSafeInteger(media.size_bytes) && media.size_bytes > 0) {
-      expectedBytes = media.size_bytes;
+    mediaPaths = [...new Set([media.storage_path, media.thumb_path].filter(Boolean))];
+    // This is the combined billing usage of full + thumb, never the size of full alone.
+    if (Number.isSafeInteger(media.size_bytes) && media.size_bytes > 0) {
+      accountedBytes = media.size_bytes;
     }
   } else if (businessType === "record") {
     const record = await readRow(admin, "records",
@@ -204,8 +207,32 @@ async function resolveBusinessMedia(admin, input, viewerId) {
   }
 
   if (!ownerId || !UUID.test(ownerId) || !path || !ownerReadable(viewerId, ownerId, publicReadable)) return null;
-  try { validateMediaR2Key(path, ownerId); } catch { return null; }
-  return { ownerId, path, expectedBytes };
+  try {
+    for (const objectPath of mediaPaths || [path]) validateMediaR2Key(objectPath, ownerId);
+  } catch { return null; }
+  return { ownerId, path, mediaPaths, accountedBytes };
+}
+
+async function readSourceObjectLengths(admin, source) {
+  if (!source.mediaPaths) return { expectedBytes: null };
+  let totalBytes = 0;
+  let expectedBytes = null;
+  for (const path of source.mediaPaths) {
+    // Storage object metadata is per file; media.size_bytes is an aggregate.
+    const { data, error } = await admin.storage.from("media").info(path);
+    const length = data?.metadata?.size ?? data?.size;
+    if (error || !Number.isSafeInteger(length) || length <= 0 || length > MAX_MEDIA_BYTES) {
+      return { error: "source_unavailable" };
+    }
+    totalBytes += length;
+    if (!Number.isSafeInteger(totalBytes)) return { error: "source_unavailable" };
+    if (path === source.path) expectedBytes = length;
+  }
+  if (expectedBytes === null) return { error: "source_unavailable" };
+  if (source.accountedBytes !== null && source.accountedBytes !== totalBytes) {
+    return { error: "source_length_mismatch" };
+  }
+  return { expectedBytes };
 }
 
 async function hasBusinessReference(admin, path) {
@@ -313,6 +340,11 @@ export async function handleR2BusinessUserMirrorRequest(request, env, dependenci
     if (!await hasBusinessReference(admin, source.path)) {
       return withCookies(respond({ error: "business_reference_not_found" }, 409), cookieWrites);
     }
+    const lengthCheck = await readSourceObjectLengths(admin, source);
+    if (lengthCheck.error) {
+      const status = lengthCheck.error === "source_length_mismatch" ? 409 : 502;
+      return withCookies(respond({ error: lengthCheck.error }, status), cookieWrites);
+    }
 
     const { data: blob, error: downloadError } = await userContext.supabase.storage
       .from("media").download(source.path);
@@ -323,7 +355,8 @@ export async function handleR2BusinessUserMirrorRequest(request, env, dependenci
     let bytes;
     try { bytes = new Uint8Array(await blob.arrayBuffer()); }
     catch { return withCookies(respond({ error: "source_read_interrupted" }, 502), cookieWrites); }
-    if (bytes.byteLength !== blob.size || (source.expectedBytes && source.expectedBytes !== bytes.byteLength)) {
+    if (bytes.byteLength !== blob.size ||
+        (lengthCheck.expectedBytes !== null && lengthCheck.expectedBytes !== bytes.byteLength)) {
       return withCookies(respond({ error: "source_length_mismatch" }, 409), cookieWrites);
     }
     const contentType = sniffImageMime(bytes);

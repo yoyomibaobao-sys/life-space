@@ -5,7 +5,8 @@ import { getMediaStoragePathFromUrl } from "@/lib/media-urls";
 export type StorageReserveResult = {
   ok: boolean;
   reservation_id: string | null;
-  reservation_mode: "reservation" | "legacy";
+  status: string | null;
+  reservation_mode: "reservation" | "legacy",
   storage_used: number;
   storage_limit_bytes: number;
   remaining_bytes: number;
@@ -124,6 +125,7 @@ async function reserveLegacyStorageBytes(bytes: number) {
     return {
       ok: false,
       reservation_id: null,
+      status: null,
       reservation_mode: "legacy",
       storage_used: 0,
       storage_limit_bytes: 0,
@@ -137,6 +139,7 @@ async function reserveLegacyStorageBytes(bytes: number) {
   return {
     ok: Boolean(row?.ok),
     reservation_id: null,
+    status: row?.status || null,
     reservation_mode: "legacy",
     storage_used: Number(row?.storage_used || 0),
     storage_limit_bytes: Number(row?.storage_limit_bytes || 0),
@@ -179,6 +182,7 @@ export async function reserveStorageUpload(params: {
       return {
         ok: false,
         reservation_id: null,
+        status: null,
         reservation_mode: "reservation",
         storage_used: 0,
         storage_limit_bytes: 0,
@@ -205,6 +209,7 @@ export async function reserveStorageUpload(params: {
     return {
       ok: false,
       reservation_id: null,
+      status: null,
       reservation_mode: "reservation",
       storage_used: 0,
       storage_limit_bytes: 0,
@@ -218,6 +223,7 @@ export async function reserveStorageUpload(params: {
   return {
     ok: Boolean(row?.ok),
     reservation_id: row?.reservation_id || null,
+    status: row?.status || null,
     reservation_mode: "reservation",
     storage_used: Number(row?.storage_used || 0),
     storage_limit_bytes: Number(row?.storage_limit_bytes || 0),

@@ -48,6 +48,12 @@ export type LocalArchiveRole =
   | "saved-local-copy"
   | "cloud-offline-cache";
 
+export type LocalSyncAttemptOutcome =
+  | "in-flight"
+  | "definite-rejection"
+  | "unknown"
+  | "committed";
+
 export type LocalSyncMeta = {
   status: LocalSyncStatus;
   cloud_archive_id?: string | null;
@@ -60,6 +66,7 @@ export type LocalSyncMeta = {
   operation_kind?: LocalSyncOperationKind | null;
   queued_at?: string | null;
   attempt_count?: number;
+  last_attempt_outcome?: LocalSyncAttemptOutcome | null;
   last_error?: string | null;
   pending_fields?: string[];
 };
@@ -313,6 +320,7 @@ export type LocalCloudSyncOperationUpdate = {
   cloud_record_id?: string | null;
   cloud_media_id?: string | null;
   cloud_media_url?: string | null;
+  last_attempt_outcome?: LocalSyncAttemptOutcome | null;
   last_error?: string | null;
 };
 
@@ -570,6 +578,12 @@ function normalizeLocalSyncMeta(sync?: Partial<LocalSyncMeta> | null): LocalSync
     "upload-image",
     "update-archive",
   ];
+  const validAttemptOutcomes: LocalSyncAttemptOutcome[] = [
+    "in-flight",
+    "definite-rejection",
+    "unknown",
+    "committed",
+  ];
 
   return {
     status: validStatuses.includes(sync?.status as LocalSyncStatus)
@@ -589,6 +603,9 @@ function normalizeLocalSyncMeta(sync?: Partial<LocalSyncMeta> | null): LocalSync
       : null,
     queued_at: normalizeOptionalText(sync?.queued_at),
     attempt_count: Math.max(0, Math.floor(Number(sync?.attempt_count) || 0)),
+    last_attempt_outcome: validAttemptOutcomes.includes(
+      sync?.last_attempt_outcome as LocalSyncAttemptOutcome
+    ) ? (sync?.last_attempt_outcome as LocalSyncAttemptOutcome) : null,
     last_error: normalizeOptionalText(sync?.last_error),
     pending_fields: Array.from(
       new Set(
@@ -780,6 +797,7 @@ function localSyncMeta(extra?: Partial<LocalSyncMeta>): LocalSyncMeta {
     operation_kind: null,
     queued_at: null,
     attempt_count: 0,
+    last_attempt_outcome: null,
     last_error: null,
     pending_fields: [],
     ...extra,
@@ -869,6 +887,7 @@ function queueCloudSyncOperation(
         operation_kind: null,
         queued_at: null,
         attempt_count: 0,
+        last_attempt_outcome: null,
         last_error: null,
         pending_fields: [],
       })
@@ -937,6 +956,7 @@ function applyCloudSyncOperationUpdate(
       ...withCloudIds,
       status: "uploading",
       attempt_count: (withCloudIds.attempt_count || 0) + 1,
+      last_attempt_outcome: "in-flight",
       last_error: null,
     });
   }
@@ -945,13 +965,15 @@ function applyCloudSyncOperationUpdate(
     return normalizeLocalSyncMeta({
       ...withCloudIds,
       status: "failed",
-      last_error: update.last_error || "云端上传失败，请稍后重试。",
+      last_attempt_outcome: update.last_attempt_outcome || "unknown",
+      last_error: update.last_error || "云端上传失败，请稍后重试。"
     });
   }
 
   return normalizeLocalSyncMeta({
     ...withCloudIds,
     status: "synced",
+    last_attempt_outcome: "committed",
     last_sync_at: timestamp,
     client_operation_id: null,
     depends_on_operation_id: null,

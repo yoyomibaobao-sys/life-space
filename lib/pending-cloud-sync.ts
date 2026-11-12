@@ -23,7 +23,10 @@ import {
 } from "@/lib/local-offline-db";
 import { normalizePlantingRegion } from "@/lib/planting-region";
 import { isAndroidOnline } from "@/lib/android-connectivity";
-import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
+import {
+  isDefiniteStorageUploadRejection,
+  uploadMediaStorageObject,
+} from "@/lib/media-storage-upload";
 import {
   reserveStorageUpload,
   settleStorageUploadReservation,
@@ -206,6 +209,7 @@ type CloudMediaRow = {
   record_id: string;
   user_id: string;
   storage_path: string;
+  thumb_path?: string | null;
   size_bytes?: number | null;
 };
 
@@ -633,7 +637,7 @@ async function syncRecord(params: {
 async function findCloudMediaById(mediaId: string) {
   const { data, error } = await supabase
     .from("media")
-    .select("id,record_id,user_id,storage_path,size_bytes")
+    .select("id,record_id,user_id,storage_path,thumb_path,size_bytes")
     .eq("id", mediaId)
     .maybeSingle();
   if (error) throw new Error("无法确认图片的云端状态，请稍后重试。");
@@ -643,10 +647,20 @@ async function findCloudMediaById(mediaId: string) {
 async function findCloudMediaByPath(storagePath: string) {
   const { data, error } = await supabase
     .from("media")
-    .select("id,record_id,user_id,storage_path,size_bytes")
+    .select("id,record_id,user_id,storage_path,thumb_path,size_bytes")
     .eq("storage_path", storagePath)
     .maybeSingle();
   if (error) throw new Error("无法确认图片文件状态，请稍后重试。");
+  return (data || null) as CloudMediaRow | null;
+}
+
+async function findCloudMediaByThumbPath(thumbPath: string) {
+  const { data, error } = await supabase
+    .from("media")
+    .select("id,record_id,user_id,storage_path,thumb_path,size_bytes")
+    .eq("thumb_path", thumbPath)
+    .maybeSingle();
+  if (error) throw new Error("无法确认缩略图对应的云端媒体状态，请稍后重试。");
   return (data || null) as CloudMediaRow | null;
 }
 
@@ -656,12 +670,15 @@ function assertMatchingCloudMedia(params: {
   recordId: string;
   userId: string;
   storagePath: string;
+  thumbPath?: string | null;
 }) {
   if (
     params.row.id !== params.mediaId ||
     params.row.record_id !== params.recordId ||
     params.row.user_id !== params.userId ||
-    params.row.storage_path !== params.storagePath
+    params.row.storage_path !== params.storagePath ||
+    (params.thumbPath && params.row.thumb_path &&
+      params.row.thumb_path !== params.thumbPath)
   ) {
     throw new Error("云端图片标识发生冲突，已停止上传以保护现有内容。");
   }
@@ -688,6 +705,66 @@ async function settleStableMediaReservation(params: {
   }
 }
 
+async function assertPendingImageRetryTarget(params: {
+  image: LocalImage;
+  cloudArchiveId: string;
+  cloudRecordId: string;
+  userId: string;
+}) {
+  const { image, cloudArchiveId, cloudRecordId, userId } = params;
+  if (!isAndroidOnline()) {
+    throw new Error("网络不可用，无法核对失败图片的云端状态。");
+  }
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError || auth.user?.id !== userId) {
+    throw new Error("当前登录账号与图片Owner不一致，已阻止重试。");
+  }
+  await loadCloudArchive(cloudArchiveId, userId);
+  const { data: record, error: recordError } = await supabase
+    .from("records")
+    .select("id,archive_id,user_id")
+    .eq("id", cloudRecordId)
+    .eq("archive_id", cloudArchiveId)
+    .eq("user_id", userId)
+    .is("trashed_at", null)
+    .maybeSingle();
+  if (recordError || !record?.id ||
+      record.archive_id !== cloudArchiveId || record.user_id !== userId) {
+    throw new Error("无法确认失败图片所属的云端记录，已阻止重试。");
+  }
+  if (
+    (cleanText(image.sync.cloud_archive_id) &&
+      cleanText(image.sync.cloud_archive_id) !== cloudArchiveId) ||
+    (cleanText(image.sync.cloud_record_id) &&
+      cleanText(image.sync.cloud_record_id) !== cloudRecordId) ||
+    (cleanText(image.sync.cloud_media_id) &&
+      cleanText(image.sync.cloud_media_id) !== getOperationId(image))
+  ) {
+    throw new Error("失败图片的云端项目、记录或媒体标识不一致，已阻止重试。");
+  }
+}
+
+// The Owner SELECT policy permits this Owner's UID-prefixed unreferenced
+// media objects. Errors are UNKNOWN; an empty exact-name result is required.
+async function hasPendingMediaStorageObject(storagePath: string) {
+  const separator = storagePath.lastIndexOf("/");
+  const folder = separator > 0 ? storagePath.slice(0, separator) : "";
+  const name = storagePath.slice(separator + 1);
+  if (!folder || !name) {
+    throw new Error("图片存储路径无效，无法安全核账。");
+  }
+  const { data, error } = await supabase.storage.from("media").list(folder, {
+    limit: 100,
+    search: name,
+  });
+  // A full page cannot prove absence of an exact object. Fail closed if the
+  // search is truncated instead of treating a missing first-page hit as safe.
+  if (error || !Array.isArray(data) || data.length >= 100) {
+    throw new Error("无法完整核对云端图片对象，已阻止重试。");
+  }
+  return data.some((entry) => entry.name === name);
+}
+
 async function syncImage(params: {
   image: LocalImage;
   cloudArchiveId: string;
@@ -697,6 +774,95 @@ async function syncImage(params: {
   const { image, cloudArchiveId, cloudRecordId, userId } = params;
   const operationId = getOperationId(image);
   const mediaId = operationId;
+  const attemptCount = Number(image.sync.attempt_count || 0);
+  const isFailedRetry = image.sync.status === "failed" && attemptCount > 0;
+  if (image.sync.status === "failed" && !isFailedRetry) {
+    throw new Error("失败图片缺少有效尝试记录，已阻止自动重试。");
+  }
+  if (isFailedRetry && image.sync.last_attempt_outcome !== "definite-rejection") {
+    throw new Error("上次上传结果不确定，必须先核账，禁止自动重试。");
+  }
+  if (isFailedRetry) {
+    await assertPendingImageRetryTarget({
+      image,
+      cloudArchiveId,
+      cloudRecordId,
+      userId,
+    });
+  }
+
+  const originalFile = new File(
+    [image.blob],
+    image.name || `${image.id}.jpg`,
+    {
+      type: image.mime_type || image.blob.type || "image/jpeg",
+      lastModified: new Date(
+        image.captured_at || image.created_at || Date.now()
+      ).getTime(),
+    }
+  );
+  const standardized = image.metadata_stripped
+    ? null
+    : await standardizeRecordPhotoFile(originalFile, {
+        requireSanitized: true,
+      });
+  const uploadFile = standardized?.file || originalFile;
+  const thumbnail = await createImageThumbnailFile(uploadFile);
+  const thumbFile = thumbnail.wasGenerated ? thumbnail.file : null;
+  const { storagePath, thumbPath } = buildPendingMediaStoragePaths({
+    userId,
+    recordId: cloudRecordId,
+    operationId,
+    fileName: uploadFile.name,
+    thumbnailName: thumbFile?.name,
+  });
+  const reservedBytes = uploadFile.size + (thumbFile?.size || 0);
+
+  let existing = await findCloudMediaById(mediaId);
+  if (!existing) existing = await findCloudMediaByPath(storagePath);
+  if (!existing && thumbPath) {
+    existing = await findCloudMediaByThumbPath(thumbPath);
+  }
+  if (existing) {
+    if (isFailedRetry) {
+      throw new Error("云端已存在媒体记录，禁止失败任务再次写入。");
+    }
+    assertMatchingCloudMedia({
+      row: existing,
+      mediaId,
+      recordId: cloudRecordId,
+      userId,
+      storagePath,
+      thumbPath,
+    });
+    await settleStableMediaReservation({
+      mediaId,
+      reservedBytes,
+      actualBytes: Number(existing.size_bytes || reservedBytes),
+    });
+    await updateLocalImageCloudSyncOperation(image.id, operationId, {
+      status: "synced",
+      cloud_archive_id: cloudArchiveId,
+      cloud_record_id: cloudRecordId,
+      cloud_media_id: mediaId,
+      cloud_media_url: null,
+    });
+    return;
+  }
+
+  if (isFailedRetry) {
+    const paths = [storagePath, ...(thumbPath ? [thumbPath] : [])];
+    const objectStates = await Promise.all(
+      paths.map(async (path) => ({
+        path,
+        exists: await hasPendingMediaStorageObject(path),
+      }))
+    );
+    if (objectStates.some((item) => item.exists)) {
+      throw new Error("云端已存在部分图片对象，必须先完成独立核账，禁止覆盖。");
+    }
+  }
+
   const claimed = await updateLocalImageCloudSyncOperation(image.id, operationId, {
     status: "uploading",
     cloud_archive_id: cloudArchiveId,
@@ -704,59 +870,8 @@ async function syncImage(params: {
   });
   assertUploadClaim(claimed, operationId);
 
+  let attemptOutcome: "definite-rejection" | "unknown" = "unknown";
   try {
-    const originalFile = new File(
-      [image.blob],
-      image.name || `${image.id}.jpg`,
-      {
-        type: image.mime_type || image.blob.type || "image/jpeg",
-        lastModified: new Date(
-          image.captured_at || image.created_at || Date.now()
-        ).getTime(),
-      }
-    );
-    const standardized = image.metadata_stripped
-      ? null
-      : await standardizeRecordPhotoFile(originalFile, {
-          requireSanitized: true,
-        });
-    const uploadFile = standardized?.file || originalFile;
-    const thumbnail = await createImageThumbnailFile(uploadFile);
-    const thumbFile = thumbnail.wasGenerated ? thumbnail.file : null;
-    const { storagePath, thumbPath } = buildPendingMediaStoragePaths({
-      userId,
-      recordId: cloudRecordId,
-      operationId,
-      fileName: uploadFile.name,
-      thumbnailName: thumbFile?.name,
-    });
-    const reservedBytes = uploadFile.size + (thumbFile?.size || 0);
-
-    let existing = await findCloudMediaById(mediaId);
-    if (!existing) existing = await findCloudMediaByPath(storagePath);
-    if (existing) {
-      assertMatchingCloudMedia({
-        row: existing,
-        mediaId,
-        recordId: cloudRecordId,
-        userId,
-        storagePath,
-      });
-      await settleStableMediaReservation({
-        mediaId,
-        reservedBytes,
-        actualBytes: Number(existing.size_bytes || reservedBytes),
-      });
-      await updateLocalImageCloudSyncOperation(image.id, operationId, {
-        status: "synced",
-        cloud_archive_id: cloudArchiveId,
-        cloud_record_id: cloudRecordId,
-        cloud_media_id: mediaId,
-        cloud_media_url: null,
-      });
-      return;
-    }
-
     const reserveResult = await reserveStorageUpload({
       reservationId: operationId,
       preserveOnUncertainError: true,
@@ -770,6 +885,10 @@ async function syncImage(params: {
       thumbBytes: thumbFile?.size || 0,
     });
     if (!reserveResult.ok) {
+      if (["storage_limit_exceeded", "membership_inactive", "upload_maintenance"]
+        .includes(reserveResult.message)) {
+        attemptOutcome = "definite-rejection";
+      }
       if (reserveResult.message === "storage_limit_exceeded") {
         throw new Error("云空间容量不足，照片仍保留在本机。");
       }
@@ -784,19 +903,30 @@ async function syncImage(params: {
       }
       throw new Error("图片容量检查失败，请稍后重试。");
     }
+    const reusableReservation =
+      reserveResult.status === "reserved" &&
+      (reserveResult.message === "reserved" ||
+        (isFailedRetry && reserveResult.message === "already_reserved"));
     if (
       reserveResult.reservation_mode !== "reservation" ||
-      reserveResult.reservation_id !== operationId
+      reserveResult.reservation_id !== operationId ||
+      !reusableReservation
     ) {
-      throw new Error("当前云端暂不支持安全续传，已停止上传并保留本机照片。");
+      throw new Error("容量预约状态未证明可安全使用，已停止图片上传。");
     }
 
     const mainUpload = await uploadMediaStorageObject(storagePath, uploadFile, {
       contentType: uploadFile.type || "image/jpeg",
-      upsert: true,
+      upsert: !isFailedRetry,
     });
     if (mainUpload.error) {
-      throw new Error("图片上传中断，稍后可从当前进度重试。");
+      attemptOutcome =
+        mainUpload.failure_kind === "definite-rejection" &&
+        (mainUpload.status_code === undefined ||
+          isDefiniteStorageUploadRejection(mainUpload.status_code))
+          ? "definite-rejection"
+          : "unknown";
+      throw new Error("图片上传未获成功回执，已保留本机照片。");
     }
 
     let uploadedThumbPath: string | null = null;
@@ -804,9 +934,13 @@ async function syncImage(params: {
     if (thumbFile && thumbPath) {
       const thumbUpload = await uploadMediaStorageObject(thumbPath, thumbFile, {
         contentType: thumbFile.type || "image/jpeg",
-        upsert: true,
+        upsert: !isFailedRetry,
       });
-      if (!thumbUpload.error) {
+      if (thumbUpload.error) {
+        if (isFailedRetry) {
+          throw new Error("缩略图上传未获确认，已停止后续写入。");
+        }
+      } else {
         uploadedThumbPath = thumbPath;
         uploadedThumbBytes = thumbFile.size;
       }
@@ -836,13 +970,13 @@ async function syncImage(params: {
     let inserted = await supabase
       .from("media")
       .insert([mediaPayload])
-      .select("id,record_id,user_id,storage_path,size_bytes")
+      .select("id,record_id,user_id,storage_path,thumb_path,size_bytes")
       .maybeSingle();
     if (isMissingDatabaseColumn(inserted.error, "media", "captured_at")) {
       inserted = await supabase
         .from("media")
         .insert([withoutCapturedAt(mediaPayload)])
-        .select("id,record_id,user_id,storage_path,size_bytes")
+        .select("id,record_id,user_id,storage_path,thumb_path,size_bytes")
         .maybeSingle();
     }
 
@@ -850,6 +984,9 @@ async function syncImage(params: {
     if (inserted.error || !existing?.id) {
       existing = await findCloudMediaById(mediaId);
       if (!existing) existing = await findCloudMediaByPath(storagePath);
+      if (!existing && thumbPath) {
+        existing = await findCloudMediaByThumbPath(thumbPath);
+      }
     }
     if (!existing?.id) {
       throw new Error(
@@ -865,6 +1002,7 @@ async function syncImage(params: {
       recordId: cloudRecordId,
       userId,
       storagePath,
+      thumbPath,
     });
     await settleStableMediaReservation({
       mediaId,
@@ -884,6 +1022,7 @@ async function syncImage(params: {
       cloud_archive_id: cloudArchiveId,
       cloud_record_id: cloudRecordId,
       cloud_media_id: mediaId,
+      last_attempt_outcome: attemptOutcome,
       last_error: errorMessage(error, "图片上传失败，请稍后重试。"),
     }).catch(() => undefined);
     throw error;
@@ -1117,10 +1256,21 @@ async function syncPendingCloudArchiveUnlocked(params: {
   const unsafe = (sync: { status: string; attempt_count?: number }) =>
     sync.status === "uploading" ||
     ((sync.attempt_count || 0) > 0 && sync.status !== "synced");
+  const unsafeImage = (sync: {
+    status: string;
+    attempt_count?: number;
+    last_attempt_outcome?: string | null;
+  }) =>
+    sync.status === "uploading" ||
+    (sync.status === "failed" &&
+      ((sync.attempt_count || 0) <= 0 ||
+        sync.last_attempt_outcome !== "definite-rejection")) ||
+    ((sync.attempt_count || 0) > 0 &&
+      sync.status !== "synced" && sync.status !== "failed");
   const candidateImages = candidateRecords.flatMap((record) => record.images);
   if ((!params.targetRecordId && unsafe(detail.archive.sync)) ||
       candidateRecords.some((record) => unsafe(record.sync)) ||
-      candidateImages.some((image) => unsafe(image.sync))) {
+      candidateImages.some((image) => unsafeImage(image.sync))) {
     return {
       success: false, cloudArchiveId: null, archiveUpdated: false,
       recordCount: 0, imageCount: 0, failedCount: 1,
@@ -1144,7 +1294,7 @@ async function syncPendingCloudArchiveUnlocked(params: {
     : detail.records;
   if ((!params.targetRecordId && unsafe(detail.archive.sync)) ||
       refreshedCandidates.some((record) => unsafe(record.sync) ||
-        record.images.some((image) => unsafe(image.sync)))) {
+        record.images.some((image) => unsafeImage(image.sync)))) {
     return {
       success: false, cloudArchiveId: null, archiveUpdated: false,
       recordCount: 0, imageCount: 0, failedCount: 1,

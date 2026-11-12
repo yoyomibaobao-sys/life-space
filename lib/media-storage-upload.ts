@@ -8,7 +8,15 @@ type MediaStorageUploadOptions = {
 
 type MediaStorageUploadResult = {
   error: Error | null;
+  failure_kind?: "definite-rejection" | "unknown";
+  status_code?: number;
 };
+
+export function isDefiniteStorageUploadRejection(statusCode: number) {
+  return Number.isInteger(statusCode) &&
+    statusCode >= 400 && statusCode < 500 &&
+    ![408, 409, 425, 429, 499].includes(statusCode);
+}
 
 function encodeStoragePath(path: string) {
   return path
@@ -51,10 +59,15 @@ export async function uploadMediaStorageObject(
     error: sessionError,
   } = await supabase.auth.getSession();
 
-  if (sessionError) return { error: sessionError };
-  if (!session?.access_token) return { error: new Error("Not authenticated") };
+  if (sessionError) return { error: sessionError, failure_kind: "definite-rejection" };
+  if (!session?.access_token) {
+    return { error: new Error("Not authenticated"), failure_kind: "definite-rejection" };
+  }
   if (!supabaseUrl || !publishableKey) {
-    return { error: new Error("Supabase configuration is missing") };
+    return {
+      error: new Error("Supabase configuration is missing"),
+      failure_kind: "definite-rejection",
+    };
   }
 
   try {
@@ -73,11 +86,20 @@ export async function uploadMediaStorageObject(
       }
     );
 
-    if (!response.ok) return { error: await readStorageError(response) };
+    if (!response.ok) {
+      return {
+        error: await readStorageError(response),
+        failure_kind: isDefiniteStorageUploadRejection(response.status)
+          ? "definite-rejection"
+          : "unknown",
+        status_code: response.status,
+      };
+    }
     return { error: null };
   } catch (error) {
     return {
       error: error instanceof Error ? error : new Error("Storage upload failed"),
+      failure_kind: "unknown",
     };
   }
 }

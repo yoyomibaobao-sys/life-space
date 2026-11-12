@@ -383,6 +383,49 @@ test("failed media keeps its operation identity and remains resumable", async ()
   assert.equal(retrying.sync.last_error, null);
 });
 
+test("088-SR01 persists definite rejection and preserves operation after queue preparation", async () => {
+  await fixture();
+  const created = await dbModule.createLocalRecord({
+    archive_id: "cloud-local-copy",
+    note: "安全重试本机记录",
+    image_files: [photo("sr01-retry.gif")],
+  });
+  const before = await dbModule.getLocalArchiveDetail("cloud-local-copy", owner);
+  const image = before.records.find((record) => record.id === created.id).images[0];
+  const operationId = image.sync.client_operation_id;
+  await dbModule.updateLocalImageCloudSyncOperation(image.id, operationId, {
+    status: "uploading",
+    cloud_archive_id: cloudArchiveId,
+    cloud_record_id: cloudRecordId,
+  });
+  await dbModule.updateLocalImageCloudSyncOperation(image.id, operationId, {
+    status: "failed",
+    cloud_archive_id: cloudArchiveId,
+    cloud_record_id: cloudRecordId,
+    cloud_media_id: operationId,
+    last_attempt_outcome: "definite-rejection",
+    last_error: "HTTP 403 confirmed rejection",
+  });
+  const saved = await dbModule.getLocalArchiveDetail("cloud-local-copy", owner);
+  const failedImage = saved.records.find((record) => record.id === created.id).images[0];
+  assert.equal(failedImage.sync.status, "failed");
+  assert.equal(failedImage.sync.last_attempt_outcome, "definite-rejection");
+  assert.equal(failedImage.sync.attempt_count, 1);
+  assert.equal(failedImage.sync.client_operation_id, operationId);
+  assert.equal(failedImage.sync.cloud_media_id, operationId);
+
+  await dbModule.preparePendingCloudSyncQueue(owner, {
+    targetArchiveId: "cloud-local-copy",
+    targetRecordId: created.id,
+  });
+  const prepared = await dbModule.getLocalArchiveDetail("cloud-local-copy", owner);
+  const preserved = prepared.records.find((record) => record.id === created.id).images[0];
+  assert.equal(preserved.sync.status, "failed");
+  assert.equal(preserved.sync.last_attempt_outcome, "definite-rejection");
+  assert.equal(preserved.sync.attempt_count, 1);
+  assert.equal(preserved.sync.client_operation_id, operationId);
+});
+
 test("in-flight record create is immutable and late receipt keeps original data", async () => {
   await fixture();
   const created = await dbModule.createLocalRecord({

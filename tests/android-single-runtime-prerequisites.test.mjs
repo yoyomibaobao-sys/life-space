@@ -9,6 +9,10 @@ import { androidNextApiInventory } from "../lib/android-api-inventory.ts";
 
 const root = process.cwd();
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+const productionSupabase = "https://eidltoikfpnrzxruvawf.supabase.co";
+const qaSupabase = "https://mablwxlipcgbmbnfdbkc.supabase.co";
+const sessionToken = (url) =>
+  `${Buffer.from('{"alg":"HS256"}').toString("base64url")}.${Buffer.from(JSON.stringify({ iss: `${url}/auth/v1` })).toString("base64url")}.test-signature`;
 
 async function loadModule(entry, stubs = {}, define = {}) {
   const output = path.join(root, `.android-contract-${process.pid}-${Math.random().toString(36).slice(2)}.mjs`);
@@ -111,11 +115,14 @@ test("QA session is not sent to the production API", async () => {
 });
 
 test("native API transport carries Bearer auth for all JSON methods and rejects redirects, HTML and network failure", async () => {
-  const module = await loadModule("lib/android-remote-api.ts", { "@/lib/supabase": "export const supabase = {};" });
+  const module = await loadModule("lib/android-remote-api.ts", { "@/lib/supabase": "export const supabase = {};" }, {
+    "process.env.NEXT_PUBLIC_SUPABASE_URL": JSON.stringify(productionSupabase),
+  });
+  const token = sessionToken(productionSupabase);
   const calls = [];
   for (const method of ["GET", "POST", "PATCH", "PUT", "DELETE"]) {
     const result = await module.requestAndroidRemoteApi("/api/trash?batch=1", {
-      method, token: "session-token", isNative: true,
+      method, token, isNative: true,
       ...(method === "POST" || method === "PATCH" || method === "PUT" ? { json: { value: 3 } } : {}),
       nativeRequest: async (request) => { calls.push(request); return { status: 200, url: request.url, data: { ok: true }, headers: {} }; },
     });
@@ -124,20 +131,79 @@ test("native API transport carries Bearer auth for all JSON methods and rejects 
   }
   assert.equal(calls.length, 5);
   assert.ok(calls.every((request) => request.url.startsWith("https://life-space.uk/api/") &&
-    request.disableRedirects && request.headers.Authorization === "Bearer session-token" && !request.headers.Cookie));
+    request.disableRedirects && request.headers.Authorization === `Bearer ${token}` && !request.headers.Cookie));
   assert.equal(calls[1].data, '{"value":3}');
-  const redirect = await module.requestAndroidRemoteApi("/api/trash", { token: "x", isNative: true,
+  const redirect = await module.requestAndroidRemoteApi("/api/trash", { token, isNative: true,
     nativeRequest: async () => ({ status: 302, data: null, headers: {}, url: "https://evil.example/" }) });
   assert.equal(redirect.error, "remote_redirect_rejected");
-  const html = await module.requestAndroidRemoteApi("/api/trash", { token: "x", isNative: true,
+  const html = await module.requestAndroidRemoteApi("/api/trash", { token, isNative: true,
     nativeRequest: async () => ({ status: 200, data: "<html>local asset</html>", headers: {} }) });
   assert.equal(html.error, "network_or_response_error");
-  const offline = await module.requestAndroidRemoteApi("/api/trash", { token: "x", isNative: true,
+  const offline = await module.requestAndroidRemoteApi("/api/trash", { token, isNative: true,
     nativeRequest: async () => { throw new Error("offline"); } });
   assert.equal(offline.status, 0);
   assert.equal((await module.requestAndroidRemoteApi("/api/trash", { token: null, isNative: true })).status, 401);
-  assert.equal((await module.requestAndroidRemoteApi("/api/trash", { token: "x", isNative: false })).error, "native_transport_required");
+  assert.equal((await module.requestAndroidRemoteApi("/api/trash", { token, isNative: false })).error, "native_transport_required");
   assert.throws(() => module.remoteApiUrl("https://life-space.uk/api/trash"));
+});
+
+test("097 Android delete routing blocks wrong Supabase, origin and session combinations before any native request", async () => {
+  const stub = { "@/lib/supabase": "export const supabase = {};" };
+  const qaOrigin = "https://life-space-w4-r25-qa-20261109.yoyomibaobao.workers.dev";
+  const loadRemote = (supabaseUrl, origin) => loadModule("lib/android-remote-api.ts", stub, {
+    "process.env.NEXT_PUBLIC_SUPABASE_URL": JSON.stringify(supabaseUrl),
+    "process.env.NEXT_PUBLIC_CLOUD_EXPORT_ORIGIN": JSON.stringify(origin),
+  });
+  const qa = await loadRemote(qaSupabase, qaOrigin);
+  const requests = [];
+  for (const kind of ["archives", "records", "media"]) {
+    const result = await qa.requestAndroidRemoteApi(`/api/${kind}/test-id`, {
+      method: "DELETE", token: sessionToken(qaSupabase), isNative: true,
+      nativeRequest: async (request) => {
+        requests.push(request);
+        return { status: 200, url: request.url, data: { ok: true }, headers: {} };
+      },
+    });
+    assert.equal(result.ok, true);
+  }
+  assert.deepEqual(requests.map(({ url }) => url), ["archives", "records", "media"]
+    .map((kind) => `${qaOrigin}/api/${kind}/test-id`));
+  assert.ok(requests.every((request) => request.disableRedirects && !request.headers.Cookie));
+
+  const noNetwork = async () => { throw Error("native transport must not be reached"); };
+  const wrongSession = await qa.requestAndroidRemoteApi("/api/media/test-id", {
+    method: "DELETE", token: sessionToken(productionSupabase), isNative: true, nativeRequest: noNetwork,
+  });
+  assert.equal(wrongSession.error, "api_session_environment_mismatch");
+  const prod = await loadRemote(productionSupabase, "https://life-space.uk");
+  assert.equal((await prod.requestAndroidRemoteApi("/api/records/test-id", {
+    method: "DELETE", token: sessionToken(qaSupabase), isNative: true, nativeRequest: noNetwork,
+  })).error, "api_session_environment_mismatch");
+  assert.throws(() => qa.remoteApiUrl("https://life-space.uk/api/trash"), /invalid_remote_api_path/);
+  assert.throws(() => prod.remoteApiUrl("//wrong.example/api/trash"), /invalid_remote_api_path/);
+  assert.equal(prod.remoteApiUrl("/api/trash"), "https://life-space.uk/api/trash");
+});
+
+test("097 Android API environment is fail-closed when QA/prod origins are missing, swapped or malformed", async () => {
+  const stub = { "@/lib/supabase": "export const supabase = {};" };
+  const loadRemote = (supabaseUrl, origin) => loadModule("lib/android-remote-api.ts", stub, {
+    "process.env.NEXT_PUBLIC_SUPABASE_URL": JSON.stringify(supabaseUrl),
+    "process.env.NEXT_PUBLIC_CLOUD_EXPORT_ORIGIN": JSON.stringify(origin),
+  });
+  for (const origin of ["", "https://life-space.uk"]) {
+    const qa = await loadRemote(qaSupabase, origin);
+    assert.throws(() => qa.remoteApiUrl("/api/records/test-id"), /qa_export_to_production_rejected/);
+  }
+  for (const origin of ["https://qa.example", "http://life-space.uk"]) {
+    const prod = await loadRemote(productionSupabase, origin);
+    assert.throws(() => prod.remoteApiUrl("/api/media/test-id"), /production_api_origin_mismatch/);
+  }
+  for (const origin of ["http://qa.example", "https://qa.example/a", "https://user@qa.example"]) {
+    const qa = await loadRemote(qaSupabase, origin);
+    assert.throws(() => qa.remoteApiUrl("/api/archives/test-id"), /invalid_remote_api_origin/);
+  }
+  const unknown = await loadRemote("https://other.supabase.co", "https://qa.example");
+  assert.throws(() => unknown.remoteApiUrl("/api/records/test-id"), /unsupported_android_api_environment/);
 });
 
 test("server chooses explicit Bearer owner over a conflicting WebView cookie", async () => {

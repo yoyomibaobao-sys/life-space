@@ -34,16 +34,18 @@ function request(variant) {
   });
 }
 
-function fixture(viewerId = OWNER) {
+function fixture(viewerId = OWNER, options = {}) {
   const downloaded = [];
   const queried = [];
+  const infoLookups = [];
   const internal = [];
   let rpcCalls = 0;
   let limiterCalls = 0;
   const rows = {
     media: {
       id: MEDIA, user_id: OWNER, record_id: RECORD, type: "image", trashed_at: null,
-      storage_path: FULL_PATH, thumb_path: THUMB_PATH, size_bytes: FULL.byteLength,
+      storage_path: FULL_PATH, thumb_path: THUMB_PATH,
+      size_bytes: options.accountedBytes ?? FULL.byteLength + THUMB.byteLength,
     },
     records: {
       id: RECORD, user_id: OWNER, archive_id: ARCHIVE, visibility: "public", trashed_at: null,
@@ -115,6 +117,20 @@ function fixture(viewerId = OWNER) {
     },
     createAdminClient() {
       return {
+        storage: {
+          from(bucket) {
+            assert.equal(bucket, "media");
+            return {
+              async info(objectPath) {
+                infoLookups.push(objectPath);
+                if (options.infoUnavailable) return { data: null, error: { message: "unavailable" } };
+                const source = objectPath === FULL_PATH ? FULL : objectPath === THUMB_PATH ? THUMB : null;
+                if (!source) return { data: null, error: { message: "not found" } };
+                return { data: { metadata: { size: options.objectSizes?.[objectPath] ?? source.byteLength } }, error: null };
+              },
+            };
+          },
+        },
         from(table) {
           return {
             select(columns) {
@@ -141,7 +157,7 @@ function fixture(viewerId = OWNER) {
     },
   };
   return {
-    env, dependencies, downloaded, queried, internal,
+    env, dependencies, downloaded, queried, infoLookups, internal, rows,
     counts: () => ({ rpcCalls, limiterCalls, internalCalls: internal.length, downloadCalls: downloaded.length }),
   };
 }
@@ -162,6 +178,8 @@ test("actual mediaId resolves distinct full/thumb paths and preserves signed sta
   assert.equal(thumbReceipt.bytes, 10997);
   assert.equal(thumbReceipt.contentType, "image/jpeg");
 
+  assert.equal(f.rows.media.size_bytes, 25660, "size_bytes remains combined billing usage");
+  assert.deepEqual(f.infoLookups, [FULL_PATH, THUMB_PATH, FULL_PATH, THUMB_PATH]);
   assert.deepEqual(f.downloaded, [FULL_PATH, THUMB_PATH]);
   assert.deepEqual(f.internal.map((req) => decodeURIComponent(req.headers.get("x-ls-media-path"))), [FULL_PATH, THUMB_PATH]);
   assert.ok(f.internal.every((req) => req.headers.get("x-ls-owner-id") === OWNER));
@@ -172,6 +190,37 @@ test("actual mediaId resolves distinct full/thumb paths and preserves signed sta
   assert.deepEqual(f.queried.filter((item) => item.table === "records").map((item) => item.id), [RECORD, RECORD]);
   assert.deepEqual(f.queried.filter((item) => item.table === "archives").map((item) => item.id), [ARCHIVE, ARCHIVE]);
   assert.deepEqual(f.counts(), { rpcCalls: 4, limiterCalls: 2, internalCalls: 2, downloadCalls: 2 });
+});
+
+test("per-object metadata mismatches reject both full and thumb even when aggregate bytes agree", async () => {
+  for (const [variant, objectSizes] of [
+    ["full", { [FULL_PATH]: FULL.byteLength + 1, [THUMB_PATH]: THUMB.byteLength - 1 }],
+    ["thumb", { [FULL_PATH]: FULL.byteLength - 1, [THUMB_PATH]: THUMB.byteLength + 1 }],
+  ]) {
+    const f = fixture(OWNER, { objectSizes });
+    const response = await handleR2BusinessUserMirrorRequest(request(variant), f.env, f.dependencies);
+    assert.equal(response.status, 409, variant);
+    assert.equal((await response.json()).error, "source_length_mismatch");
+    assert.equal(f.rows.media.size_bytes, 25660);
+    assert.deepEqual(f.internal, [], "no R2 stage when individual source length mismatches");
+  }
+});
+
+test("aggregate billing total mismatch is rejected without changing billing data or staging", async () => {
+  const f = fixture(OWNER, { accountedBytes: 25661 });
+  const response = await handleR2BusinessUserMirrorRequest(request("full"), f.env, f.dependencies);
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error, "source_length_mismatch");
+  assert.equal(f.rows.media.size_bytes, 25661);
+  assert.deepEqual(f.internal, []);
+});
+
+test("unavailable per-object storage metadata fails closed before R2 staging", async () => {
+  const f = fixture(OWNER, { infoUnavailable: true });
+  const response = await handleR2BusinessUserMirrorRequest(request("thumb"), f.env, f.dependencies);
+  assert.equal(response.status, 502);
+  assert.equal((await response.json()).error, "source_unavailable");
+  assert.deepEqual(f.internal, []);
 });
 
 test("public readability never lets a non-owner trigger a media mirror", async () => {

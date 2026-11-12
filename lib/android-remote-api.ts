@@ -2,16 +2,43 @@ import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { supabase } from "@/lib/supabase";
 
 const PRODUCTION_ORIGIN = "https://life-space.uk";
-const ISOLATED_QA_SUPABASE = "mablwxlipcgbmbnfdbkc.supabase.co";
+const PRODUCTION_SUPABASE = "https://eidltoikfpnrzxruvawf.supabase.co";
+const ISOLATED_QA_SUPABASE = "https://mablwxlipcgbmbnfdbkc.supabase.co";
 
-function assertQaSessionStaysOffProduction() {
-  let host = "";
-  try {
-    host = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || "").hostname;
-  } catch {
-    host = "";
+function resolveApiEnvironment() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, "");
+  const configuredOrigin = process.env.NEXT_PUBLIC_CLOUD_EXPORT_ORIGIN?.trim() || "";
+  if (supabaseUrl !== PRODUCTION_SUPABASE && supabaseUrl !== ISOLATED_QA_SUPABASE) {
+    throw new Error("unsupported_android_api_environment");
   }
-  if (host === ISOLATED_QA_SUPABASE) throw new Error("qa_export_to_production_rejected");
+  if (supabaseUrl === ISOLATED_QA_SUPABASE && (!configuredOrigin || configuredOrigin === PRODUCTION_ORIGIN)) {
+    throw new Error("qa_export_to_production_rejected");
+  }
+  if (supabaseUrl === PRODUCTION_SUPABASE && configuredOrigin && configuredOrigin !== PRODUCTION_ORIGIN) {
+    throw new Error("production_api_origin_mismatch");
+  }
+  const origin = configuredOrigin || PRODUCTION_ORIGIN;
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    throw new Error("invalid_remote_api_origin");
+  }
+  if (url.protocol !== "https:" || url.origin !== origin || url.username || url.password) {
+    throw new Error("invalid_remote_api_origin");
+  }
+  return { origin, supabaseUrl };
+}
+
+// Check the session's Supabase issuer before passing its Bearer token to an
+// external HTTPS origin. Server-side signature and Owner checks remain required.
+function tokenMatchesEnvironment(token: string, supabaseUrl: string) {
+  try {
+    const payload = JSON.parse(atob((token.split(".")[1] || "").replace(/-/g, "+").replace(/_/g, "/")));
+    return payload.iss === `${supabaseUrl}/auth/v1`;
+  } catch {
+    return false;
+  }
 }
 export type RemoteApiMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
@@ -25,12 +52,12 @@ type NativeRequest = (options: {
 export type RemoteApiResult<T> = { status: number; ok: boolean; data: T | null; error: string | null };
 
 export function remoteApiUrl(path: string) {
-  assertQaSessionStaysOffProduction();
+  const { origin } = resolveApiEnvironment();
   if (!path.startsWith("/api/") || path.startsWith("//") || path.includes("\\")) {
     throw new Error("invalid_remote_api_path");
   }
-  const url = new URL(path, PRODUCTION_ORIGIN);
-  if (url.origin !== PRODUCTION_ORIGIN || !url.pathname.startsWith("/api/")) throw new Error("invalid_remote_api_origin");
+  const url = new URL(path, origin);
+  if (url.origin !== origin || !url.pathname.startsWith("/api/")) throw new Error("invalid_remote_api_origin");
   return url.href;
 }
 
@@ -56,6 +83,9 @@ export async function requestAndroidRemoteApi<T>(path: string, options: {
       ? (await supabase.auth.getSession()).data.session?.access_token || null
       : options.token;
     if (!auth) return { status: 401, ok: false, data: null, error: "not_authenticated" };
+    if (!tokenMatchesEnvironment(auth, resolveApiEnvironment().supabaseUrl)) {
+      return { status: 0, ok: false, data: null, error: "api_session_environment_mismatch" };
+    }
     const headers: Record<string, string> = {
       Authorization: `Bearer ${auth}`,
       Accept: "application/json",
@@ -66,7 +96,7 @@ export async function requestAndroidRemoteApi<T>(path: string, options: {
       disableRedirects: true, responseType: "json", connectTimeout: 10000, readTimeout: 30000,
     });
     const responseUrl = result.url ? new URL(result.url, url) : new URL(url);
-    if (responseUrl.origin !== PRODUCTION_ORIGIN || result.status >= 300 && result.status < 400) {
+    if (responseUrl.origin !== new URL(url).origin || result.status >= 300 && result.status < 400) {
       return { status: result.status, ok: false, data: null, error: "remote_redirect_rejected" };
     }
     let data: T | null = null;

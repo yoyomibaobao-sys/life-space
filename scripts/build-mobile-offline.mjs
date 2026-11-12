@@ -42,6 +42,15 @@ if (qaBuild) {
 if (exportOrigin && (new URL(exportOrigin).origin !== exportOrigin || !exportOrigin.startsWith("https://"))) {
   throw new Error("ANDROID_CLOUD_EXPORT_ORIGIN must be an HTTPS origin without a path.");
 }
+// Keep the bundled mail confirmation/reset callback on the same QA origin.
+// Explicitly inline this variable: esbuild does not expose process.env in WebView.
+const authRedirectOrigin = process.env.ANDROID_AUTH_REDIRECT_ORIGIN?.trim() || cloudOrigin;
+if (qaBuild && authRedirectOrigin !== cloudOrigin) {
+  throw new Error("QA Android auth callback must match its isolated HTTPS origin.");
+}
+if (new URL(authRedirectOrigin).origin !== authRedirectOrigin || !authRedirectOrigin.startsWith("https://")) {
+  throw new Error("ANDROID_AUTH_REDIRECT_ORIGIN must be an HTTPS origin without a path.");
+}
 const supabasePublishableKey = (qaBuild
   ? process.env.ANDROID_QA_SUPABASE_PUBLISHABLE_KEY
   : process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
@@ -75,6 +84,7 @@ const buildResult = await build({
   define: {
     __LIFESPACE_CLOUD_ORIGIN__: JSON.stringify(cloudOrigin),
     "process.env.NEXT_PUBLIC_CLOUD_EXPORT_ORIGIN": JSON.stringify(exportOrigin),
+    "process.env.NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN": JSON.stringify(authRedirectOrigin),
     "process.env.NODE_ENV": JSON.stringify("production"),
     "process.env.NEXT_PUBLIC_SUPABASE_URL": JSON.stringify(supabaseUrl),
     "process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY":

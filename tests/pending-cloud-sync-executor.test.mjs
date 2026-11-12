@@ -24,7 +24,8 @@ test("pending image retries keep deterministic paths and never delete uncertain 
   const executor = await source("lib/pending-cloud-sync.ts");
 
   assert.match(executor, /offline-\$\{params\.operationId\}/);
-  assert.match(executor, /upsert: true/);
+  assert.match(executor, /upsert: !isFailedRetry/);
+  assert.match(executor, /last_attempt_outcome/);
   assert.doesNotMatch(executor, /cancelStorageUploadReservation/);
   assert.doesNotMatch(executor, /storage\.from\("media"\)\.remove/);
 });
