@@ -69,13 +69,13 @@
 定向测试命令：
 
 ```text
-node --test \\
-  tests/m4-qa-controlled-ui.test.mjs \\
-  tests/r2-media-user-gateway-media-id.test.mjs \\
-  tests/r2-media-user-gateway-security.test.mjs \\
-  tests/r2-media-service-stage.test.mjs \\
-  tests/r2-media-business.test.mjs \\
-  tests/r2-media-miniflare.isolated.mjs \\
+node --test \
+  tests/m4-qa-controlled-ui.test.mjs \
+  tests/r2-media-user-gateway-media-id.test.mjs \
+  tests/r2-media-user-gateway-security.test.mjs \
+  tests/r2-media-service-stage.test.mjs \
+  tests/r2-media-business.test.mjs \
+  tests/r2-media-miniflare.isolated.mjs \
   tests/r2-media-http-concurrency.isolated.mjs
 ```
 
