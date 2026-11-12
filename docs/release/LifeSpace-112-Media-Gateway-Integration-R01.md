@@ -60,22 +60,30 @@
 | HMAC、时间戳、Nonce、防重放及并发唯一写入 | PASS（隔离模拟） |
 | R2 条件写、目标对象冲突保护、读回 SHA／大小／MIME | PASS（模拟 R2 bucket） |
 | 脱敏回执不含路径及 Owner／Record UUID | PASS |
-| 定向测试 | **38/38 PASS，0 FAIL** |
+| 扩展定向隔离测试（7 个测试文件） | **60/60 PASS，0 FAIL** |
 | TypeScript `tsc --noEmit -p tsconfig.vinext.json` | PASS |
 | QA 配置下 Vinext 构建 | PASS |
 | QA-only 客户端构建 | PASS |
+| 本地统一 Worker 导入、QA 路由与静态资产隔离 smoke | PASS（QA Origin 200；生产 Origin／关闭开关 404；QA-only asset 存在，生产 asset 不存在） |
 
 定向测试命令：
 
 ```text
-node --test tests/m4-qa-controlled-ui.test.mjs tests/r2-media-user-gateway-media-id.test.mjs tests/r2-media-user-gateway-security.test.mjs tests/r2-media-service-stage.test.mjs
+node --test \\
+  tests/m4-qa-controlled-ui.test.mjs \\
+  tests/r2-media-user-gateway-media-id.test.mjs \\
+  tests/r2-media-user-gateway-security.test.mjs \\
+  tests/r2-media-service-stage.test.mjs \\
+  tests/r2-media-business.test.mjs \\
+  tests/r2-media-miniflare.isolated.mjs \\
+  tests/r2-media-http-concurrency.isolated.mjs
 ```
 
 QA-only 客户端产物：`dist/qa-client/__qa/m4-controlled-mirror.js`，197,476 bytes。
 
 SHA-256：`81526d92b97c26679bce75328a0a8fe013c58b7819e2241d03b7049066731ec5`。
 
-构建输出确认生产 `dist/client` 未修改。暂存差异 `git diff --cached --check` 通过。
+本地统一 Worker smoke：`qaPageStatus=200`、`productionOriginStatus=404`、`disabledFlagStatus=404`；页面引用 QA 静态客户端，QA 产物存在、生产目录对应产物不存在。QA asset 为 197,476 bytes，SHA-256 与上方记录一致。构建输出确认生产 `dist/client` 未修改。源码提交 `git show --check` 通过。
 
 ## 提交与保护
 

@@ -332,6 +332,6 @@
 - **基线与提交：**在 `development/lifespace-unified-r01` 独立检出中，以 `0a0c7c458eee150e522930f90593e209fd5a1a95` 为修改前 HEAD；源码提交 `637745ab4d63fcec0633135b451dbe620466bf44`。只提交本任务 12 个文件，未纳入 Android Gradle、`mobile-shell/index.html` 和 `.wp10-delivery/` 等既有无关修改。
 - **源码接入：**统一 Worker 接入严格 QA Origin／isolated flag／GET-only 控制页面和同源镜像 POST 路由；客户端每次 POST 前使用现有 SDK 在线验证 Owner A 与同一 Session，POST 使用实际 mediaId 和 full／thumb。服务端继续执行 Owner／业务引用校验，并保留 HMAC、时间戳、Nonce、R2 条件写与冲突读回合同。full 失败或 UNKNOWN 不会继续发 thumb POST，也不自动重试。
 - **回执脱敏：**每种尺寸分别记录源字节 SHA-256、MIME、大小和前后状态；路径改为 SHA-256 指纹，Owner 只记录核验布尔结果，不输出路径、Owner UUID、recordId 或认证凭据。明确标注 SDK 缓存状态未验证、对象版本元数据不可用及客户端未执行独立 R2 读回。
-- **验证：**定向隔离测试 38/38 PASS；TypeScript 检查 PASS；QA 配置下 Vinext 构建 PASS；QA-only 客户端构建 PASS，197,476 bytes，SHA-256 `81526d92b97c26679bce75328a0a8fe013c58b7819e2241d03b7049066731ec5`。生产 `dist/client` 未修改。
-- **边界：**未打开 QA 页面、未执行真实认证、未发送真实镜像 HTTP 请求、未写 R2、未部署；未执行 113／115。38 项均为隔离模拟，不能代替真实 R2 读回。QA 配置绑定既有独立 media Worker service，本轮未部署或线上核验该独立服务。
+- **验证：**扩展定向隔离测试（7 个测试文件）60/60 PASS；TypeScript 检查 PASS；QA 配置下 Vinext 构建 PASS；QA-only 客户端构建 PASS，197,476 bytes，SHA-256 `81526d92b97c26679bce75328a0a8fe013c58b7819e2241d03b7049066731ec5`。本地统一 Worker smoke PASS：QA Origin 返回 200，生产 Origin 和关闭开关均返回 404；页面引用 QA 静态客户端，QA 产物存在而生产目录对应产物不存在。生产 `dist/client` 未修改。
+- **边界：**未打开线上 QA 页面、未执行真实认证、未发送真实镜像 HTTP 请求、未写 R2、未部署；未执行 113／115。60 项均为隔离模拟／本地模拟 R2，不能代替真实 R2 读回。QA 配置绑定既有独立 media Worker service，本轮未部署或线上核验该独立服务。
 - **报告：**`docs/release/LifeSpace-112-Media-Gateway-Integration-R01.md`。完成本轮源码与隔离验证后 STOP，等待 D 组按合法会话交接执行独立只读 R2 读回。
