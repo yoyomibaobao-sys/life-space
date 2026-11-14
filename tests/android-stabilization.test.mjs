@@ -32,6 +32,8 @@ async function loadModule(entry, stubs = {}) {
 test("one native connectivity subscription handles hot toggle, missed event on resume and cleanup", async () => {
   const subscriptions = {};
   let status = true;
+  const originalSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://mablwxlipcgbmbnfdbkc.supabase.co";
   globalThis.__connectivityTest = {
     subscribe: (kind, listener) => { subscriptions[kind] = listener; return { remove: async () => { delete subscriptions[kind]; } }; },
     status: () => ({ connected: status }),
@@ -43,7 +45,7 @@ test("one native connectivity subscription handles hot toggle, missed event on r
   document.visibilityState = "visible";
   const connectivity = await loadModule("lib/android-connectivity.ts", {
     "react": "export const useSyncExternalStore = () => {};",
-    "@capacitor/core": "export const Capacitor = { isNativePlatform: () => true }; export const CapacitorHttp = { request: async () => ({ status: 200, data: { ok: true }, headers: {}, url: 'https://life-space.uk/api/health' }) };",
+    "@capacitor/core": "export const Capacitor = { isNativePlatform: () => true }; export const CapacitorHttp = { request: async () => ({ status: 200, data: { ok: true }, headers: {}, url: 'https://lifespace-site-media-qa-20261028.lifespace-assets-isolated-lab.workers.dev/api/health' }) };",
     "@capacitor/network": "export const Network = { getStatus: async () => globalThis.__connectivityTest.status(), addListener: async (_, listener) => globalThis.__connectivityTest.subscribe('network', listener) };",
     "@capacitor/app": "export const App = { addListener: async (_, listener) => globalThis.__connectivityTest.subscribe('resume', listener) };",
   });
@@ -66,16 +68,20 @@ test("one native connectivity subscription handles hot toggle, missed event on r
   delete globalThis.document;
   if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
   else delete globalThis.navigator;
+  if (originalSupabaseUrl === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  else process.env.NEXT_PUBLIC_SUPABASE_URL = originalSupabaseUrl;
   assert.doesNotMatch(read("mobile-offline-src/main.tsx"), /navigator\.onLine/);
 });
 
-test("signed-out cloud offers trial or Plus via bundled login; remembered local content remains", () => {
+test("signed-out cloud offers Free or Plus via bundled login; protected local content remains", () => {
   const shell = read("mobile-offline-src/main.tsx");
   const auth = read("lib/android-auth-state.ts");
-  assert.match(shell, /sourceFilter === "cloud" && auth\.status !== "checking"/);
-  assert.match(shell, /openCloudLogin\(trialLoginTo/);
+  assert.match(shell, /sourceFilter === "cloud" && !offlineOwnerRead && auth\.status !== "checking"/);
+  assert.doesNotMatch(shell, /openCloudLogin\(trialLoginTo|supabase\.rpc\("claim_my_cloud_trial"\)/);
+  assert.match(shell, /Free 云空间（30 MB）；Plus 云空间为 1 GB/);
+  assert.match(shell, /openCloudLogin\("list-cloud"\)/);
   assert.match(shell, /openCloudLogin\("membership-payment"\)/);
-  assert.match(shell, /sourceFilter !== "cloud" \? \(\s*filteredLocalArchives/);
+  assert.match(shell, /localSpaceEnabled && sourceFilter !== "cloud" && sourceFilter !== "pending"/);
   assert.match(auth, /preserveLocalOwner: true/);
   assert.match(shell, /auth\.status === "signed-out"/);
   assert.match(shell, /setCloudArchives\(\[\]\)/);
@@ -102,7 +108,10 @@ test("route registry handles all profile, user and membership destinations", () 
   const shell = read("mobile-offline-src/main.tsx");
   assert.match(shell, /Browser\.open\(\{ url: url\.href \}\)/);
   assert.match(shell, /data-android-shell-page="recent"/);
-  assert.match(shell, /listLocalArchiveCycleTrash\(ownerContext\)/);
+  const trash = shell.slice(shell.indexOf("function AndroidLocalTrash("), shell.indexOf("function ProjectForm("));
+  assert.doesNotMatch(trash, /await listLocalArchiveCycleTrash\(ownerContext\)|await listLocalProjectTrash\(ownerContext\)/);
+  assert.match(trash, /fetchCloudTrash\(/);
+  assert.match(trash, /restoreCloudTrashItem\(/);
   assert.match(shell, /restoreLocalArchiveCycle\(item\.archive_id/);
   for (const page of ["app/follow/page.tsx", "app/market/page.tsx"]) {
     assert.match(read(page), /useAndroidConnectivity/);

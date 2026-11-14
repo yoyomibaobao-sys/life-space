@@ -202,7 +202,8 @@ test("pending cloud records upload by explicit action without deleting local ori
   assert.match(sync, /record\.sync\?\.status === "pending-cloud-sync"/);
   assert.match(sync, /原云端项目已不存在/);
   assert.match(sync, /原云端项目已结束/);
-  assert.match(offline, /syncAllPendingCloudArchives/);
+  assert.match(offline, /syncAndroidAllPendingCloudArchives\(\{ ownerContext: authenticatedOwnerContext \}\)/);
+  assert.match(offline, /if \(!authenticatedOwnerContext \|\| !cloudUserId\) \{ openCloudLogin\("list-cloud"\); return; \}/);
   assert.match(offline, /onClick=\{\(\) => void uploadPendingProject\(item\)\}/);
   assert.match(offline, /onClick=\{\(\) => void uploadAllPending\(\)\}/);
   assert.match(db, /stripSyncedCloudOfflineCacheRows/);

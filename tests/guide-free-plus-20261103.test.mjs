@@ -29,7 +29,7 @@ test("every guide separately caps Free guest cards and records at 0/1/2/2; Plus 
 });
 test("Plus entitlement is paid, active and unexpired; Trial Free expired refund cannot unlock",async()=>{
  const {canAccessMembershipGuidance}=await load("lib/membership.ts");
- const base={plan:"basic",status:"active",paid_until:"2050-01-01T00:00:00Z"};
+ const base={plan:"basic",status:"active",can_create_content:true,paid_until:"2050-01-01T00:00:00Z"};
  assert.equal(canAccessMembershipGuidance(base),true);
  for(const membership of [null,{...base,plan:"trial"},{...base,plan:"admin"},
   {...base,status:"trialing"},{...base,status:"canceled"},
@@ -59,7 +59,7 @@ test("v2 legacy cache migration removes member-generated full overviews, preserv
  }finally{globalThis.localStorage=oldStorage;}
 });
 test("held SQL's Plus predicate executes correctly in isolated PostgreSQL (no QA DB writes)",async()=>{
- const sql=source(".wp10-delivery/Guide-FreePlus-20261103/Guide-Plus-RPC-REVIEW-20261103.sql");
+ const sql=source("tests/fixtures/guide-plus-rpc-review-20261103.sql");
  const helper=sql.match(/create or replace function private\.can_read_full_guide[\s\S]*?\$\$;/i)?.[0];
  assert.ok(helper);
  const db=new PGlite();
@@ -93,8 +93,8 @@ test("ordinary/plant guide Free rows are scoped to already public archives; offl
  assert.match(offline,/const KEY = "lifespace:guide-directory:v3"/);
 });
 test("full plant content is still a server ACL installation gate, not falsely marked verified",()=>{
- const sql=source(".wp10-delivery/Guide-FreePlus-20261103/Guide-Plus-RPC-REVIEW-20261103.sql");
- const held=source(".wp10-delivery/Guide-FreePlus-20261103/Guide-Plant-Full-ACL-PhaseB-HELD-20261103.sql");
+ const sql=source("tests/fixtures/guide-plus-rpc-review-20261103.sql");
+ const held=source("tests/fixtures/guide-plant-full-acl-phaseb-held-20261103.sql");
  assert.match(sql,/get_plus_plant_guide/);
  assert.match(sql,/private\.can_read_full_guide/);
  assert.match(held,/revoke select on public\.plant_parameters/);

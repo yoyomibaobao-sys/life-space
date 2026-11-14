@@ -183,7 +183,11 @@ test("a pre-upgrade member guide cache retains lookup names but discards full co
   assert.equal(plant.overviewZh, "旧版公开植物概要");
   assert.doesNotMatch(JSON.stringify(directory), /旧版完整实操概要|只向会员提供的数值|sun_score/);
   assert.equal(localStorage.getItem("lifespace:guide-directory:v1"), null);
-  assert.doesNotMatch(localStorage.getItem("lifespace:guide-directory:v2"), /旧版完整实操概要|只向会员提供的数值|sun_score/);
+  assert.equal(localStorage.getItem("lifespace:guide-directory:v2"), null);
+  const migrated = localStorage.getItem("lifespace:guide-directory:v3");
+  assert.ok(typeof migrated === "string");
+  assert.doesNotMatch(migrated, /旧版完整实操概要|只向会员提供的数值|sun_score/);
+  assert.match(migrated, /旧别名/, "legacy public lookup aliases remain searchable");
   assert.equal(guides.getOfflineGuideParameters(guide, "zh")[0].label, "用途");
 });
 
@@ -199,7 +203,7 @@ test("adding a planting region to a legacy project preserves all records and ori
   assert.equal(detail.archive.cycles[0].id, "old-cycle");
   assert.deepEqual(await rawRows("records"), beforeRecords);
   await assertOriginalPhoto(detail);
-  await assert.rejects(dbModule.updateLocalArchiveFields("old-project", {planting_region:{...region,city_name:""}}, owner), /Invalid planting region/);
+  await assert.rejects(dbModule.updateLocalArchiveFields("old-project", {planting_region:{...region,region_name:"",city_name:""}}, owner), /Invalid planting region/);
   assert.deepEqual((await dbModule.getLocalArchiveDetail("old-project", owner)).archive.planting_region, region);
 });
 

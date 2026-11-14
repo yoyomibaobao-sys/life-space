@@ -43,7 +43,10 @@ test("Android login keeps one title and the requested compact actions", () => {
   assert.match(login, /<label[^>]*>\s*<input type="checkbox" checked=\{rememberEmail\}/);
   assert.match(login, /\{t\.auth\.remember_email\}[\s\S]*?<\/label>\s*<button type="button"[\s\S]*?sendPasswordRecovery/);
   assert.match(login, /\{t\.auth\.forgot_password\}/);
-  assert.match(login, /<AuthCaptcha\s+interactionOnly\s+action="auth"/);
+  assert.match(login, /<AuthCaptcha\s+action="auth"/);
+  assert.match(login, /onTokenChange=\{setCaptchaToken\}/);
+  assert.match(login, /resetKey=\{captchaResetKey\}/);
+  assert.match(login, /AUTH_CAPTCHA_ENABLED \? <p/);
   assert.match(login, /<button type="submit" className="primary-button"/);
   assert.match(login, /<\/form>\s*<p[^>]*>[\s\S]*?onClick=\{onRegister\}[\s\S]*?\{t\.auth\.register_account\}/);
   assert.match(shell, /<CloudLogin copy=\{copy\} online=\{online\}[\s\S]*?onRegister=\{\(\) => setScreen\(\{ kind: "register" \}\)\}/);

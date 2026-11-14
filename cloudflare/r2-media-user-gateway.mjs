@@ -308,10 +308,12 @@ export async function handleR2BusinessUserReadRequest(request, env, dependencies
   const url = new URL(request.url);
   if (url.pathname !== R2_BUSINESS_VIEW_PATH) return imageError(404);
   if (request.method !== "GET") return imageError(405);
-  if (env?.R2_BUSINESS_MEDIA_MODE !== "isolated" || env?.R2_MEDIA_READ_ENABLED !== "true") return imageError(404);
-  if (!env.R2_BUSINESS_MEDIA_SERVICE || typeof env.R2_BUSINESS_MEDIA_SERVICE.fetch !== "function" ||
+  if (env?.R2_BUSINESS_MEDIA_MODE !== "isolated") return imageError(404);
+  const r2ReadEnabled = env?.R2_MEDIA_READ_ENABLED === "true";
+  if (r2ReadEnabled && (!env.R2_BUSINESS_MEDIA_SERVICE ||
+      typeof env.R2_BUSINESS_MEDIA_SERVICE.fetch !== "function" ||
       typeof env.R2_MEDIA_SERVICE_AUTH_SECRET !== "string" ||
-      new TextEncoder().encode(env.R2_MEDIA_SERVICE_AUTH_SECRET).byteLength < 32) return imageError(503);
+      new TextEncoder().encode(env.R2_MEDIA_SERVICE_AUTH_SECRET).byteLength < 32)) return imageError(503);
   if ((request.headers.get("sec-fetch-site") || "").toLowerCase() === "cross-site") return imageError(403);
   if ([...url.searchParams.keys()].some((key) => !["id", "variant"].includes(key))) return imageError(400);
   const businessId = url.searchParams.get("id") || "";
@@ -333,30 +335,33 @@ export async function handleR2BusinessUserReadRequest(request, env, dependencies
     if (!source) return reply(imageError(404));
     if (!await recordReadableForViewer(auth.supabase, source.recordId)) return reply(imageError(403));
 
-    const headers = await createR2InternalReadHeaders({
-      secret: env.R2_MEDIA_SERVICE_AUTH_SECRET, ownerId: source.ownerId, path: source.path,
-    });
-    let fetched;
-    try {
-      fetched = await env.R2_BUSINESS_MEDIA_SERVICE.fetch(new Request(
-        "https://media.internal" + R2_BUSINESS_INTERNAL_READ_PATH, { method: "GET", headers },
-      ));
-    } catch {
-      fetched = null; // Storage remains the source during transient R2 outage.
-    }
-    // An R2 integrity or authentication failure must never be hidden by fallback.
-    if (fetched && ![200, 404, 502, 503].includes(fetched.status)) return reply(imageError(503));
     let blob;
-    if (fetched?.status === 200) {
-      const type = (fetched.headers.get("content-type") || "").split(";")[0].toLowerCase();
-      const size = Number(fetched.headers.get("content-length") || 0);
-      if (!/^image\/(?:jpeg|png|webp|gif|avif|heic|heif)$/.test(type) ||
-          size > MAX_MEDIA_BYTES) return reply(imageError(503));
-      const buffer = await fetched.arrayBuffer();
-      if (!buffer.byteLength || buffer.byteLength > MAX_MEDIA_BYTES ||
-          (size > 0 && size !== buffer.byteLength)) return reply(imageError(503));
-      blob = new Blob([buffer], { type });
-    } else {
+    if (r2ReadEnabled) {
+      const headers = await createR2InternalReadHeaders({
+        secret: env.R2_MEDIA_SERVICE_AUTH_SECRET, ownerId: source.ownerId, path: source.path,
+      });
+      let fetched;
+      try {
+        fetched = await env.R2_BUSINESS_MEDIA_SERVICE.fetch(new Request(
+          "https://media.internal" + R2_BUSINESS_INTERNAL_READ_PATH, { method: "GET", headers },
+        ));
+      } catch {
+        fetched = null; // Storage remains the source during transient R2 outage.
+      }
+      // An R2 integrity or authentication failure must never be hidden by fallback.
+      if (fetched && ![200, 404, 502, 503].includes(fetched.status)) return reply(imageError(503));
+      if (fetched?.status === 200) {
+        const type = (fetched.headers.get("content-type") || "").split(";")[0].toLowerCase();
+        const size = Number(fetched.headers.get("content-length") || 0);
+        if (!/^image\/(?:jpeg|png|webp|gif|avif|heic|heif)$/.test(type) ||
+            size > MAX_MEDIA_BYTES) return reply(imageError(503));
+        const buffer = await fetched.arrayBuffer();
+        if (!buffer.byteLength || buffer.byteLength > MAX_MEDIA_BYTES ||
+            (size > 0 && size !== buffer.byteLength)) return reply(imageError(503));
+        blob = new Blob([buffer], { type });
+      }
+    }
+    if (!blob) {
       const legacy = await admin.storage.from("media").download(source.path);
       if (legacy.error || !legacy.data ||
           !/^image\/(?:jpeg|png|webp|gif|avif|heic|heif)$/.test((legacy.data.type || "").toLowerCase()) ||
@@ -384,6 +389,9 @@ export async function handleR2BusinessUserMirrorRequest(request, env, dependenci
   if (url.pathname !== R2_BUSINESS_MIRROR_PATH) return respond({ error: "unsupported_media_request" }, 404);
   if (request.method !== "POST") return respond({ error: "method_not_allowed" }, 405);
   if (env?.R2_BUSINESS_MEDIA_MODE !== "isolated") return respond({ error: "disabled" }, 404);
+  if (env?.R2_MEDIA_MIRROR_WRITE_ENABLED !== "true") {
+    return respond({ error: "mirror_write_disabled" }, 404);
+  }
   if (!env?.R2_BUSINESS_MEDIA_SERVICE || typeof env.R2_BUSINESS_MEDIA_SERVICE.fetch !== "function") {
     return respond({ error: "media_service_unavailable" }, 503);
   }

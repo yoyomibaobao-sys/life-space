@@ -87,7 +87,10 @@ test("online cloud workspace never falls back to cache cards when live loading f
   const shell = read("mobile-offline-src/main.tsx");
   assert.match(shell, /const liveCloudWorkspace =\s*online &&\s*Boolean\(authenticatedOwnerContext\);/);
   assert.match(shell, /cloudError && cloudUserId[\s\S]*notice warning/);
-  assert.match(shell, /auth\.status === "signed-in" &&\s*!online &&\s*filteredCloudCaches\.length/);
+  assert.match(shell, /readOwnerContext && cloudReadable && sourceFilter !== "local" && sourceFilter !== "pending"/);
+  assert.match(shell, /!liveCloudWorkspace &&[\s\S]{0,80}filteredCloudCaches\.length/);
+  assert.match(shell, /liveCloudWorkspace \? \(/);
+  assert.match(shell, /!cloudLoading && !cloudError/);
   assert.doesNotMatch(shell, /\(!online \|\| Boolean\(cloudError\)\)[\s\S]*filteredCloudCaches\.length/);
 });
 

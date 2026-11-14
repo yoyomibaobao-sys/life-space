@@ -52,7 +52,7 @@ async function webhook(db,id) {
     "next/server":"export const NextResponse={json:(v,o={})=>Response.json(v,o)};",
     "@/lib/paypal-runtime-gate":"export const isPayPalRuntimeEnabled=()=>true;",
     "@/lib/paypal":"export const PAYPAL_MEMBERSHIP_AMOUNT='8.00';export const PAYPAL_MEMBERSHIP_CURRENCY='USD';export const verifyPayPalWebhookSignature=async()=>true;export const getPayPalOrder=()=>{throw Error('duplicate must not query PayPal')};export const capturePayPalOrder=()=>{throw Error('duplicate must not capture')};export const getCompletedMembershipCapture=()=>{throw Error('duplicate must not parse')};",
-    "@/lib/paypal-membership":"export const confirmMembershipFromPayPalOrder=()=>{throw Error('duplicate must not grant')};",
+    "@/lib/paypal-membership":"export const beginPayPalMembershipCapture=()=>{throw Error('duplicate must not begin capture')};export const confirmMembershipFromPayPalOrder=()=>{throw Error('duplicate must not grant')};",
     "@/lib/supabaseAdmin":"export const getSupabaseAdmin=()=>globalThis.r26Admin;"
   };
   const bundle=await build({entryPoints:[path.join(process.cwd(),"app/api/paypal/webhook/route.ts")],bundle:true,platform:"node",format:"cjs",write:false,
@@ -139,7 +139,7 @@ test("Historical R26 intermediate 500 MB migration, superseded by the 1 GB forwa
 
 test("R26 current UI defaults and bilingual Plus offers are 1 GB",()=>{
   const adminSource=read("app/admin/memberships/page.tsx");
-  assert.match(adminSource,/key: "basic",\s+storageLimitBytes: 1_000_000_000,/);
+  assert.match(adminSource,/\{\s*key:\s*"basic",\s*storageLimitBytes:\s*1_000_000_000,\s*baseMarketPostLimit:\s*30/);
   assert.match(adminSource,/useState\("1000000000"\)/);
 
   for(const lang of ["zh","en"]){

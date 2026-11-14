@@ -78,6 +78,7 @@ function setup(options = {}) {
     },
   };
   const serviceEnv = { R2_BUSINESS_MEDIA_MODE: "isolated", R2_BUSINESS_MEDIA: bucket,
+    R2_MEDIA_READ_ENABLED: "true", // Legacy R2-hit tests explicitly enable the media Worker read gate.
     R2_MEDIA_SERVICE_AUTH_SECRET: SECRET };
   const env = {
     R2_BUSINESS_MEDIA_MODE: "isolated", R2_MEDIA_READ_ENABLED: "true",
@@ -188,10 +189,15 @@ test("authorization is rechecked after asynchronous media read", async () => {
   assert.equal((await get(null)).status, 404);
 });
 
-test("site route disabled by default, invalid requests/cross-site requests rejected", async () => {
-  const { get, env } = setup();
+test("read-off keeps authenticated Storage fallback, disabled mode and malformed requests rejected", async () => {
+  const { get, env, state } = setup();
   env.R2_MEDIA_READ_ENABLED = "false";
+  assert.equal((await get(A)).status, 200);
+  assert.deepEqual(state.legacyCalls, [FULL]);
+  assert.deepEqual(state.mediaCalls, []);
+  env.R2_BUSINESS_MEDIA_MODE = "disabled";
   assert.equal((await get(A)).status, 404);
+  env.R2_BUSINESS_MEDIA_MODE = "isolated";
   env.R2_MEDIA_READ_ENABLED = "true";
   assert.equal((await get(A, "unknown")).status, 400);
   assert.equal((await get(A, "full", { "sec-fetch-site": "cross-site" })).status, 403);
@@ -212,8 +218,8 @@ test("internal HMAC expires after 60 seconds, cannot be tampered with or used as
   assert.equal(await verifyR2InternalReadRequest(forged, SECRET, timestamp), null);
   const direct = await handleR2MediaStageBytesRequest(new Request(valid.url),
     { R2_BUSINESS_MEDIA_MODE: "isolated", R2_BUSINESS_MEDIA: { get() { throw new Error("must not read"); } },
-      R2_MEDIA_SERVICE_AUTH_SECRET: SECRET });
-  assert.equal(direct.status, 401);
+      R2_MEDIA_MIRROR_WRITE_ENABLED: "true", R2_MEDIA_SERVICE_AUTH_SECRET: SECRET });
+  assert.equal(direct.status, 404); // Wrong internal route is rejected before authentication.
 });
 
 test("legacy URL-only rows use configured Supabase origin and owner-scoped paths", async () => {

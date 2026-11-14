@@ -91,8 +91,8 @@ test("admin section links remain reachable without long reverse scrolling", asyn
   assert.match(admin, /!isMobileViewport \? <nav[\s\S]*?id="admin-section-navigation"/);
   assert.doesNotMatch(admin, /<select aria-label=\{t\.admin_memberships\.admin_sections_aria\}/);
   assert.doesNotMatch(admin, /display: isMobileViewport && activeAdminSection !==/);
-  const sections = [...admin.matchAll(/<section\s+id="(overview|traffic|payment-review|refund-review|capacity|trial-cleanup|registrations|account-closures)"/g)].map((match) => match[1]);
-  assert.deepEqual(sections, ["overview", "traffic", "payment-review", "refund-review", "capacity", "trial-cleanup", "registrations", "account-closures"]);
+  const sections = [...admin.matchAll(/<section\s+id="(overview|traffic|payment-review|refund-review|capacity|registrations|account-closures)"/g)].map((match) => match[1]);
+  assert.deepEqual(sections, ["overview", "traffic", "payment-review", "refund-review", "capacity", "registrations", "account-closures"]);
 });
 
 test("website brand marks use the quieter visual treatment", async () => {

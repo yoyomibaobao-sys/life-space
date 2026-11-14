@@ -84,8 +84,12 @@ test("Android bridge verifies environment before bearer and uses separate tempor
 });
 
 test("backup reminder opens the real App module; original web export endpoint remains the packer", () => {
-  assert.match(source("mobile-offline-src/main.tsx"), /onOpenBackup=\{\(\) => setScreen\(\{ kind: "profile", module: "backup" \}\)\}/);
+  const shell = source("mobile-offline-src/main.tsx");
+  assert.match(shell, /kind: "profile"; module\?: "backup"/);
+  assert.match(shell, /initialModule=\{screen\.module\}/);
   const profile = source("components/profile/AndroidProfileController.tsx");
+  assert.match(profile, /initialModule\?: MobileProfileModule/);
+  assert.match(profile, /module === "backup"/);
   assert.match(profile, /estimateAndroidCloudExport\(request\)/);
   assert.match(profile, /saveAndroidCloudExport\(request\)/);
   assert.doesNotMatch(profile, /Browser\.open\(\{ url: "https:\/\/life-space\.uk\/profile" \}\)/);

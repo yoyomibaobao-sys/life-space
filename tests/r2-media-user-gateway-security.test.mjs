@@ -19,6 +19,7 @@ function fixture(currentUser = owner, options = {}) {
   let rpcCalls = 0, storageCalls = 0, mirrorCalls = 0, limiterCalls = 0;
   const env = {
     R2_BUSINESS_MEDIA_MODE: "isolated",
+    R2_MEDIA_MIRROR_WRITE_ENABLED: "true",
     R2_MEDIA_SERVICE_AUTH_SECRET: "isolation-test-secret-of-at-least-thirty-two-chars",
     R2_BUSINESS_MEDIA_SERVICE: {
       async fetch(req) {

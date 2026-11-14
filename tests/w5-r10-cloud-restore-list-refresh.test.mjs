@@ -89,12 +89,15 @@ test("historical local project restoration still uses local list only",async()=>
 
 test("parent delegates to existing owner-scoped loadCloudList without new state, purge or RPC",()=>{
   const parent = source.slice(parentStart, parentEnd);
-  assert.match(parent,/onCloudRestored=\{\(\) => loadCloudList\(cloudUserId\)\}/);
+  assert.match(parent,/onCloudRestored=\{async \(\) => \{ await loadCloudList\(cloudUserId\); \}\}/);
   assert.match(parent,/onLocalChanged=\{\(\) => loadList\(\)\}/);
   assert.match(section,/await onCloudRestored\(\);\s*await refreshTrash\(\)/);
   assert.doesNotMatch(section,/resetDatabase|clearAllCache|localStorage\.clear|repeatRestore/);
   const loader = source.slice(source.indexOf("const loadCloudList = useCallback"),source.indexOf("const loadDetail = useCallback"));
-  assert.match(loader,/authenticatedOwnerContext\?\.userId !== resolvedUserId/);
+  assert.match(loader,/authority\.sessionUserId !== resolvedUserId/);
+  assert.match(loader,/authority\.explicitSignedOut/);
+  assert.match(loader,/getAndroidAuthSnapshot\(\)\.sessionUserId !== resolvedUserId/);
+  assert.match(loader,/!isAndroidOnline\(\)/);
   assert.match(loader,/requestId !== cloudListRequestRef\.current/);
   assert.match(loader,/setCloudArchives\(displayRows\)/);
 });

@@ -534,9 +534,6 @@ function assertWritableCachedCloudRecord(
   archive: LocalArchive, record: LocalRecord,
   ownerContext?: LocalArchiveOwnerContext | null,
 ) {
-  if (isPendingCloudSyncStatus(record.sync?.status)) {
-    throw Error("待上传记录只读，请先上传或安全删除。");
-  }
   if (resolveLocalArchiveRole(archive) !== "cloud-offline-cache") return;
   const ownerId = getOwnerUserId(ownerContext);
   if (!ownerId || archive.local_owner_user_id !== ownerId ||

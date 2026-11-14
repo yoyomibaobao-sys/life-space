@@ -23,7 +23,7 @@ const worker = {
     const qaUi = handleM4QaControlledUi(request, env);
     if (qaUi) return qaUi;
 
-    if (url.pathname === R2_BUSINESS_VIEW_PATH && env?.R2_MEDIA_READ_ENABLED === "true") {
+    if (url.pathname === R2_BUSINESS_VIEW_PATH && env?.R2_BUSINESS_MEDIA_MODE === "isolated") {
       return handleR2BusinessUserReadRequest(request, env);
     }
 

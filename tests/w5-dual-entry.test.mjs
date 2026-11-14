@@ -81,10 +81,11 @@ test("W5 temporary listing has no independent creation route and invokes the exi
   assert.match(web, /syncPendingCloudArchive\(\{/);
   assert.match(web, /cancelNeverUploadedCloudArchive\(/);
   assert.match(web, /discardUnattemptedPendingArchiveEdit\(/);
-  assert.match(shell, /data-android-temporary-space=\{sourceFilter === "pending"\}/);
+  assert.match(shell, /readOwnerContext && sourceFilter === "pending"/);
+  assert.match(shell, /data-android-cloud-pending="true" data-android-temporary-space="true"/);
   assert.match(shell, /sourceTrailingSlot=\{sourceFilter === "pending" \? null/);
   assert.match(shell, /cancelNeverUploadedCloudArchive\(/);
-  assert.match(shell, /syncPendingCloudArchive\(\{/);
+  assert.match(shell, /syncAndroidPendingCloudArchive\(\{[\s\S]*ownerContext: authenticatedOwnerContext/);
 });
 
 test("W5 account ownership is checked before showing pending items or destructive action", () => {

@@ -23,17 +23,16 @@ test("cleanup preview uses five nonoverlapping calendar-age bands and requires a
   assert.doesNotMatch(sql, /request_delete_archive|request_delete_market_post|delete from|truncate|storage\.remove/);
 });
 
-test("admin cleanup UI is preview-only, guarded by the existing admin page", () => {
+test("retired Trial cleanup is absent from active admin UI; historical preview remains read-only", () => {
   const page = read("app/admin/memberships/page.tsx");
   const component = read("components/admin/AdminTrialCleanupPreview.tsx");
   assert.match(page, /if \(!isAdmin\) \{/);
-  assert.match(page, /id="trial-cleanup"/);
-  assert.match(page, /<AdminTrialCleanupPreview language=\{language\}/);
-  assert.match(component, /AGE_BANDS\.map/);
-  assert.match(component, /setBands/);
-  assert.match(component, /admin_preview_trial_cloud_cleanup/);
-  assert.match(component, /Safety lock: preview only/);
-  assert.doesNotMatch(component, /execute_trial_cleanup|request_delete_archive|admin_run_trial_cleanup|\bDELETE\b/);
+  assert.doesNotMatch(page, /id="trial-cleanup"|<AdminTrialCleanupPreview/,
+    "retired Trial cleanup must not be offered as a production action");
+  assert.match(component, /历史云体验（Trial）清理预览已冻结/);
+  assert.match(component, /此处不再调用旧版预览RPC/);
+  assert.match(component, /Free闲置资料清理仍需独立核实365天登录记录/);
+  assert.doesNotMatch(component, /\.rpc\(|admin_preview_trial_cloud_cleanup|execute_trial_cleanup|request_delete_archive|admin_run_trial_cleanup|\bDELETE\b/);
   for (const [name, source] of [
     ["admin page", page],
     ["cleanup preview component", component],

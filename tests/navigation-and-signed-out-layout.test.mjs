@@ -220,7 +220,8 @@ test("mobile archive creation and project controls stay compact without clipping
   ]);
 
   assert.match(workspace, /showCreateToolbar = true/);
-  assert.match(archivePage, /showCreateToolbar=\{!isMobileViewport\}/);
+  assert.match(archivePage, /showCreateToolbar=\{!isMobileViewport && activeSource !== "pending"\}/);
+  assert.match(archivePage, /onCreateArchive=\{\(category\) => \{ if \(activeSource !== "pending"\)/);
   assert.match(archiveCard, /<ProjectSummaryCard/);
   assert.match(archiveCard, /actionSlot=/);
   assert.match(projectCard, /className=\{styles\.titleRow\}/);
@@ -466,7 +467,8 @@ test("mobile market keeps actions out of the global bar and uses readable manage
   assert.doesNotMatch(mine, /getMarketPostQuotaHint/);
   assert.match(mine, /cardOpenLinkStyle[\s\S]*?gridTemplateColumns: "98px minmax\(0, 1fr\)"/);
   assert.match(mine, /descriptionStyle[\s\S]*?WebkitLineClamp: 2/);
-  assert.match(mine, /formatMarketTime\(item\.created_at\)/);
+  assert.match(mine, /formatMarketTime\(item\.published_at \|\| item\.created_at\)/);
+  assert.match(mine, /item\.updated_at \? formatMarketTime\(item\.updated_at\) : null/);
   assert.doesNotMatch(mine, /views_prefix/);
   assert.match(mine, /<MobilePageHeader[\s\S]*?title=\{t\.market\.mine_title\}[\s\S]*?right=/);
   assert.match(mine, /cardContentStyle[\s\S]*?height: 98/);
@@ -607,7 +609,9 @@ test("plant detail exposes guide, experience cards, and records as peer tabs", a
   assert.match(detail, /`\$\{copy\.experience_cards\} \(\$\{experienceCardTabCount\}\)`/);
   assert.match(detail, /`\$\{copy\.growing_records\} \(\$\{plantingRecordTabCount\}\)`/);
   assert.match(detail, /activeTab === "experience"/);
-  assert.match(detail, /<PlantExperienceCardsSection[\s\S]*?cards=\{relatedExperienceCards\}[\s\S]*?currentUserId=\{currentUserId\}/);
+  assert.match(detail, /<PlantExperienceCardsSection[\s\S]*?cards=\{relatedExperienceCards\.slice\(0, visibleCards\)\}[\s\S]*?currentUserId=\{currentUserId\}/);
+  assert.match(detail, /<PlantExperienceCardsSection cards=\{relatedExperienceCards\} currentUserId=\{null\}/);
+  assert.match(detail, /setVisibleCards\(\(n\) => n \+ RELATED_ARCHIVE_LIMIT\)/);
   assert.match(detail, /title=\{copy\.my_experience_cards\}/);
   assert.match(detail, /title=\{copy\.others_experience_cards\}/);
   assert.match(detail, /activeTab === "records"/);

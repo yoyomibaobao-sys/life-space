@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getSupportCopy } from "@/lib/i18n/support-workflow";
 import { formatPreciseDateTime } from "@/lib/date-time";
+import UiIcon from "@/components/ui/UiIcon";
 import { getReportCategoryLabel, getSupportStatusLabel, getSupportResolutionLabel, normalizeSupportRows } from "@/lib/support-submissions";
 import styles from "./support.module.css";
 
@@ -87,7 +88,7 @@ export default function AdminSupportAudit() {
       {loading ? <p role="status">{copy.loading}</p> : failed ? <p role="alert">{copy.loadError}</p> : <>
         {!rows.length && <p>{copy.empty}</p>}
         {rows.map(entry => <article key={entry.id} className={styles.card}>
-          <p><strong>{getSupportStatusLabel(entry.previous_status, language)} → {getSupportStatusLabel(entry.next_status, language)}</strong></p>
+          <p><strong>{getSupportStatusLabel(entry.previous_status, language)} <UiIcon name="arrow-right" size={14} aria-hidden="true" /> {getSupportStatusLabel(entry.next_status, language)}</strong></p>
           <p className={styles.note}>{formatPreciseDateTime(entry.occurred_at)}</p>
           <p className={styles.note}>{language === "zh" ? "管理员：" : "Administrator: "}{entry.actor_id}</p>
           <p className={styles.note}>{language === "zh" ? "举报编号：" : "Submission: "}{entry.submission_id}</p>
@@ -115,7 +116,7 @@ export default function AdminSupportAudit() {
             : entry.action === "restore"
               ? (language === "zh" ? "恢复记录" : "Record restored")
               : (language === "zh" ? "已下架记录的举报结案" : "Report closed for hidden record")}
-            {" · "}v{entry.previous_version} → v{entry.next_version}</strong></p>
+            {" · "}v{entry.previous_version} <UiIcon name="arrow-right" size={14} aria-hidden="true" /> v{entry.next_version}</strong></p>
           <p className={styles.note}>{formatPreciseDateTime(entry.occurred_at)}</p>
           <p className={styles.note}>{language === "zh" ? "记录：" : "Record: "}{entry.record_id}</p>
           <p className={styles.note}>{language === "zh" ? "项目：" : "Project: "}{entry.archive_id}</p>
@@ -124,7 +125,7 @@ export default function AdminSupportAudit() {
           <p className={styles.note}>{language === "zh" ? "请求编号：" : "Request: "}{entry.request_id}</p>
           {entry.reason_code && <p>{language === "zh" ? "原因：" : "Reason: "}{getReportCategoryLabel(entry.reason_code, language)}</p>}
           <p>{language === "zh" ? "公开状态：" : "Effective public: "}
-            {entry.previous_effective_public ? "true" : "false"} → {entry.next_effective_public ? "true" : "false"}</p>
+            {entry.previous_effective_public ? "true" : "false"} <UiIcon name="arrow-right" size={14} aria-hidden="true" /> {entry.next_effective_public ? "true" : "false"}</p>
           {entry.source_submission_id && <p className={styles.note}>{language === "zh" ? "来源举报：" : "Source report: "}{entry.source_submission_id}</p>}
           {entry.admin_note && <p>{copy.adminNote}: {entry.admin_note}</p>}
         </article>)}

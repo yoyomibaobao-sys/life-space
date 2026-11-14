@@ -124,7 +124,7 @@ test("guide online and offline keep the PlantPage presentation and swap data", (
 
   assert.match(plant, /<HomeSectionTabs\s+active="guide"/);
   assert.match(shell, /<PlantPage/);
-  assert.match(shell, /<PlantPage offline=\{!online\} offlineDirectory=\{directory\}/);
+  assert.match(shell, /<PlantPage offline=\{!online \|\| offlineOwnerRead\} offlineDirectory=\{directory\} offlineSignedIn=\{auth\.status === "signed-in"\}/);
   assert.match(plant, /const fallbackEntries = offlineDirectory\.filter/);
   assert.match(plant, /setPlants\(fallbackPlants\)/);
   assert.match(plant, /if \(offline\)[\s\S]*setIsSignedIn\(offlineSignedIn\)[\s\S]*return;/);

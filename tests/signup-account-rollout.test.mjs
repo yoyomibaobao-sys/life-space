@@ -161,46 +161,32 @@ test("account identity keeps a pre-migration compatibility path without crowding
   assert.match(accountNumber, /正式用户总第\$\{parsed\.registrationSequence\}位/);
 });
 
-test("registration, membership, and admin copy use the claim and handling rules", async () => {
-  const [registration, membership, admin, docs, migration, handlingOverride, zhCopy, enCopy] = await Promise.all([
+test("registration, membership and admin use Free/Plus while retired Trial migration stays non-destructive", async () => {
+  const [registration, membership, admin, shell, docs, migration, handlingOverride, zhCopy, enCopy] = await Promise.all([
     source("app/register/page.tsx"),
     source("app/membership/page.tsx"),
     source("app/admin/memberships/page.tsx"),
+    source("mobile-offline-src/main.tsx"),
     source("docs/membership-access.md"),
     source(claimableTrialMigrationPath),
     source(handlingPeriodOverrideMigrationPath),
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
   ]);
-
-  for (const text of [zhCopy, docs]) {
-    assert.match(text, /30MB/i);
-    assert.match(text, /90天/i);
-  }
-
   assert.match(registration, /t\.auth\.registration_intro/);
   assert.match(membership, /t\.membership_page/);
   assert.match(zhCopy, /永久账号编号/);
-  assert.match(zhCopy, /处理期/);
-  assert.match(admin, /admin_get_cloud_trial_status/);
-  assert.match(admin, /t\.admin_memberships\.rollout_title/);
-  assert.match(admin, /t\.admin_memberships\.platform_storage/);
-  assert.match(admin, /t\.admin_memberships\.unused_allowance/);
-  assert.match(zhCopy, /rollout_title: "每个正式账号可领取一次 · 30MB／90天"/);
-  assert.match(enCopy, /rollout_title: "One claim per formal account · 30 MB \/ 90 days"/);
+  assert.match(shell, /Free 云空间（30 MB）；Plus 云空间为 1 GB/);
+  assert.match(shell, /联网后可开通 Plus 云会员/);
+  assert.doesNotMatch(shell, /<AndroidCloudTrialReminder|<AndroidCloudTrialEntry|supabase\.rpc\("claim_my_cloud_trial"\)/);
+  assert.match(admin, /id="capacity"/);
+  assert.match(admin, /id="payment-review"/);
+  assert.match(admin, /id="refund-review"/);
+  assert.doesNotMatch(admin, /admin_get_cloud_trial_status|id="trial-cleanup"/);
   assert.match(zhCopy, /platform_storage: "平台实际存储"/);
   assert.match(enCopy, /platform_storage: "Actual platform storage"/);
+  // Archived Trial documentation/migrations remain inspectable, not a current entitlement.
   assert.match(docs, /LSa-2026-0001/);
-  assert.match(docs, /700MB安全线/);
-  assert.match(docs, /处理期结束后/);
-  assert.match(docs, /处理期结束前7天额外发送一次站内关键提醒/);
-  assert.match(docs, /可在同一节点发送一封 SMTP 邮件/);
-  assert.match(docs, /曾经至少有一笔确认成功且未被撤销的付费会员记录/);
-  assert.match(docs, /公开转私密/);
-  assert.match(zhCopy, /trial_handling_period: "体验已到期，云端数据处于30天只读处理期/);
-  assert.match(zhCopy, /trial_cleanup_completed: "体验云端处理已完成/);
-  assert.match(zhCopy, /未保存到本机且未升级为 Plus 的体验云端内容会/);
-  assert.match(enCopy, /30-day read-only handling period/);
   assert.match(migration, /insert into public\.notifications/i);
   assert.match(handlingOverride, /30-day read-only handling period/i);
   assert.doesNotMatch(handlingOverride, /cleanup_thirty_days/i);

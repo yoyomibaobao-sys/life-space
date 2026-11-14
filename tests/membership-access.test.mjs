@@ -108,10 +108,9 @@ test("expired cloud access is database-enforced read-only with narrow downgrade 
   assert.match(recordCard, /readOnly=\{!canEditRecord\}/);
   assert.match(marketPage, /rpc\("end_my_market_post"/);
   assert.match(archiveListPage, /const mobileCreateHref =/);
-  assert.match(
-    archiveListPage,
-    /activeSource === "local"[\s\S]*?"\/local\/archive\/new"[\s\S]*?contentBlocked[\s\S]*?"\/membership"/
-  );
+  const mobileCreation = archiveListPage.slice(archiveListPage.indexOf("const mobileCreateHref ="));
+  assert.match(mobileCreation, /contentBlocked\s*\? "\/membership"\s*: "\/archive\/new"/);
+  assert.doesNotMatch(mobileCreation.slice(0, 220), /"\/local\/archive\/new"/);
   assert.match(archiveListPage, /<Link href=\{mobileCreateHref\}/);
   assert.match(databaseTest, /expired account edited retained cloud content/);
   assert.match(databaseTest, /expired account restored cloud content without renewing/);
@@ -144,7 +143,7 @@ test("the launch cloud plan is fixed at 1 GB and 30 active market posts", async 
     /market_post_quota_addons/i
   );
   assert.match(admin, /if \(plan === "basic"\) return currency === "CNY" \? 64 : 8;/);
-  assert.match(admin, /baseMarketPostLimit: 30/);
+  assert.match(admin, /baseMarketPostLimit:\s*30/);
   assert.match(admin, /preset\.key !== "trial" \|\| selected\?\.plan === "trial"/);
   assert.match(membershipPage, /t\.membership_page/);
   assert.match(zhCopy, /¥64 \/ 年｜US\$8 \/ year/);
@@ -201,10 +200,9 @@ test("membership orders keep fixed prices, private Alipay proof, and transaction
     accountDelete,
     /\.in\("status", \["pending_payment", "submitted", "needs_update"\]\)/
   );
-  assert.match(
-    admin,
-    /\.in\("status", \["confirmed", "refunded", "canceled"\]\)/
-  );
+  const paymentHistory = admin.slice(admin.indexOf("async function loadPaymentRows("));
+  assert.match(paymentHistory, /\.from\("membership_payments"\)[\s\S]*?\.eq\("user_id", userId\)[\s\S]*?\.order\("created_at"/);
+  assert.doesNotMatch(paymentHistory.slice(0, 550), /\.in\("status"/, "payment history must include all statuses");
   assert.match(docs, /PayPal 自动开通与支付宝人工确认/);
   assert.match(docs, /同一订单或捕获重复送达时只返回既有结果，不重复延长/);
 });
@@ -312,14 +310,10 @@ test("the plant pages request only data allowed for the current tier", async () 
   assert.doesNotMatch(detailPage, /loadPlantCoreParametersCompat\(resolvedPlantId\)/);
   assert.match(detailPage, /\.eq\("slug", id\)/);
   assert.match(detailPage, /\.eq\("common_name", id\)/);
-  assert.match(
-    detailPage,
-    /canReadFullGuide\s+\?\s+supabase\.from\("plant_parameters"\)/
-  );
-  assert.match(
-    detailPage,
-    /canReadFullGuide\s+\?\s+supabase\.from\("plant_growth_cycle"\)/
-  );
+  assert.match(detailPage, /claimedPlus\s*\?\s*await Promise\.resolve\(supabase\.rpc\("get_plus_plant_guide"/);
+  assert.match(detailPage, /const canReadFullGuide = claimedPlus && Boolean\(plusDetail\)/);
+  assert.doesNotMatch(detailPage, /\.from\("plant_parameters"\)|\.from\("plant_growth_cycle"\)|\.from\("plant_care_guides"\)/,
+    "full plant-detail tables must be returned only by the protected server RPC");
   assert.doesNotMatch(detailPage, /from\("plant_related_archives_view"\)/);
   assert.match(detailPage, /copy\.plus_visible/);
   assert.match(zhCopy, /visitor_notice: "游客可以查看植物目录和简化版指引。"/);
@@ -491,10 +485,11 @@ test("client-side entitlement checks fail closed when membership is absent", asy
     membership,
     /canCreateMembershipMarketPost[\s\S]*?can_create_market_post === true/
   );
-  assert.match(
-    membership,
-    /canAccessMembershipGuidance[\s\S]*?status === "active" \|\| membership\?\.status === "trialing"/
-  );
+  assert.match(membership, /canAccessMembershipGuidance[\s\S]*?can_create_content !== true/);
+  assert.match(membership, /membership\.plan !== "basic" && membership\.plan !== "large"/);
+  assert.match(membership, /membership\.status !== "active" && membership\.status !== "past_due"/);
+  assert.match(membership, /!membership\.paid_until/);
+  assert.match(membership, /Number\.isFinite\(until\) && until > Date\.now\(\)/);
   assert.match(membership, /需要开通云会员/);
 });
 

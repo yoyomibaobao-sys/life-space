@@ -14,6 +14,7 @@ import type { ArchiveCategoryDepth, ArchiveCategoryDepths, ArchiveCategorySpace 
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function ProjectCategorySettingsView({
+  hideLocalSpace = true,
   activeSpace,
   onSpaceChange,
   depths,
@@ -26,6 +27,7 @@ export default function ProjectCategorySettingsView({
   onBack,
 }: {
   activeSpace: ArchiveCategorySpace;
+  hideLocalSpace?: boolean;
   onSpaceChange: (space: ArchiveCategorySpace) => void;
   depths: ArchiveCategoryDepths;
   loading?: boolean;
@@ -72,13 +74,13 @@ export default function ProjectCategorySettingsView({
           </InternalLink> : null}
           {!onBack ? <h1 className="mobile-app-desktop-only" style={desktopTitleStyle}>{pageTitle}</h1> : null}
           <p style={introStyle}>
-            {isEnglish
-              ? "Cloud and local groups are configured independently. Hiding a level does not delete existing groups."
-              : "云空间与本地分别设置。关闭层级只隐藏对应选择，不删除已有分组数据。"}
+            {hideLocalSpace
+              ? (isEnglish ? "Cloud groups only. Existing local groups are preserved." : "此处仅设置云空间分组，已有本地分组数据保留。")
+              : (isEnglish ? "Cloud and local groups are configured independently. Hiding a level does not delete existing groups." : "云空间与本地分别设置。关闭层级只隐藏对应选择，不删除已有分组数据。")}
           </p>
         </header>
 
-        <nav style={spaceTabsStyle} aria-label={isEnglish ? "Project space" : "项目空间"}>
+        {!hideLocalSpace ? <nav style={spaceTabsStyle} aria-label={isEnglish ? "Project space" : "项目空间"}>
           {(["cloud", "local"] as const).map((space) => (
             <button
               key={space}
@@ -91,7 +93,7 @@ export default function ProjectCategorySettingsView({
                 : (isEnglish ? "Local" : "本地")}
             </button>
           ))}
-        </nav>
+        </nav> : null}
 
         <div style={{ ...introStyle, marginBottom: 14 }}>
           <p style={{ margin: "0 0 6px" }}>{t.archive_workspace.group_setup_hint}</p>

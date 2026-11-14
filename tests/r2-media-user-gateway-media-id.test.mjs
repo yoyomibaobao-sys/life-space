@@ -56,6 +56,7 @@ function fixture(viewerId = OWNER, options = {}) {
   };
   const env = {
     R2_BUSINESS_MEDIA_MODE: "isolated",
+    R2_MEDIA_MIRROR_WRITE_ENABLED: "true",
     R2_MEDIA_SERVICE_AUTH_SECRET: SECRET,
     R2_MEDIA_MIRROR_RATE_LIMITER: {
       async limit({ key }) {

@@ -42,12 +42,13 @@ test("Guide list and detail change data within the same formal presentation", ()
   const directory = read("app/plant/page.tsx");
   const detail = read("components/plant-detail/GuideDetailView.tsx");
   const web = read("app/plant/guide/[id]/page.tsx");
-  assert.match(shell, /<PlantPage offline=\{!online\} offlineDirectory=\{directory\}/);
+  assert.match(shell, /<PlantPage offline=\{!online \|\| offlineOwnerRead\} offlineDirectory=\{directory\} offlineSignedIn=\{auth\.status === "signed-in"\}/);
   assert.match(directory, /rememberGuideDirectory\(rows\)/);
   assert.match(directory, /offlineDirectory/);
   assert.match(directory, /<HomeSectionTabs\s+active="guide"/);
   assert.match(web, /<GuideDetailView id=\{params\.id\}/);
-  assert.match(shell, /<GuideDetailView id=\{screen\.guideId \|\| screen\.guideKey\} offline=\{!online\}/);
+  assert.match(shell, /<GuideDetailView id=\{screen\.guideId \|\| screen\.guideKey\} offline=\{!online \|\| offlineOwnerRead\}/);
+  assert.match(shell, /offlineSignedIn=\{auth\.status === "signed-in"\}/);
   assert.doesNotMatch(shell, /function OfflineGuideDetail/);
   assert.match(detail, /getOfflineGuideOverview\(offlineGuide/);
   assert.match(detail, /getOfflineGuideParameters\(offlineGuide/);
@@ -102,8 +103,9 @@ test("Web and Android Profile share navigation, identity card and offline capabi
   assert.doesNotMatch(presentation, /href: "\/experience-cards"/);
   assert.match(profileView, /href="\/profile\/helpful"/);
   assert.match(snapshot, /countryCode|accountNumber|storageUsed/);
-  assert.match(shell, /onLogout=\{auth\.status === "signed-in"/);
-  assert.match(shell, /profile: auth\.status === "signed-in" \? spaceProfile : null/);
+  assert.match(shell, /onLogout=\{readOwnerContext \? \(\) => void logoutFromProfile\(\) : undefined\}/);
+  assert.match(shell, /profile: readOwnerContext\?\.userId === owner\?\.userId \? spaceProfile : null/);
+  assert.match(shell, /online=\{online && cloudUserId === owner\?\.userId\}/);
   assert.match(android, /const live = snapshot\.userId \? loaded : null/);
 });
 

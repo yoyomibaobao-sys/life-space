@@ -33,7 +33,8 @@ export async function handleR2InternalReadRequest(request, env,
   nowSeconds = Math.floor(Date.now() / 1000)) {
   const headers = { ...JSON_HEADERS, "CDN-Cache-Control": "no-store",
     "Surrogate-Control": "no-store", "Cross-Origin-Resource-Policy": "same-origin" };
-  if (env?.R2_BUSINESS_MEDIA_MODE !== "isolated" || !env?.R2_BUSINESS_MEDIA) {
+  if (env?.R2_BUSINESS_MEDIA_MODE !== "isolated" ||
+      env?.R2_MEDIA_READ_ENABLED !== "true" || !env?.R2_BUSINESS_MEDIA) {
     return Response.json({ error: "disabled" }, { status: 404, headers });
   }
   const identity = await verifyR2InternalReadRequest(request, env.R2_MEDIA_SERVICE_AUTH_SECRET, nowSeconds);

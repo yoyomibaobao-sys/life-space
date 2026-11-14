@@ -55,7 +55,7 @@ test("visitor, Free and offline guides stay basic; only current paid Plus unlock
   assert.equal(canAccessMembershipGuidance({ status: "expired", can_create_content: true }), false);
   assert.equal(canAccessMembershipGuidance({ plan: "trial", status: "trialing", can_create_content: false }), false);
   assert.equal(canAccessMembershipGuidance({ plan: "basic", status: "active", can_create_content: false }), false);
-  assert.equal(canAccessMembershipGuidance({ plan: "basic", status: "active", paid_until: "2050-01-01T00:00:00Z" }), true);
+  assert.equal(canAccessMembershipGuidance({ plan: "basic", status: "active", can_create_content: true, paid_until: "2050-01-01T00:00:00Z" }), true);
 
   const [index, plant, guide] = await Promise.all([
     readFile(path.join(root, "app/plant/page.tsx"), "utf8"),

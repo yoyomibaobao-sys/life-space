@@ -90,7 +90,11 @@ test("coarse project region never inherits a profile street address or record GP
   const input = { country_code:"CN", country_name:"中国", region_name:"浙江", city_name:"宁波", location:"某路99号", latitude:29.8, longitude:121.5 };
   assert.deepEqual(regions.normalizePlantingRegion(input), {country_code:"CN",country_name:"中国",region_name:"浙江",city_name:"宁波"});
   assert.equal(regions.normalizePlantingRegion({location:"某路99号"}), null);
-  assert.equal(regions.normalizePlantingRegion({...input, city_name:""}), null);
+  const provinceOnly = regions.normalizePlantingRegion({...input, city_name:""});
+  assert.deepEqual(provinceOnly, {country_code:"CN",country_name:"中国",region_name:"浙江",city_name:""});
+  assert.equal("location" in provinceOnly, false);
+  assert.equal("latitude" in provinceOnly, false);
+  assert.equal("longitude" in provinceOnly, false);
   assert.equal(regions.normalizePlantingRegion({...input, city_name:22}), null);
   assert.equal(regions.formatPlantingRegion(input), "中国 · 浙江 · 宁波");
 });

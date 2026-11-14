@@ -11,7 +11,8 @@ const secret = "isolated-test-service-secret-1234567890";
 const bytes = Uint8Array.from([0xff,0xd8,0xff,0xd9]);
 const sha = createHash("sha256").update(bytes).digest("hex");
 const url = "https://media.internal" + R2_BUSINESS_INTERNAL_READ_PATH;
-const env = () => ({R2_BUSINESS_MEDIA_MODE:"isolated", R2_MEDIA_SERVICE_AUTH_SECRET:secret,
+const env = () => ({R2_BUSINESS_MEDIA_MODE:"isolated", R2_MEDIA_READ_ENABLED:"true",
+  R2_MEDIA_SERVICE_AUTH_SECRET:secret,
   QA_TOKEN:"existing_qa_token", R2_BUSINESS_MEDIA:{
     async get(key){assert.equal(key,path);return {size:bytes.length,
       customMetadata:{sha256:sha},httpMetadata:{contentType:"image/jpeg"},

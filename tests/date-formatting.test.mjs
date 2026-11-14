@@ -28,7 +28,8 @@ test("dates use one numeric card and precise-time contract", async () => {
   assert.match(archiveDate, /formatCardDate/);
   assert.match(notifications, /formatPreciseDateTime/);
   assert.match(marketTypes, /formatMarketTime[\s\S]*?formatCardDate\(value\)/);
-  assert.match(marketDetail, /formatPreciseDateTime\(item\.created_at\)/);
+  assert.match(marketDetail, /formatPreciseDateTime\(item\.published_at \|\| item\.created_at\)/);
+  assert.match(marketDetail, /formatPreciseDateTime\(item\.updated_at\)/);
   assert.match(profileDates, /formatProfileDate[\s\S]*?formatCardDate\(value\)/);
   assert.match(profileDates, /formatProfileDateTime[\s\S]*?formatPreciseDateTime\(value\)/);
 });

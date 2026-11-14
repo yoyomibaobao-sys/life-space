@@ -72,7 +72,7 @@ test("ordinary guide and plant guide both use the shared pagination, public-firs
 test("Plus RPC client is server-gated, never falls back to old full-table SELECT",()=>{
  const plant=source("app/plant/[id]/page.tsx");
  const ordinary=source("components/plant-detail/GuideDetailView.tsx");
- const sql=source(".wp10-delivery/Guide-FreePlus-20261103/Guide-Plus-RPC-REVIEW-20261103.sql");
+ const sql=source("tests/fixtures/guide-plus-rpc-review-20261103.sql");
  assert.match(plant,/get_plus_plant_guide/);
  assert.match(plant,/p_species_id: resolvedPlantId, p_language: language/);
  assert.match(plant,/hasOwnProperty\.call\(plusResult\.data, "parameters"\)/);

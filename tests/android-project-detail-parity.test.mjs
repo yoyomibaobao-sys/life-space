@@ -43,7 +43,8 @@ test("Android project details share one presentation across cloud, local, and of
   assert.match(adapters, /isCloudOfflineCacheArchive/);
   assert.match(adapters, /canEditLocalArchiveFields/);
   assert.match(adapters, /canEditLocalArchiveRecord/);
-  assert.match(deviceDetail, /canEditLocalArchiveRecord\(archive, source\)/);
+  assert.match(deviceDetail, /canEditLocalArchiveRecord\(archive, source, ownerContext\)/);
+  assert.match(deviceDetail, /const editable = source \? canEditLocalArchiveRecord/);
   assert.match(deviceDetail, /mode=\{editable \? "owner" : "viewer"\}/);
   assert.match(deviceDetail, /archiveCopy\.cloud_read_only_notice/);
   assert.doesNotMatch(deviceDetail, /archiveCopy\.saved_on_this_device/);

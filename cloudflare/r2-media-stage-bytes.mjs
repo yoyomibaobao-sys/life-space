@@ -108,6 +108,9 @@ export async function handleR2MediaStageBytesRequest(
   if (env?.R2_BUSINESS_MEDIA_MODE !== "isolated" || !env?.R2_BUSINESS_MEDIA) {
     return respond({ error: "disabled" }, 404);
   }
+  if (env?.R2_MEDIA_MIRROR_WRITE_ENABLED !== "true") {
+    return respond({ error: "mirror_write_disabled" }, 404);
+  }
   const secret = env.R2_MEDIA_SERVICE_AUTH_SECRET;
   if (typeof secret !== "string" || new TextEncoder().encode(secret).byteLength < 32) {
     return respond({ error: "internal_auth_not_configured" }, 503);

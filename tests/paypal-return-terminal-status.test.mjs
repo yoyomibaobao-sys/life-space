@@ -15,7 +15,7 @@ const paymentBase = {
 };
 
 async function loadReturnRoute(payment, { orderStatus = "APPROVED" } = {}) {
-  const calls = { dbRead: 0, getOrder: 0, capture: 0, confirm: 0 };
+  const calls = { dbRead: 0, getOrder: 0, beginCapture: 0, capture: 0, confirm: 0 };
   const bindings = {
     calls,
     payment,
@@ -48,6 +48,10 @@ async function loadReturnRoute(payment, { orderStatus = "APPROVED" } = {}) {
         };
       },
     }),
+    async beginPayPalMembershipCapture() {
+      calls.beginCapture++;
+      return { ok: true, already_confirmed: false };
+    },
     async confirmMembershipFromPayPalOrder() {
       calls.confirm++;
       return { confirmed: true };
@@ -62,7 +66,10 @@ async function loadReturnRoute(payment, { orderStatus = "APPROVED" } = {}) {
       "export const PAYPAL_MEMBERSHIP_AMOUNT = globalThis.mock.PAYPAL_MEMBERSHIP_AMOUNT;",
       "export const PAYPAL_MEMBERSHIP_CURRENCY = globalThis.mock.PAYPAL_MEMBERSHIP_CURRENCY;",
     ].join("\n"),
-    "@/lib/paypal-membership": "export const confirmMembershipFromPayPalOrder = (...args) => globalThis.mock.confirmMembershipFromPayPalOrder(...args);",
+    "@/lib/paypal-membership": [
+      "export const beginPayPalMembershipCapture = (...args) => globalThis.mock.beginPayPalMembershipCapture(...args);",
+      "export const confirmMembershipFromPayPalOrder = (...args) => globalThis.mock.confirmMembershipFromPayPalOrder(...args);",
+    ].join("\n"),
     "@/lib/paypal-runtime-gate": "export const isPayPalRuntimeEnabled = () => globalThis.mock.isPayPalRuntimeEnabled();",
     "@/lib/supabaseAdmin": "export const getSupabaseAdmin = () => globalThis.mock.getSupabaseAdmin();",
   };
@@ -102,7 +109,7 @@ test("refunded Return is terminal before external Order lookup or Capture", asyn
   const response = await get(request());
   assert.equal(response.status, 303);
   assert.equal(redirect(response).searchParams.get("paypal"), "refunded");
-  assert.deepEqual(calls, { dbRead: 1, getOrder: 0, capture: 0, confirm: 0 });
+  assert.deepEqual(calls, { dbRead: 1, getOrder: 0, beginCapture: 0, capture: 0, confirm: 0 });
 });
 
 test("unknown and non-payable local states fail closed before external calls", async () => {
@@ -111,6 +118,7 @@ test("unknown and non-payable local states fail closed before external calls", a
     const response = await get(request());
     assert.equal(redirect(response).searchParams.get("paypal"), "invalid-order", status);
     assert.equal(calls.getOrder, 0, status);
+    assert.equal(calls.beginCapture, 0, status);
     assert.equal(calls.capture, 0, status);
     assert.equal(calls.confirm, 0, status);
   }
@@ -121,6 +129,7 @@ test("confirmed Return remains successful without another Capture", async () => 
   const response = await get(request());
   assert.equal(redirect(response).pathname, "/membership/payment/success");
   assert.equal(calls.getOrder, 0);
+  assert.equal(calls.beginCapture, 0);
   assert.equal(calls.capture, 0);
   assert.equal(calls.confirm, 0);
 });
@@ -131,6 +140,7 @@ test("pending, canceled and expired orders retain the approved-order Capture pat
     const response = await get(request());
     assert.equal(redirect(response).pathname, "/membership/payment/success", status);
     assert.equal(calls.getOrder, 1, status);
+    assert.equal(calls.beginCapture, 1, status);
     assert.equal(calls.capture, 1, status);
     assert.equal(calls.confirm, 1, status);
   }
@@ -144,6 +154,7 @@ test("official COMPLETED order is confirmed without a second Capture", async () 
   const response = await get(request());
   assert.equal(redirect(response).pathname, "/membership/payment/success");
   assert.equal(calls.getOrder, 1);
+  assert.equal(calls.beginCapture, 0);
   assert.equal(calls.capture, 0);
   assert.equal(calls.confirm, 1);
 });
@@ -157,6 +168,7 @@ test("wrong amount or payment method is rejected before external calls", async (
     const response = await get(request());
     assert.equal(redirect(response).searchParams.get("paypal"), "invalid-order");
     assert.equal(calls.getOrder, 0);
+    assert.equal(calls.beginCapture, 0);
     assert.equal(calls.capture, 0);
   }
 });

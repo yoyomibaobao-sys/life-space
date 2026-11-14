@@ -31,25 +31,18 @@ test("paid and internal accounts do not get the invitation; offline does not cla
   assert.match(entry, /if \(!userId \|\| !online \|\| !offer\?\.can_claim \|\| offer\.claimed \|\| busy\.current\) return;/);
 });
 
-test("Android My Space uses one server-timed trial notice without local copy while active", () => {
+test("Android My Space offers Free 30MB and paid Plus without exposing retired trial actions", () => {
   const shell = read("mobile-offline-src/main.tsx");
-  const reminder = read("components/archive-ui/AndroidCloudTrialReminder.tsx");
-  assert.match(shell, /screen\.kind === "list" && auth\.status === "signed-in"[\s\S]*?<AndroidCloudTrialReminder/);
-  assert.match(reminder, /get_my_cloud_trial_server_time/);
-  assert.match(reminder, /active && days > 7/);
-  assert.match(reminder, /offer\.lifecycle_status === "handling_period"/);
-  assert.doesNotMatch(reminder, /saveCloudArchiveToLocal|claim_my_cloud_trial/);
+  assert.doesNotMatch(shell, /<AndroidCloudTrialReminder|<AndroidCloudTrialEntry|supabase\.rpc\("claim_my_cloud_trial"\)/);
+  assert.match(shell, /Free 云空间（30 MB）；Plus 云空间为 1 GB/);
+  assert.match(shell, /联网后可开通 Plus 云会员/);
   assert.match(shell, /data-android-cloud-access-options="true"/);
+  assert.match(shell, /sourceFilter === "cloud" && !offlineOwnerRead && auth\.status !== "checking"/);
   assert.match(shell, /renderCloudAccessOptions\(\)/);
-  assert.match(shell, /升级Plus会员/);
   assert.match(shell, /openCloudLogin\("membership-payment"\)/);
-  assert.match(shell, /!canCreateMembershipContent\(membership\) \? renderCloudAccessOptions\(\)/);
-  assert.match(shell, /cloudReadable && sourceFilter !== "local"/);
+  assert.match(shell, /!canCreateMembershipContent\(membership\)/);
+  // Historical offer reads may remain for existing data, but must not be a claim entry point.
   assert.match(shell, /supabase\.rpc\("get_my_cloud_trial_offer"\)/);
-  assert.match(shell, /canReadAndroidCloudWorkspace\(\{[\s\S]*?trialAccess: cloudTrialAccess/);
   assert.doesNotMatch(shell, /Date\.parse\(membership\.trial_ends_at/);
-  assert.match(shell, /onChanged=\{\(\) => \{ void loadShellIdentity\(cloudUserId\); \}\}/);
-  assert.match(shell, /screen\.kind === "new-project"[\s\S]*?screen\.destination === "live-cloud" \|\| screen\.destination === "pending-cloud"/);
   assert.match(shell, /data-android-shell-page="cloud-create-access"/);
-  assert.match(shell, /!canCreateMembershipContent\(membership\) \? \([\s\S]*?renderCloudAccessOptions\(\)/);
 });

@@ -487,7 +487,9 @@ test("experience card lists use a shared cover with source and archive fallbacks
   assert.doesNotMatch(timeline, />\+\{imageMedia\.length - 1\}</);
   assert.match(timeline, /href=\{`\/archive\/\$\{archive\.id\}\?record=\$\{record\.id\}`\}/);
   assert.doesNotMatch(timeline, /这条记录以照片为主|这条记录没有文字/);
-  assert.match(plantDetail, /hydrateExperienceCardListItems\(cardRows, language\)/);
+  assert.match(plantDetail, /hydrateExperienceCardListItems\(publicCards, language\)/);
+  assert.match(plantDetail, /const publicCards/);
+  assert.match(plantDetail, /const hydratedCards = await hydrateExperienceCardListItems/);
   assert.match(plantDetail, /<ExperienceCardListCard/);
 });
 

@@ -10,7 +10,9 @@ const offlineDb = readFileSync(new URL("../lib/local-offline-db.ts", import.meta
 test("offline cold start cannot apply an older list read over the verified account", () => {
   const loadList = shell.slice(shell.indexOf("const loadList = useCallback"), shell.indexOf("const loadCloudList"));
   assert.match(loadList, /listRequestRef/);
-  assert.match(loadList, /authenticatedOwnerRef\.current/);
+  assert.match(loadList, /const authenticated = readOwnerRef\.current/);
+  assert.match(loadList, /authenticated\?\.userId && authenticated\.userId === resolvedContext\?\.userId/);
+  assert.match(loadList, /currentAuthenticated\.userId === currentContext\?\.userId/);
   assert.match(loadList, /if \(requestId !== listRequestRef\.current\) return/);
   assert.match(loadList, /if \(\(privateContext\?\.userId \|\| null\) !== currentPrivateId\) return/);
   assert.match(loadList, /privateContext[\s\S]*listVisibleCloudOfflineArchiveSummaries\(privateContext\)/);
@@ -30,7 +32,7 @@ test("a durable local create survives a later SAF revision conflict without a se
   assert.match(saved, /SAF concurrent revision conflict\./);
   assert.match(saved, /setScreen\(\{ kind: "detail", archiveId: archive\.id \}\)/);
   assert.match(offlineDb, /isSafRevisionConflict\(error\)/);
-  assert.match(offlineDb, /return connectedCloudSafState\(ownerUserId, attempt \+ 1\)/);
+  assert.match(offlineDb, /return connectedCloudSafState\(ownerUserId, attempt \+ 1, targetArchiveId\)/);
   assert.match(safCore, /advanceCommitEpoch\(storage\)/);
   assert.match(safCore, /readSafCommittedUnshared\(storage, baselineEpoch, currentCommitEpoch\(storage\)\)/);
 });
@@ -38,8 +40,12 @@ test("a durable local create survives a later SAF revision conflict without a se
 test("image save return does not rebuild live cloud detail during connectivity checking", () => {
   const runtime = shell.slice(shell.indexOf("function CloudProjectRuntime("), shell.indexOf("function CloudLogin("));
   assert.match(runtime, /useAndroidConnectivityStatus\(\)/);
-  assert.match(runtime, /connectivity\.status === "offline" && !imageFullscreenOpen/);
-  assert.match(runtime, /imageFullscreenOpen \|\| connectivity\.status === "checking"[\s\S]*\? presentationOnline\.current/);
+  assert.match(runtime, /const mountedCloudOwner = useRef/);
+  assert.match(runtime, /const confirmedRejection = auth\.explicitSignedOut/);
+  assert.match(runtime, /auth\.verification === "invalid-session"/);
+  assert.match(runtime, /const checking = auth\.status === "checking" \|\| connectivity\.status === "checking"/);
+  assert.match(runtime, /suspended=\{!showVerifiedCloud\}/);
+  assert.match(runtime, /!showVerifiedCloud && !\(showLiveCloud && checking\)/);
   assert.match(runtime, /showLiveCloud/);
   assert.match(shell, /function readMobileOverlayOpen\(\)/);
   const controller = readFileSync(new URL("../components/archive-ui/CloudArchiveDetailController.tsx", import.meta.url), "utf8");
@@ -58,35 +64,39 @@ test("image save return does not rebuild live cloud detail during connectivity c
 
 test("a failed probe keeps the open image readable and refuses cloud trash until online", () => {
   const runtime = shell.slice(shell.indexOf("function CloudProjectRuntime("), shell.indexOf("function CloudLogin("));
-  assert.match(runtime, /imageFullscreenOpen \|\| connectivity\.status === "checking"[\s\S]*\? presentationOnline\.current/);
-  assert.match(runtime, /if \(showLiveCloud\) return <CloudArchiveDetailController/);
+  assert.match(runtime, /const controller = showLiveCloud && cloudControllerOwnerId \? <CloudArchiveDetailController/);
+  assert.match(runtime, /suspended=\{!showVerifiedCloud\}/);
+  assert.match(runtime, /const confirmedRejection = auth\.explicitSignedOut/);
   const controller = readFileSync(new URL("../components/archive-ui/CloudArchiveDetailController.tsx", import.meta.url), "utf8");
   const guarded = controller.slice(controller.indexOf("async function change("), controller.indexOf("async function patchArchive("));
-  assert.match(guarded, /!isAndroidOnline\(\)\) return/);
+  assert.match(guarded, /!hasLiveAccess\(\)/);
+  assert.match(controller, /const hasLiveAccess = useCallback\(\(\) => hasVerifiedOwner\(\) && isAndroidOnline\(\)/);
   const deleteMedia = controller.slice(controller.indexOf("onDeleteMedia="), controller.indexOf("onAddMedia="));
-  assert.match(deleteMedia, /if \(!isAndroidOnline\(\) \|\| !await requestCloudTrash\("media", mediaId\)\) throw new Error\(recordCopy\.delete_failed\)/);
+  assert.match(deleteMedia, /if \(!hasLiveAccess\(\) \|\| !await requestCloudTrash\("media", mediaId\)\) throw new Error\(recordCopy\.delete_failed\)/);
   const deleteImage = controller.slice(controller.indexOf("onDeleteCurrentImage:"), controller.indexOf("onChange:"));
-  assert.match(deleteImage, /if \(!isAndroidOnline\(\) \|\| !image\.id \|\| !await requestCloudTrash\("media", image\.id\)\) throw new Error\(recordCopy\.delete_failed\)/);
+  assert.match(deleteImage, /if \(!hasLiveAccess\(\) \|\| !image\.id \|\| !await requestCloudTrash\("media", image\.id\)\) throw new Error\(recordCopy\.delete_failed\)/);
   assert.match(deleteImage, /setLightbox/);
   const archiveTrash = controller.slice(controller.indexOf("open={trashConfirmOpen}"), controller.indexOf("</>;"));
   assert.match(archiveTrash, /requestCloudTrash\("archives", archiveId\)/);
   assert.match(archiveTrash, /change\(async \(\) => \{[\s\S]*requestCloudTrash\("archives", archiveId\)[\s\S]*\}, false\)/);
   assert.match(lightbox, /setTrashConfirmOpen\(false\)/);
   assert.match(lightbox, /async function saveCurrentImage\(\)/);
-  assert.match(lightbox, /saveViewedImage\(current\.url, current\.id\)/);
+  assert.match(lightbox, /if \(imageActionBusy \|\| !currentImageUrl\) return/);
+  assert.match(lightbox, /saveViewedImage\(currentImageUrl, current\.id\)/);
+  assert.match(lightbox, /useGuardedRecordImage/);
 });
 
 test("closing an offline image does not replay a historical add-record request", () => {
   const runtime = shell.slice(shell.indexOf("function CloudProjectRuntime("), shell.indexOf("function CloudLogin("));
   const handoff = runtime.slice(runtime.indexOf("const lastAddRecordRequest"), runtime.indexOf("if (!authenticatedOwnerContext?.userId)"));
   assert.match(handoff, /useRef\(addRecordRequest\)/);
-  assert.match(handoff, /if \(showLiveCloud\) \{\s*lastAddRecordRequest\.current = addRecordRequest;\s*return;\s*\}/);
+  assert.match(handoff, /if \(showVerifiedCloud \|\| \(showLiveCloud && checking\)\) \{\s*lastAddRecordRequest\.current = addRecordRequest;\s*return;\s*\}/);
   assert.match(handoff, /status !== "ready" \|\| !cached \|\| !addRecordRequest \|\| addRecordRequest === lastAddRecordRequest\.current/);
   assert.match(handoff, /onAddRecord\(cached\.archive\.id\)/);
   assert.match(shell, /setDetailAddRecordRequest\(\(current\) => \(\{ archiveId: screen\.archiveId, nonce: \(current\?\.nonce \|\| 0\) \+ 1 \}\)\)/);
   const controller = readFileSync(new URL("../components/archive-ui/CloudArchiveDetailController.tsx", import.meta.url), "utf8");
   assert.match(controller, /const lastAddRecordRequest = useRef\(addRecordRequest\)/);
-  assert.match(controller, /if \(!addRecordRequest \|\| addRecordRequest === lastAddRecordRequest\.current\) return/);
+  assert.match(controller, /if \(!hasLiveAccess\(\) \|\| !addRecordRequest \|\| addRecordRequest === lastAddRecordRequest\.current\) return/);
   assert.match(controller, /setAddOpen\(true\)/);
 });
 
@@ -186,7 +196,7 @@ test("a saved cloud record refreshes the project list without letting an older s
   assert.match(list, /if \(requestId === cloudListRequestRef\.current\) setCloudLoading\(false\)/);
   const detail = shell.slice(shell.indexOf("onCacheChanged={async () => {"), shell.indexOf("onAddRecord={(id) =>"));
   assert.match(detail, /await loadList\(authenticatedOwnerContext\)/);
-  assert.match(detail, /await loadCloudList\(authenticatedOwnerContext\?\.userId\)/);
+  assert.match(detail, /if \(!authenticatedOwnerContext\) return;[\s\S]*await loadCloudList\(authenticatedOwnerContext\.userId\)/);
   const controller = readFileSync(new URL("../components/archive-ui/CloudArchiveDetailController.tsx", import.meta.url), "utf8");
-  assert.match(controller, /onRecordCreated=\{async \(\) => \{ await reload\(\); setAddOpen\(false\); onRecordCreated\?\.\(\); await onCacheChanged\(\); \}\}/);
+  assert.match(controller, /onRecordCreated=\{async \(\) => \{ if \(!hasLiveAccess\(\)\) return; await reload\(\); if \(!hasLiveAccess\(\)\) return; setAddOpen\(false\); onRecordCreated\?\.\(\); await onCacheChanged\(\); \}\}/);
 });

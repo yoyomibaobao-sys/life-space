@@ -44,8 +44,9 @@ test("local transfer and cloud pending use different explicit engines and preser
   assert.doesNotMatch(transfer, /syncPendingCloudArchive|syncAllPendingCloudArchives/);
   assert.match(transfer, /if \(!result\.success\) \{ setTransferError\(result\.error\)/);
   assert.match(transfer, /loadList\(authenticatedOwnerContext\)[\s\S]*loadCloudList\(cloudUserId\)[\s\S]*kind: "cloud-detail", archiveId: result\.cloudArchiveId/);
-  assert.match(pending, /syncPendingCloudArchive\(\{/);
-  assert.match(pending, /syncAllPendingCloudArchives\(\{/);
+  assert.match(pending, /syncAndroidPendingCloudArchive\(\{[\s\S]*ownerContext: authenticatedOwnerContext/);
+  assert.match(pending, /syncAndroidAllPendingCloudArchives\(\{ ownerContext: authenticatedOwnerContext \}\)/);
+  assert.match(pending, /if \(!authenticatedOwnerContext \|\| !cloudUserId\) \{ openCloudLogin\("list-cloud"\); return; \}/);
   assert.doesNotMatch(pending, /syncLocalArchiveToCloud/);
   assert.match(engine, /sourceCloudArchiveId && !archive\.migration_cloud_archive_id[\s\S]*原云端项目仍然保留/);
   assert.match(engine, /existingCloudArchiveId: cloudArchiveId/);

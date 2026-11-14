@@ -66,7 +66,12 @@ test("public related guides are explicit-grant, RLS-protected, and admin reviewe
   assert.match(guidePage, /<GuideCategoryTabs/);
   assert.match(await source("components/plant/GuideCategoryTabs.tsx"), /archiveCategoryOptions\.map/);
   assert.match(adminPage, /list_pending_guide_candidates/);
-  assert.match(adminPage, /review_guide_candidate/);
+  assert.match(adminPage, /reviewGuideCandidate\(supabase, row\.id, decision, note\)/);
+  const reviewHelper = await source("lib/guide-candidate-review.ts");
+  assert.match(reviewHelper, /client\.rpc\("review_guide_candidate"/);
+  assert.match(reviewHelper, /\.from\("guide_candidates"\)/);
+  assert.match(reviewHelper, /row\?\.id !== candidateId \|\| row\.status !== expected/);
+  assert.match(reviewHelper, /if \(readError[\s\S]*review: null/);
   assert.match(candidates, /\.from\("guide_entries"\)/);
 });
 

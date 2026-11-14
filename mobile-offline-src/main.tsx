@@ -2551,7 +2551,7 @@ function App() {
           setScreen({ kind: "membership-payment" });
         }}>{language === "zh" ? "升级Plus会员" : "Upgrade to Plus"}</button>
       </div>
-      {!online ? <p>{language === "zh" ? "联网后可领取试用或开通 Plus。" : "Connect to claim a trial or subscribe to Plus."}</p> : null}
+      {!online ? <p>{language === "zh" ? "联网后可开通 Plus 云会员。" : "Connect to subscribe to Plus."}</p> : null}
     </section>;
   }
 

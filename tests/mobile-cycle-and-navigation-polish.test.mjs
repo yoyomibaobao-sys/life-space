@@ -74,7 +74,8 @@ test("mobile My Space is single-line and taxonomy actions move to long press", a
   assert.match(archivePage, /personalSpaceStorageTrackStyle/);
   assert.match(archivePage, /personalSpaceStorageTotalStyle/);
   assert.doesNotMatch(archivePage, /storageUsageLabel/);
-  assert.match(archivePage, /sourceTrailingSlot=\{isMobileViewport \? \([\s\S]*?\+\{t\.nav\.project\}/);
+  assert.match(archivePage, /sourceTrailingSlot=\{isMobileViewport && activeSource !== "pending" \? \([\s\S]*?<Link href=\{mobileCreateHref\}[\s\S]*?\+\{t\.nav\.project\}/);
+  assert.match(archivePage, /showCreateToolbar=\{!isMobileViewport && activeSource !== "pending"\}/);
   assert.match(sourceSwitcher, /flexWrap: singleLine \? "nowrap" : "wrap"/);
   assert.match(sourceSwitcher, /"repeat\(3, minmax\(0, 1fr\)\) auto"/);
   assert.match(sourceSwitcher, /if \(value === "cloud"\) return 2/);

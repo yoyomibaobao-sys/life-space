@@ -86,6 +86,7 @@ function env(bucket, extra = {}) {
   return {
     R2_BUSINESS_MEDIA_MODE: "isolated",
     R2_BUSINESS_MEDIA: bucket,
+    R2_MEDIA_MIRROR_WRITE_ENABLED: "true", // Legacy positive-path tests explicitly enable the R03 write gate.
     R2_MEDIA_SERVICE_AUTH_SECRET: SECRET,
     ...extra,
   };
@@ -239,7 +240,8 @@ test("unsupported MIME is rejected by the site signing helper", async () => {
 test("a missing internal secret fails closed", async () => {
   const bucket = fakeBucket();
   const input = await signedRequest();
-  const noSecret = { R2_BUSINESS_MEDIA_MODE: "isolated", R2_BUSINESS_MEDIA: bucket };
+  const noSecret = { R2_BUSINESS_MEDIA_MODE: "isolated", R2_BUSINESS_MEDIA: bucket,
+    R2_MEDIA_MIRROR_WRITE_ENABLED: "true" };
   const response = await handleR2MediaStageBytesRequest(input.request, noSecret, NOW);
   assert.equal(response.status, 503);
   assert.equal(bucket.actions.puts, 0);

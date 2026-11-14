@@ -98,6 +98,7 @@ export default function ProjectCategorySettingsPage() {
 
   return (
     <ProjectCategorySettingsView
+      hideLocalSpace={true}
       activeSpace={activeSpace}
       onSpaceChange={(space) => {
         setActiveSpace(space);

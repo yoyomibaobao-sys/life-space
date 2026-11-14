@@ -58,8 +58,17 @@ function fixture(status, catalogRows = [row]) {
         data: args.p_lookup ? [] : catalogRows, error: null,
       });
       if (name === "get_my_membership") return Promise.resolve({
-        data: [{ status, can_create_content: false }], error: null,
+        data: [{ status, plan: status === "active" ? "basic" : "free", can_create_content: false }], error: null,
       });
+      if (name === "get_plus_plant_guide") {
+        assert.equal(status, "active", "only active paid Plus may request full guide RPC");
+        assert.equal(args.p_species_id, speciesId);
+        return Promise.resolve({ data: {
+          parameters: { sun_score: 8 },
+          growth_cycle: { species_id: speciesId, germination_days: 14 },
+          care_guide: { planting_guide: "完整养护" },
+        }, error: null });
+      }
       throw Error(`unexpected RPC: ${name}`);
     },
     auth: { getUser: async () => ({ data: { user: status === "guest" ? null : { id: "test-user" } } }) },
@@ -68,7 +77,8 @@ function fixture(status, catalogRows = [row]) {
       const query = {
         select() { return query; },
         eq(column, value) { filters.push([column, value]); return query; },
-        or() { return query; }, order() { return query; }, limit() { return query; },
+        or() { return query; }, is() { return query; }, order() { return query; }, limit() { return query; },
+        range() { calls.push({ kind: "table", name, filters }); return Promise.resolve({ data: [], error: null }); },
         maybeSingle() {
           calls.push({ kind: "table", name, filters });
           if (["plant_parameters", "plant_growth_cycle", "plant_care_guides"].includes(name)) {
@@ -103,7 +113,7 @@ function fixture(status, catalogRows = [row]) {
     "@/lib/plant-guide-compat": compat,
     "@/lib/membership": {
       normalizeMembershipRpcResult: (data) => data?.[0] || null,
-      canAccessMembershipGuidance: (membership) => ["active", "trialing"].includes(membership?.status),
+      canAccessMembershipGuidance: (membership) => membership?.plan === "basic" && membership?.status === "active",
     },
     "@/lib/i18n/useLanguage": { useLanguage: () => ({ language: "zh", t: {
       nav: { back: "返回" }, archive: { categories: { plant_label: "植物" } },
@@ -123,21 +133,22 @@ function fixture(status, catalogRows = [row]) {
 }
 
 for (const [status, shouldBeFull] of [
-  ["guest", false], ["expired", false], ["trialing", true], ["active", true],
+  ["guest", false], ["expired", false], ["trialing", false], ["active", true],
 ]) {
   test(`${status} alias detail resolves the public summary and ${shouldBeFull ? "full member" : "basic"} content`, async () => {
     const scenario = fixture(status);
     scenario.render();
-    assert.equal(scenario.effects.length, 1);
-    scenario.effects[0]();
+    assert.equal(scenario.effects.length, 2, "auth reset listener and guide data loader both registered");
+    scenario.effects[1]();
     for (let i = 0; i < 12; i++) await new Promise((resolve) => setImmediate(resolve));
     assert.equal(scenario.states[0].id, speciesId);
     assert.equal(scenario.states[3], row.summary_zh);
-    assert.equal(scenario.states[13], shouldBeFull);
+    assert.equal(scenario.states[16], shouldBeFull, "full guide remains fail-closed until the paid RPC completes");
     const memberTables = scenario.calls.filter((call) => call.kind === "table"
       && ["plant_parameters", "plant_growth_cycle", "plant_care_guides"].includes(call.name));
-    assert.deepEqual(memberTables.map((call) => call.name).sort(), shouldBeFull
-      ? ["plant_parameters", "plant_growth_cycle", "plant_care_guides"].sort() : []);
+    assert.deepEqual(memberTables, [], "the client must never SELECT full guide tables directly");
+    assert.equal(scenario.calls.filter((call) => call.kind === "rpc" && call.name === "get_plus_plant_guide").length,
+      shouldBeFull ? 1 : 0, "the full guide RPC is paid-Plus-only");
     if (shouldBeFull) {
       assert.equal(scenario.states[4]?.sun_score, 8);
       assert.equal(scenario.states[5]?.germination_days, 14);

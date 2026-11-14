@@ -68,7 +68,10 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(navbar, /<MobileBottomNavigationView/);
   assert.match(sharedNavigation, /data-mobile-bottom-nav="true"/);
   assert.match(source, /<ArchiveWorkspaceTemplate/);
-  assert.match(source, /workspaceSourceOptions\(auth\.status, localSpaceEnabled, cloudReadable\)/);
+  assert.match(source, /sourceOptions=\{w5WorkspaceSources\(auth\.status\)\.map/);
+  assert.match(source, /function w5WorkspaceSources\(auth:/);
+  assert.match(source, /const localSpaceEnabled = false/);
+  assert.match(source, /data-android-shell-page="s6-local-create-deferred"/);
   assert.match(source, /activeSource=\{sourceFilter\}/);
   assert.match(source, /<ArchiveTaxonomyPanel/);
   assert.match(sharedTaxonomy, /archiveCategoryOptions\.map/);

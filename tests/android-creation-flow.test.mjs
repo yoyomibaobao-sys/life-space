@@ -97,7 +97,10 @@ test("center action opens the in-app camera, supports album or skip, then preser
   assert.match(camera, /getUserMedia/);
   assert.match(camera, /onAlbum/);
   assert.match(camera, /onSkip/);
-  assert.match(shell, /onAlbum=\{\(\) => quickGallery\.current\?\.click\(\)\}/);
+  assert.match(shell, /onAlbum=\{\(\) => void openQuickAddAlbum\(\)\}/);
+  assert.match(shell, /if \(!isAndroidRecordGallery\(\)\) \{ quickGallery\.current\?\.click\(\); return; \}/);
+  assert.match(shell, /await pickAndroidRecordPhotos\(\)/);
+  assert.match(shell, /await acceptQuickAddImageFiles\(files, "gallery"\)/);
   assert.match(shell, /skipQuickAddPhotos[\s\S]*files: \[\][\s\S]*setScreen\(\{ kind: "choose-project" \}\)/);
   assert.doesNotMatch(shell, /quick-add-album/);
   assert.match(shell, /acceptQuickAddImageFiles[\s\S]*setQuickAddDraft\(\{ files, capturedAt, source, note: "" \}\)[\s\S]*setScreen\(\{ kind: "choose-project" \}\)/);
