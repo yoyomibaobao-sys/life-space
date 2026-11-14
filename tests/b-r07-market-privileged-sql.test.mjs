@@ -7,8 +7,8 @@ import { PGlite } from "@electric-sql/pglite";
 
 const root = path.resolve(import.meta.dirname, "..");
 const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
-const migration = read("supabase/migrations/20261110032043_r07_remove_membership_market_auto_end.sql");
-const rollback = read("supabase/rollbacks/20261110032043_r07_restore_membership_market_auto_end.sql");
+const migration = read("supabase/migrations/20261110032043_r07_remove_membership_market_auto_end.sql").replace(/\r\n/g, "\n");
+const rollback = read("supabase/rollbacks/20261110032043_r07_restore_membership_market_auto_end.sql").replace(/\r\n/g, "\n");
 const manifest = JSON.parse(read("tests/fixtures/b-r07-market-function-fingerprints.json"));
 const md5 = (value) => createHash("md5").update(value).digest("hex");
 const targetSql = "update public.market_posts mp set status='ended',ended_at=v_m2_now,updated_at=v_m2_now";
