@@ -23,6 +23,7 @@ import type {
   ArchiveMode,
   RecordItem,
 } from "@/lib/archive-detail-types";
+import GuardedRecordImage from "./GuardedRecordImage";
 import UiIcon from "@/components/ui/UiIcon";
 import type { MediaItem } from "@/lib/domain-types";
 import { getBehaviorTagLabel } from "@/lib/tag-labels";
@@ -978,7 +979,7 @@ function MobileRecordMediaGrid({
       {mediaList.map((media, mediaIndex) => {
         const target = mediaItems[mediaIndex];
         const image = (
-            <img
+            <GuardedRecordImage
               src={target?.display_thumb_url || media.url}
               alt={media.alt}
               style={mobileRecordMediaImageStyle}
@@ -1057,7 +1058,7 @@ function DesktopRecordMediaGrid({
             } : undefined}
             style={{ position: "relative", cursor: canOpen ? "pointer" : "default" }}
           >
-            <img
+            <GuardedRecordImage
               src={target?.display_thumb_url || media.url}
               alt={media.alt}
               loading="lazy"

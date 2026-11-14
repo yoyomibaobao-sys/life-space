@@ -16,6 +16,7 @@ import {
   standardizeRecordPhotoFile,
 } from "@/lib/image-compression";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
+import { mirrorCommittedRecordMedia } from "@/lib/r2-business-media-mirror";
 import { showToast } from "@/components/Toast";
 import ArchiveAddRecordSection from "@/components/archive-detail/ArchiveAddRecordSection";
 import ArchiveCycleSettings from "@/components/archive-detail/ArchiveCycleSettings";
@@ -1715,12 +1716,18 @@ saveRecentArchiveBrowse({
         }
       }
 
-      await settleStorageUploadReservation({
+      const settled = await settleStorageUploadReservation({
         reservation,
         targetType: "media",
         targetId: committedMedia.id,
         legacyActualBytes: actualBytes,
       });
+      if (settled.ok) {
+        const mirror = await mirrorCommittedRecordMedia({
+          mediaId: committedMedia.id, ownerId: user.id, thumbPath: uploadedThumbPath,
+        });
+        if (mirror.endsWith("_pending")) console.warn("R2 QA additional photo mirror pending:", mirror);
+      }
 
       const [displayMediaRow] = await attachMediaDisplayUrls(
         supabase,

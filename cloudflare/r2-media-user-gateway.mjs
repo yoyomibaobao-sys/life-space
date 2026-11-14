@@ -5,6 +5,8 @@ import {
   createR2MediaServiceHeaders,
   R2_BUSINESS_STAGE_BYTES_PATH,
 } from "../lib/r2-media-service-auth.mjs";
+import { R2_BUSINESS_INTERNAL_READ_PATH, createR2InternalReadHeaders } from "../lib/r2-media-read-service-auth.mjs";
+import { extractLegacyMediaPath } from "../lib/r2-media-business.mjs";
 
 export const R2_BUSINESS_MIRROR_PATH = "/__internal/r2/business-media/mirror";
 
@@ -128,6 +130,7 @@ function ownerReadable(viewerId, ownerId, isPublic) {
 async function resolveBusinessMedia(admin, input, viewerId) {
   const { businessType, businessId, variant } = input;
   let ownerId = null;
+  let recordId = null;
   let path = null;
   let accountedBytes = null;
   let mediaPaths = null;
@@ -135,7 +138,9 @@ async function resolveBusinessMedia(admin, input, viewerId) {
 
   if (businessType === "media") {
     const media = await readRow(admin, "media",
-      "id,user_id,record_id,type,trashed_at,storage_path,thumb_path,size_bytes", businessId);
+      input.legacySourceOrigin
+        ? "id,user_id,record_id,type,trashed_at,storage_path,thumb_path,url,thumb_url,size_bytes"
+        : "id,user_id,record_id,type,trashed_at,storage_path,thumb_path,size_bytes", businessId);
     if (!media || media.type !== "image" || media.trashed_at || !media.record_id) return null;
     const record = await readRow(admin, "records",
       "id,user_id,archive_id,visibility,trashed_at", media.record_id);
@@ -144,10 +149,17 @@ async function resolveBusinessMedia(admin, input, viewerId) {
       "id,user_id,is_public,trashed_at", record.archive_id);
     if (!archive || archive.trashed_at) return null;
     ownerId = media.user_id;
+    recordId = record.id;
     if (!ownerId || record.user_id !== ownerId || archive.user_id !== ownerId) return null;
     publicReadable = archive.is_public === true && record.visibility === "public";
-    path = choosePath(media.storage_path, media.thumb_path, variant);
-    mediaPaths = [...new Set([media.storage_path, media.thumb_path].filter(Boolean))];
+    // Only W4 reads may resolve legacy signed/public Storage URLs, and only
+    // from the configured Supabase origin with the same owner prefix.
+    const fullPath = media.storage_path || (input.legacySourceOrigin &&
+      extractLegacyMediaPath(media.url, ownerId, input.legacySourceOrigin));
+    const thumbPath = media.thumb_path || (input.legacySourceOrigin &&
+      extractLegacyMediaPath(media.thumb_url, ownerId, input.legacySourceOrigin));
+    path = choosePath(fullPath, thumbPath, variant);
+    mediaPaths = [...new Set([fullPath, thumbPath].filter(Boolean))];
     // This is the combined billing usage of full + thumb, never the size of full alone.
     if (Number.isSafeInteger(media.size_bytes) && media.size_bytes > 0) {
       accountedBytes = media.size_bytes;
@@ -210,7 +222,7 @@ async function resolveBusinessMedia(admin, input, viewerId) {
   try {
     for (const objectPath of mediaPaths || [path]) validateMediaR2Key(objectPath, ownerId);
   } catch { return null; }
-  return { ownerId, path, mediaPaths, accountedBytes };
+  return { ownerId, path, mediaPaths, accountedBytes, recordId };
 }
 
 async function readSourceObjectLengths(admin, source) {
@@ -265,6 +277,106 @@ function sniffImageMime(bytes) {
     if (brands.some((brand) => brand === "mif1" || brand === "msf1")) return "image/heif";
   }
   return null;
+}
+
+
+async function recordReadableForViewer(client, recordId) {
+  // The retired trial-only RPC does not exist in the current Free/Plus schema.
+  // Use the existing caller-JWT record access policy, not service-role RPC
+  // or the paid-only membership check (Free cloud space is perpetual).
+  if (!recordId) return false;
+  const { data, error } = await client.rpc("can_access_record", { p_record_id: recordId });
+  return !error && data === true;
+}
+
+export const R2_BUSINESS_VIEW_PATH = "/api/media/record-image";
+const R2_READ_HEADERS = {
+  "Cache-Control": "private, no-store, max-age=0",
+  "CDN-Cache-Control": "no-store",
+  "Surrogate-Control": "no-store",
+  "Vary": "Cookie, Authorization",
+  "Cross-Origin-Resource-Policy": "same-origin",
+  "X-Content-Type-Options": "nosniff",
+};
+const imageError = (status) => Response.json({ error: "image_unavailable" },
+  { status, headers: R2_READ_HEADERS });
+
+/** W4 opt-in only. Every image GET rechecks Owner/public/trashed state. No
+ * reusable public R2 ticket or R2 key ever reaches the browser.
+ */
+export async function handleR2BusinessUserReadRequest(request, env, dependencies = {}) {
+  const url = new URL(request.url);
+  if (url.pathname !== R2_BUSINESS_VIEW_PATH) return imageError(404);
+  if (request.method !== "GET") return imageError(405);
+  if (env?.R2_BUSINESS_MEDIA_MODE !== "isolated" || env?.R2_MEDIA_READ_ENABLED !== "true") return imageError(404);
+  if (!env.R2_BUSINESS_MEDIA_SERVICE || typeof env.R2_BUSINESS_MEDIA_SERVICE.fetch !== "function" ||
+      typeof env.R2_MEDIA_SERVICE_AUTH_SECRET !== "string" ||
+      new TextEncoder().encode(env.R2_MEDIA_SERVICE_AUTH_SECRET).byteLength < 32) return imageError(503);
+  if ((request.headers.get("sec-fetch-site") || "").toLowerCase() === "cross-site") return imageError(403);
+  if ([...url.searchParams.keys()].some((key) => !["id", "variant"].includes(key))) return imageError(400);
+  const businessId = url.searchParams.get("id") || "";
+  const variant = url.searchParams.get("variant") || "full";
+  if (!UUID.test(businessId) || !["full", "thumb"].includes(variant)) return imageError(400);
+
+  let cookieWrites = [];
+  const reply = (response) => withCookies(response, cookieWrites);
+  try {
+    const auth = await (dependencies.createUserClient || createRequestUserClient)(request, env);
+    cookieWrites = auth.cookieWrites || [];
+    const result = await auth.supabase.auth.getUser(auth.accessToken || undefined);
+    const viewerId = result?.data?.user?.id || null;
+    if (request.headers.has("authorization") && (!viewerId || result.error)) return reply(imageError(401));
+    const admin = await (dependencies.createAdminClient || createAdminClient)(env);
+    const input = { businessType: "media", businessId, variant,
+      legacySourceOrigin: safeConfig(env)?.url || null };
+    const source = await resolveBusinessMedia(admin, input, viewerId);
+    if (!source) return reply(imageError(404));
+    if (!await recordReadableForViewer(auth.supabase, source.recordId)) return reply(imageError(403));
+
+    const headers = await createR2InternalReadHeaders({
+      secret: env.R2_MEDIA_SERVICE_AUTH_SECRET, ownerId: source.ownerId, path: source.path,
+    });
+    let fetched;
+    try {
+      fetched = await env.R2_BUSINESS_MEDIA_SERVICE.fetch(new Request(
+        "https://media.internal" + R2_BUSINESS_INTERNAL_READ_PATH, { method: "GET", headers },
+      ));
+    } catch {
+      fetched = null; // Storage remains the source during transient R2 outage.
+    }
+    // An R2 integrity or authentication failure must never be hidden by fallback.
+    if (fetched && ![200, 404, 502, 503].includes(fetched.status)) return reply(imageError(503));
+    let blob;
+    if (fetched?.status === 200) {
+      const type = (fetched.headers.get("content-type") || "").split(";")[0].toLowerCase();
+      const size = Number(fetched.headers.get("content-length") || 0);
+      if (!/^image\/(?:jpeg|png|webp|gif|avif|heic|heif)$/.test(type) ||
+          size > MAX_MEDIA_BYTES) return reply(imageError(503));
+      const buffer = await fetched.arrayBuffer();
+      if (!buffer.byteLength || buffer.byteLength > MAX_MEDIA_BYTES ||
+          (size > 0 && size !== buffer.byteLength)) return reply(imageError(503));
+      blob = new Blob([buffer], { type });
+    } else {
+      const legacy = await admin.storage.from("media").download(source.path);
+      if (legacy.error || !legacy.data ||
+          !/^image\/(?:jpeg|png|webp|gif|avif|heic|heif)$/.test((legacy.data.type || "").toLowerCase()) ||
+          !legacy.data.size || legacy.data.size > MAX_MEDIA_BYTES) return reply(imageError(404));
+      blob = legacy.data;
+    }
+    // Recheck session and business permission after any slow R2/Storage transfer.
+    const freshAuth = await auth.supabase.auth.getUser(auth.accessToken || undefined);
+    const freshViewer = freshAuth?.error ? null : freshAuth?.data?.user?.id || null;
+    if (freshViewer !== viewerId) return reply(imageError(403));
+    const current = await resolveBusinessMedia(admin, input, freshViewer);
+    if (!current || current.ownerId !== source.ownerId || current.path !== source.path) {
+      return reply(imageError(404));
+    }
+    if (!await recordReadableForViewer(auth.supabase, current.recordId)) return reply(imageError(403));
+    return reply(new Response(blob, { status: 200,
+      headers: { ...R2_READ_HEADERS, "Content-Type": blob.type } }));
+  } catch {
+    return reply(imageError(503));
+  }
 }
 
 export async function handleR2BusinessUserMirrorRequest(request, env, dependencies = {}) {

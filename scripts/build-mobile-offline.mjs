@@ -97,6 +97,16 @@ const buildResult = await build({
     // Do not switch bundled Android images to relative /api URLs: the APK's
     // local origin has no API server. Native cloud transport needs separate QA.
     "process.env.NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED": JSON.stringify("false"),
+    // A native R2 mirror is a separate opt-in QA build, never auto-enabled.
+    // Production bundles and standard QA bundles preserve Storage reads.
+    "process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED": JSON.stringify(
+      qaBuild && process.env.ANDROID_QA_R2_MIRROR_ENABLED === "1" ? "true" : "false"
+    ),
+    "process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN": JSON.stringify(
+      qaBuild && process.env.ANDROID_QA_R2_MIRROR_ENABLED === "1"
+        ? "https://lifespace-site-media-qa-20261028.lifespace-assets-isolated-lab.workers.dev"
+        : ""
+    ),
     // A few shared UI components pull in Next client helpers. In the normal
     // Next build these flags are replaced by the compiler. The standalone
     // Android shell is bundled by esbuild, so leaving them behind causes

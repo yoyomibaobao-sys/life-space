@@ -22,6 +22,7 @@ import {
   standardizeRecordPhotoFile,
 } from "@/lib/image-compression";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
+import { mirrorCommittedRecordMedia } from "@/lib/r2-business-media-mirror";
 import {
   bindRecoveryRecord, completeRecovery, eraseRecovery, markRecoveryUnknown,
   readRecovery, stageRecovery, type RecoveryEntry,
@@ -912,7 +913,13 @@ export default function AddRecord({
       targetId: mediaId,
       legacyActualBytes: actualBytes,
     });
-    if (settleResult.ok) setStorageUsedBytes(settleResult.storage_used);
+    if (settleResult.ok) {
+      setStorageUsedBytes(settleResult.storage_used);
+      const mirror = await mirrorCommittedRecordMedia({
+        mediaId, ownerId: userId, thumbPath: uploadedThumbPath,
+      });
+      if (mirror.endsWith("_pending")) console.warn("R2 QA record mirror pending:", mirror);
+    }
 
     return actualBytes;
   }

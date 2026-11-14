@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { standardizeRecordPhotoFile, createImageThumbnailFile } from "@/lib/image-compression";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
+import { mirrorCommittedRecordMedia } from "@/lib/r2-business-media-mirror";
 import { reserveStorageUpload, settleStorageUploadReservation } from "@/lib/storage-usage";
 import { canCreateMembershipContent, normalizeMembershipRpcResult } from "@/lib/membership";
 import { isStorageUploadMaintenance } from "@/lib/storage-upload-maintenance";
@@ -287,6 +288,10 @@ async function uploadMissingPhotos(original: RecoveryEntry) {
       legacyActualBytes: photo.image.size + (photo.thumbnail?.size || 0),
     });
     if (!settled.ok) throw new Error("recovery_reservation_settle_unknown");
+    const mirror = await mirrorCommittedRecordMedia({
+      mediaId: photo.mediaId, ownerId: entry.ownerId, thumbPath: photo.thumbPath,
+    });
+    if (mirror.endsWith("_pending")) console.warn("R2 QA photo-recovery mirror pending:", mirror);
   }
   const complete: RecoveryEntry = { ...entry, phase: "media-confirmed" };
   await writeRecovery(complete);

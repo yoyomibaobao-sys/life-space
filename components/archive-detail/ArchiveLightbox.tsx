@@ -14,6 +14,7 @@ import AppConfirmDialog from "@/components/mobile/AppConfirmDialog";
 import { showToast } from "@/components/Toast";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { saveViewedImage } from "@/lib/image-save";
+import { useGuardedRecordImage } from "@/lib/use-guarded-record-image";
 
 type PanOffset = {
   x: number;
@@ -163,9 +164,9 @@ export default function ArchiveLightbox({
     return () => window.removeEventListener("keydown", handleKeyDown);
   });
 
-  if (!images.length) return null;
-
   const current = images[((index % images.length) + images.length) % images.length];
+  const currentImageUrl = useGuardedRecordImage(current?.url);
+  if (!current) return null;
 
   function requestClose() {
     if (
@@ -279,10 +280,10 @@ export default function ArchiveLightbox({
   }
 
   async function saveCurrentImage() {
-    if (imageActionBusy) return;
+    if (imageActionBusy || !currentImageUrl) return;
     setImageActionBusy(true);
     try {
-      const saved = await saveViewedImage(current.url, current.id);
+      const saved = await saveViewedImage(currentImageUrl, current.id);
       if (saved) showToast(language === "zh" ? "图片已下载" : "Image downloaded");
     } catch {
       showToast(language === "zh" ? "图片下载失败，请检查访问权限和网络后重试。" : "Could not download the image. Check access and connectivity.");
@@ -445,7 +446,7 @@ export default function ArchiveLightbox({
           ) : null}
           <div style={mobileImageFrameStyle}>
             <img
-              src={current.url}
+              src={currentImageUrl}
               alt={current.alt}
               style={{
                 width: "100%",
@@ -468,7 +469,7 @@ export default function ArchiveLightbox({
                 <button type="button" style={mobileImageActionButtonStyle}
                   aria-label={language === "zh" ? "下载当前图片" : "Download current image"}
                   title={language === "zh" ? "下载图片" : "Download image"}
-                  disabled={imageActionBusy} onClick={() => void saveCurrentImage()}>
+                  disabled={imageActionBusy || !currentImageUrl} onClick={() => void saveCurrentImage()}>
                   <UiIcon name="download" size={22} />
                 </button>
                 {onDeleteCurrentImage ? (
@@ -629,7 +630,7 @@ export default function ArchiveLightbox({
         zIndex: 3002, display: "flex", gap: 6 }} onClick={(event) => event.stopPropagation()}>
         <button type="button" aria-label={language === "zh" ? "下载当前图片" : "Download current image"}
           title={language === "zh" ? "下载图片" : "Download image"}
-          disabled={imageActionBusy} onClick={() => void saveCurrentImage()}
+          disabled={imageActionBusy || !currentImageUrl} onClick={() => void saveCurrentImage()}
           style={mobileImageActionButtonStyle}>
           <UiIcon name="download" size={22} />
         </button>
@@ -666,7 +667,7 @@ export default function ArchiveLightbox({
         }}
       >
         <img
-          src={current.url}
+          src={currentImageUrl}
           alt={current.alt}
           onMouseDown={startMousePan}
           onClick={(event) => {

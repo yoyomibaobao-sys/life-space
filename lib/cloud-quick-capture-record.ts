@@ -1,6 +1,7 @@
 import { loadDefaultRecordLocation } from "@/lib/record-location";
 import { createImageThumbnailFile, standardizeRecordPhotoFile } from "@/lib/image-compression";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
+import { mirrorCommittedRecordMedia } from "@/lib/r2-business-media-mirror";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
 import {
   deleteQuickCapture,
@@ -167,12 +168,18 @@ async function uploadQuickCapturePhoto({
     }
   }
 
-  await settleStorageUploadReservation({
+  const settled = await settleStorageUploadReservation({
     reservation,
     targetType: "media",
     targetId: committedMediaId,
     legacyActualBytes: actualBytes,
   });
+  if (settled.ok) {
+    const mirror = await mirrorCommittedRecordMedia({
+      mediaId: committedMediaId, ownerId: userId, thumbPath: savedThumbPath,
+    });
+    if (mirror.endsWith("_pending")) console.warn("R2 QA quick-capture mirror pending:", mirror);
+  }
   return committedMediaId;
 }
 

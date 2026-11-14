@@ -1,6 +1,7 @@
 import { normalizePlantingRegion } from "@/lib/planting-region";
 import { createImageThumbnailFile, standardizeRecordPhotoFile } from "@/lib/image-compression";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
+import { mirrorCommittedRecordMedia } from "@/lib/r2-business-media-mirror";
 import {
   completeLocalArchiveCloudTransfer,
   getLocalArchiveDetail,
@@ -647,12 +648,18 @@ export async function uploadLocalImageToCloud(params: {
     }
     mediaCommitted = true;
 
-    await settleStorageUploadReservation({
+    const settled = await settleStorageUploadReservation({
       reservation,
       targetType: "media",
       targetId: mediaId,
       legacyActualBytes: actualBytes,
     });
+    if (settled.ok) {
+      const mirror = await mirrorCommittedRecordMedia({
+        mediaId, ownerId: params.userId, thumbPath: uploadedThumbPath,
+      });
+      if (mirror.endsWith("_pending")) console.warn("R2 QA local-sync mirror pending:", mirror);
+    }
 
     await updateLocalImageSyncMeta(params.image.id, {
       status: "synced",

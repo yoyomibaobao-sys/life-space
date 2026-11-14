@@ -148,6 +148,9 @@ import {
   syncAndroidAllPendingCloudArchives,
   syncAndroidPendingCloudArchive,
 } from "@/lib/android-verified-pending-sync";
+import {
+  getPendingR2MirrorCountForOwner, retryPendingR2MediaMirrorsForOwner,
+} from "@/lib/r2-business-media-mirror";
 import { buildAndroidCloudWorkspace, canOfferLocalCloudTransfer, type PendingCloudProject } from "@/lib/android-cloud-workspace";
 import { syncLocalArchiveToCloud, type LocalToCloudVisibility } from "@/lib/local-to-cloud-sync";
 import { canAddLocalArchiveRecord } from "@/lib/local-archive-detail-adapters";
@@ -1937,6 +1940,25 @@ function App() {
     }
   }
 
+
+  async function retryPendingR2Mirrors() {
+    if (!online || !authenticatedOwnerContext || !cloudUserId ||
+        authenticatedOwnerContext.userId !== cloudUserId || syncingArchiveId) return;
+    setSyncingArchiveId("r2");
+    try {
+      const result = await retryPendingR2MediaMirrorsForOwner(cloudUserId);
+      showToast(result.blocked
+        ? (language === "zh" ? "镜像状态无法核实，原云端照片已保留" : "Mirror status unavailable; source photos are safe")
+        : result.pending > 0
+          ? (language === "zh" ? "仍有备用镜像待补传，原云端照片已保留" : "Some mirrors remain pending; source photos are safe")
+          : (language === "zh" ? "备用镜像已核实" : "Backup mirrors verified"));
+    } catch {
+      showToast(language === "zh" ? "补镜像暂不可用，原云端照片已保留" : "Mirror retry unavailable; source photos are safe");
+    } finally {
+      setSyncingArchiveId(null);
+    }
+  }
+
   async function uploadPendingProject(item: PendingCloudProject<LocalArchiveSummary, CloudArchiveSummary>) {
     if (!online) { showToast(language === "zh" ? "联网后可上传待同步内容" : "Connect to upload pending changes"); return; }
     if (!authenticatedOwnerContext || !cloudUserId) { openCloudLogin("list-cloud"); return; }
@@ -2692,7 +2714,10 @@ function App() {
             </section>
           ) : null}
         >
-          {readOwnerContext && sourceFilter === "pending" && filteredPending.length ? (
+          {((readOwnerContext && sourceFilter === "pending" && filteredPending.length) ||
+            (readOwnerContext && sourceFilter === "pending" && cloudUserId &&
+             authenticatedOwnerContext?.userId === cloudUserId &&
+             getPendingR2MirrorCountForOwner(cloudUserId) > 0)) ? (
             <section data-android-cloud-pending="true" data-android-temporary-space="true">
               <div className="panel pending-upload-summary">
                 <h2 className="workspace-section-label">{language === "zh" ? "待上传" : "Pending uploads"} {workspace.pending.length}</h2>
@@ -2703,6 +2728,22 @@ function App() {
                   ? "请进入待创建项目或具体待上传记录，明确点击上传或删除。"
                   : "Open the pending project or record and explicitly choose Upload or Delete."}</p>
               </div>
+
+              {cloudUserId && authenticatedOwnerContext?.userId === cloudUserId &&
+                getPendingR2MirrorCountForOwner(cloudUserId) > 0 ? (
+                <div className="panel" data-android-r2-qa-pending="true">
+                  <p>{language === "zh"
+                    ? `R2备用镜像待核实：${getPendingR2MirrorCountForOwner(cloudUserId)} 张。原云端照片已保存。`
+                    : `R2 shadow mirrors pending: ${getPendingR2MirrorCountForOwner(cloudUserId)}. Original cloud photos are saved.`}</p>
+                  <button type="button" className="secondary-button"
+                    disabled={!online || Boolean(syncingArchiveId)}
+                    onClick={() => void retryPendingR2Mirrors()}>
+                    {syncingArchiveId === "r2"
+                      ? (language === "zh" ? "核实镜像中…" : "Verifying mirrors…")
+                      : (language === "zh" ? "手动补镜像" : "Retry mirrors")}
+                  </button>
+                </div>
+              ) : null}
               {online && authenticatedOwnerContext && cloudUserId ? (
                 <div className="action-row" data-w5-upload-all-pending="true">
                   <button type="button" className="secondary-button"

@@ -169,12 +169,24 @@ function ReportGroupCard({ group, status, onUpdated }: {
   const [actionFailed, setActionFailed] = useState(false);
   const [moderation, setModeration] = useState<RecordModerationSnapshot | null>(null);
   const [moderationLoadFailed, setModerationLoadFailed] = useState(false);
-  const [representativeCategory, setRepresentativeCategory] = useState<string | null>(null);
+  const [moderationReasonCode, setModerationReasonCode] = useState("");
   const moderationRequestRef = useRef<{ key: string; requestId: string } | null>(null);
   const inFlight = useRef(false);
   const pageSize = 50;
   const total = Number(details[0]?.total_count ?? group.report_count);
   const href = safeSupportUrl(group.target_url);
+  // The server validates this separately from the historical representative_id.
+  // Only this ID may be attached to a record moderation decision.
+  const canTakeReportAction =
+    status === "open" &&
+    group.target_type === "record" &&
+    !!group.actionable_submission_id &&
+    !!moderation &&
+    !moderationLoadFailed &&
+    !detailError &&
+    !loading &&
+    details.length > 0 &&
+    !!moderationReasonCode;
   useEffect(() => {
     if (!expanded) return;
     let active = true;
@@ -215,29 +227,9 @@ function ReportGroupCard({ group, status, onUpdated }: {
     return () => { active = false; abort.abort(); };
   }, [expanded, group.target_id, group.target_type, status, detailPage]);
 
-  useEffect(() => {
-    if (!expanded || group.target_type !== "record") return;
-    let active = true;
-    const abort = new AbortController();
-    setRepresentativeCategory(null);
-    void (async () => {
-      try {
-        const { data, error } = await supabase.rpc("admin_get_support_report_group_details", {
-          p_target_type: group.target_type, p_target_id: group.target_id,
-          p_status: status, p_limit: 1, p_offset: 0,
-        }).abortSignal(abort.signal);
-        if (!active) return;
-        if (error) { setDetailError(true); return; }
-        const representative = normalizeSupportRows<AdminSupportReportDetailRow>(data)[0];
-        setRepresentativeCategory(representative?.category ?? null);
-      } catch { if (active) setDetailError(true); }
-    })();
-    return () => { active = false; abort.abort(); };
-  }, [expanded, group.target_id, group.target_type, status]);
-
   async function moderateRecord(action: "hide" | "restore", submissionId: string | null = null) {
     if (inFlight.current || !moderation || moderationLoadFailed) return;
-    const reasonCode = action === "hide" ? representativeCategory : null;
+    const reasonCode = action === "hide" ? (moderationReasonCode || null) : null;
     if (action === "hide" && !reasonCode) { setActionFailed(true); return; }
     const adminNote = note.trim() || null;
     const requestKey = [group.target_id, action, submissionId || "", moderation.version, reasonCode || "", adminNote || ""].join("|");
@@ -284,15 +276,19 @@ function ReportGroupCard({ group, status, onUpdated }: {
 
   async function update(nextStatus: "needs_info" | "resolved") {
     if (inFlight.current || (nextStatus === "resolved" && !resolution)) return;
+    if (nextStatus === "resolved" && resolution === "action_taken" && !canTakeReportAction) {
+      setActionFailed(true);
+      return;
+    }
     if (nextStatus === "resolved" && !window.confirm(copy.confirmGroup)) return;
     if (nextStatus === "resolved" && resolution === "action_taken") {
-      if (group.target_type !== "record" || !representativeCategory || !moderation || moderationLoadFailed) {
+      if (!canTakeReportAction || !group.actionable_submission_id) {
         setActionFailed(true);
         return;
       }
       // One RPC handles both first-time hide+report closure and report-only
       // closure when an administrator hide already exists.
-      await moderateRecord("hide", group.representative_id);
+      await moderateRecord("hide", group.actionable_submission_id);
       return;
     }
     inFlight.current = true;
@@ -369,9 +365,17 @@ function ReportGroupCard({ group, status, onUpdated }: {
               : copy.loading}
         </p>
         {moderationLoadFailed && <p role="alert" className={styles.error}>{copy.loadError}</p>}
-        {moderation && <div className={styles.actions}>
+        {moderation && <label className={styles.field}>
+          {language === "zh" ? "管理员审核原因（区别于原举报类别）" : "Moderation reason (separate from report category)"}
+          <select value={moderationReasonCode} onChange={event => setModerationReasonCode(event.target.value)} disabled={saving}>
+            <option value="">{language === "zh" ? "请选择审核原因" : "Choose moderation reason"}</option>
+            <option value="violence_threat_hate">{language === "zh" ? "暴力、威胁或仇恨" : "Violence, threats or hate"}</option>
+            <option value="harassment_privacy_fraud">{language === "zh" ? "骚扰、隐私侵害或欺诈" : "Harassment, privacy or fraud"}</option>
+            <option value="other_severe">{language === "zh" ? "其他严重违规" : "Other severe violation"}</option>
+          </select>
+        </label>}        {moderation && <div className={styles.actions}>
           <button type="button" className={styles.secondary}
-            disabled={saving || moderation.isHidden || detailError || details.length === 0}
+            disabled={saving || moderation.isHidden || !group.actionable_submission_id || !moderationReasonCode || detailError || details.length === 0}
             onClick={() => {
               if (window.confirm(language === "zh" ? "确认下架这条记录？" : "Hide this record?")) {
                 void moderateRecord("hide");
@@ -390,6 +394,13 @@ function ReportGroupCard({ group, status, onUpdated }: {
           </button>
         </div>}
       </div>}
+      {status === "open" && group.target_type === "record" && !group.actionable_submission_id && (
+        <p className={styles.note} role="status">
+          {language === "zh"
+            ? "该组没有可合法关联此记录的待处理举报，不能直接选择「已采取处理」或关联下架。历史举报仍保留，可请求补充，或人工选择「无违规」「重复」「关闭」并留下处置记录。"
+            : "No open report in this group is legally linked to this record. Action taken and report-linked hiding are unavailable. Historical reports remain available for more information or documented manual resolution."}
+        </p>
+      )}
       {status !== "resolved" && <div className={styles.form}>
         <p className={styles.note}>{copy.adminHint} {copy.groupHint}</p>
         <label className={styles.field}>{copy.adminNote}
@@ -407,7 +418,7 @@ function ReportGroupCard({ group, status, onUpdated }: {
         <div className={styles.actions}>
           {details[0]?.status !== "needs_info" && !details[0]?.supplement &&
             <button className={styles.secondary} disabled={saving} onClick={() => void update("needs_info")}>{copy.requestInfo}</button>}
-          <button className={styles.button} disabled={saving || !resolution}
+          <button className={styles.button} disabled={saving || !resolution || (resolution === "action_taken" && !canTakeReportAction)}
             onClick={() => void update("resolved")}>{saving ? copy.submitting : copy.markResult}</button>
         </div>
       </div>}

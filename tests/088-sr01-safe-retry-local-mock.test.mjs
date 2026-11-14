@@ -132,6 +132,19 @@ const stubs={
     "export const discardVerifiedPendingRecordEdit=async()=>{};"
   ].join("\n"),
   "@/lib/supabase":"export const supabase=globalThis.__sr01.supabase;",
+  // QA R2 shadow mirror is disabled in this historical source-upload retry
+  // suite; the real R2 journal/retry flows run in dedicated R2 tests.
+  "@/lib/r2-business-media-mirror":"export const mirrorCommittedRecordMedia=async()=> 'disabled';",
+  // This 088 suite tests idempotent retries, not image decoding. Its original
+  // intentionally synthetic non-JPEG bytes are handled by a codec boundary
+  // stub; 128-r02-pending-photo-guard.test.mjs exercises the actual strict guard.
+  "@/lib/pending-sync-photo-guard":[
+    "export const preparePendingSyncPhoto=async(image,codecs)=>{",
+    "const originalFile=new File([image.blob],image.name||'image.jpg',{type:'image/jpeg'});",
+    "const result=await codecs.thumbnail(originalFile);",
+    "return {originalFile,uploadFile:originalFile,thumbFile:result.file,standardized:null};",
+    "};"
+  ].join("\n"),
   "@/lib/android-connectivity":"export const isAndroidOnline=()=>true;",
   "@/lib/image-compression":[
     "export const standardizeRecordPhotoFile=async()=>{throw Error('unexpected compression')};",

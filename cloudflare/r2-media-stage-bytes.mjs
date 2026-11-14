@@ -7,6 +7,8 @@ import {
   R2_BUSINESS_STAGE_BYTES_PATH,
   verifyR2MediaServiceRequest,
 } from "../lib/r2-media-service-auth.mjs";
+import { R2_BUSINESS_INTERNAL_READ_PATH } from "../lib/r2-media-read-service-auth.mjs";
+import { handleR2InternalReadRequest } from "./r2-media-business.mjs";
 
 export { R2_BUSINESS_STAGE_BYTES_PATH };
 
@@ -98,6 +100,11 @@ export async function handleR2MediaStageBytesRequest(
   env,
   nowSeconds = Math.floor(Date.now() / 1000),
 ) {
+  // Preserve the established media-Worker entry while adding its internal
+  // authenticated read path; the existing POST staging path is unchanged.
+  if (new URL(request.url).pathname === R2_BUSINESS_INTERNAL_READ_PATH) {
+    return handleR2InternalReadRequest(request, env, nowSeconds);
+  }
   if (env?.R2_BUSINESS_MEDIA_MODE !== "isolated" || !env?.R2_BUSINESS_MEDIA) {
     return respond({ error: "disabled" }, 404);
   }

@@ -2,6 +2,8 @@ import {
   businessMediaPath, stageVerifiedR2Photo, createR2ReadTicket,
   verifyR2ReadTicket, readVerifiedR2Photo,
 } from "../lib/r2-media-business.mjs";
+import { sha256Hex } from "../lib/r2-media-business.mjs";
+import { R2_BUSINESS_INTERNAL_READ_PATH, verifyR2InternalReadRequest } from "../lib/r2-media-read-service-auth.mjs";
 
 /**
  * WP10/C owns the Worker entry, R2_BUSINESS_MEDIA binding and secrets.
@@ -25,9 +27,44 @@ function bearer(request, secret) {
   return diff === 0;
 }
 
+
+/** Service-binding-only image GET, HMAC gated. Never expose arbitrary R2 keys. */
+export async function handleR2InternalReadRequest(request, env,
+  nowSeconds = Math.floor(Date.now() / 1000)) {
+  const headers = { ...JSON_HEADERS, "CDN-Cache-Control": "no-store",
+    "Surrogate-Control": "no-store", "Cross-Origin-Resource-Policy": "same-origin" };
+  if (env?.R2_BUSINESS_MEDIA_MODE !== "isolated" || !env?.R2_BUSINESS_MEDIA) {
+    return Response.json({ error: "disabled" }, { status: 404, headers });
+  }
+  const identity = await verifyR2InternalReadRequest(request, env.R2_MEDIA_SERVICE_AUTH_SECRET, nowSeconds);
+  if (!identity) return Response.json({ error: "unauthorized" }, { status: 401, headers });
+  try {
+    const obj = await env.R2_BUSINESS_MEDIA.get(identity.path);
+    if (!obj) return Response.json({ error: "r2_object_missing" }, { status: 404, headers });
+    if (obj.size > 25 * 1024 * 1024) return Response.json({ error: "invalid_image" }, { status: 409, headers });
+    const contentType = (obj.httpMetadata?.contentType || "").toLowerCase();
+    const expected = obj.customMetadata?.sha256;
+    if (!/^image\/(?:jpeg|png|webp|gif|avif|heic|heif)$/.test(contentType) ||
+        !/^[a-f0-9]{64}$/.test(expected || "")) {
+      return Response.json({ error: "r2_integrity_unknown" }, { status: 409, headers });
+    }
+    const bytes = new Uint8Array(await obj.arrayBuffer());
+    if (bytes.length === 0 || bytes.length > 25 * 1024 * 1024 ||
+        (obj.size !== undefined && bytes.length !== obj.size) ||
+        await sha256Hex(bytes) !== expected) {
+      return Response.json({ error: "r2_integrity_mismatch" }, { status: 409, headers });
+    }
+    return new Response(bytes, { status: 200,
+      headers: { ...headers, "Content-Type": contentType, "Content-Length": String(bytes.length) } });
+  } catch {
+    return Response.json({ error: "r2_unavailable" }, { status: 503, headers });
+  }
+}
+
 export async function handleR2BusinessMediaRequest(request, env, fetchSource = fetch) {
   if (env?.R2_BUSINESS_MEDIA_MODE !== "isolated" || !env?.R2_BUSINESS_MEDIA) return respond({ error: "disabled" }, 404);
   const url = new URL(request.url);
+  if (url.pathname === R2_BUSINESS_INTERNAL_READ_PATH) return handleR2InternalReadRequest(request, env);
   if (url.pathname === R2_BUSINESS_STAGE_PATH && request.method === "POST") {
     if (!bearer(request, env.R2_MEDIA_MIGRATION_SECRET)) return respond({ error: "unauthorized" }, 401);
     let input;

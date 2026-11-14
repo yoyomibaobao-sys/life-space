@@ -163,6 +163,8 @@ import {
   withoutCapturedAt,
 } from "@/lib/supabase-schema-compat";
 import { ensureCloudCycles } from "@/lib/local-to-cloud-sync";
+import { mirrorCommittedRecordMedia } from "@/lib/r2-business-media-mirror";
+import { preparePendingSyncPhoto } from "@/lib/pending-sync-photo-guard";
 import { loadCloudProjectTaxonomy } from "@/lib/android-project-taxonomy";
 import { resolvePendingCloudTaxonomy } from "@/lib/pending-cloud-taxonomy";
 
@@ -791,24 +793,13 @@ async function syncImage(params: {
     });
   }
 
-  const originalFile = new File(
-    [image.blob],
-    image.name || `${image.id}.jpg`,
-    {
-      type: image.mime_type || image.blob.type || "image/jpeg",
-      lastModified: new Date(
-        image.captured_at || image.created_at || Date.now()
-      ).getTime(),
-    }
-  );
-  const standardized = image.metadata_stripped
-    ? null
-    : await standardizeRecordPhotoFile(originalFile, {
-        requireSanitized: true,
-      });
-  const uploadFile = standardized?.file || originalFile;
-  const thumbnail = await createImageThumbnailFile(uploadFile);
-  const thumbFile = thumbnail.wasGenerated ? thumbnail.file : null;
+  // Validate real stored bytes and prepare the thumbnail before reserving,
+  // uploading or inserting any cloud media object. Retain local queue on error.
+  const { originalFile, uploadFile, thumbFile, standardized } =
+    await preparePendingSyncPhoto(image, {
+      standardize: standardizeRecordPhotoFile,
+      thumbnail: createImageThumbnailFile,
+    });
   const { storagePath, thumbPath } = buildPendingMediaStoragePaths({
     userId,
     recordId: cloudRecordId,
@@ -937,9 +928,10 @@ async function syncImage(params: {
         upsert: !isFailedRetry,
       });
       if (thumbUpload.error) {
-        if (isFailedRetry) {
-          throw new Error("缩略图上传未获确认，已停止后续写入。");
-        }
+        // Main object may exist; never publish a media row without its thumb.
+        // Keep the original and operation for conservative Owner reconciliation.
+        attemptOutcome = "unknown";
+        throw new Error("缩略图上传未获确认，已保留本机原图及待上传任务，需先核账。");
       } else {
         uploadedThumbPath = thumbPath;
         uploadedThumbBytes = thumbFile.size;
@@ -1009,6 +1001,16 @@ async function syncImage(params: {
       reservedBytes,
       actualBytes,
     });
+    const mirror = await mirrorCommittedRecordMedia({
+      mediaId, ownerId: userId, thumbPath: uploadedThumbPath,
+    });
+    if (process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED === "true" &&
+        !["mirrored", "full_pending", "thumb_pending"].includes(mirror)) {
+      // No durable journal exists for auth/journal/configuration errors.
+      // Preserve local bytes and the exact operation for independent audit.
+      throw new Error("R2镜像无法确认安全恢复点，已保留本机原图，须先按操作ID核账。");
+    }
+    if (mirror.endsWith("_pending")) console.warn("R2 QA pending-sync mirror pending:", mirror);
     await updateLocalImageCloudSyncOperation(image.id, operationId, {
       status: "synced",
       cloud_archive_id: cloudArchiveId,
@@ -1016,6 +1018,7 @@ async function syncImage(params: {
       cloud_media_id: mediaId,
       cloud_media_url: null,
     });
+    return mirror;
   } catch (error) {
     await updateLocalImageCloudSyncOperation(image.id, operationId, {
       status: "failed",
@@ -1484,13 +1487,20 @@ async function syncPendingCloudArchiveUnlocked(params: {
           continue;
         }
         try {
-          await syncImage({
+          const mirrorOutcome = await syncImage({
             image,
             cloudArchiveId,
             cloudRecordId: cloudRecordId!,
             userId,
           });
           imageCount += 1;
+          // The cloud source is committed, but a QA R2 full/thumb journal
+          // may still need user-directed verification. Never report PASS here.
+          if (process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED === "true" &&
+              (mirrorOutcome === "full_pending" || mirrorOutcome === "thumb_pending")) {
+            failedCount += 1;
+            lastError = "云端原图已保存，R2镜像仍待核实；请使用手动补镜像，不要重新上传原图。";
+          }
         } catch (error) {
           failedCount += 1;
           lastError = errorMessage(error, "照片上传失败。");

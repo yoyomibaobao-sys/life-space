@@ -3,6 +3,7 @@ import { createImageThumbnailFile, standardizeRecordPhotoFile } from "@/lib/imag
 import { readImageCapturedAt } from "@/lib/photo-metadata";
 import { limitRecordPhotoBatch } from "@/lib/record-photo-batches";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
+import { mirrorCommittedRecordMedia } from "@/lib/r2-business-media-mirror";
 import { isStorageUploadMaintenance } from "@/lib/storage-upload-maintenance";
 import { canCreateMembershipContent, normalizeMembershipRpcResult } from "@/lib/membership";
 import { reserveStorageUpload, cancelStorageUploadReservation, settleStorageUploadReservation, reconcileMediaUploadCommit } from "@/lib/storage-usage";
@@ -95,7 +96,13 @@ export async function uploadCloudRecordImages({ recordId, files, userId }: {
         throw new Error("save_state_pending");
       }
     }
-    await settleStorageUploadReservation({ reservation, targetType: "media", targetId: row.id, legacyActualBytes: actualBytes });
+    const settled = await settleStorageUploadReservation({ reservation, targetType: "media", targetId: row.id, legacyActualBytes: actualBytes });
+    if (settled.ok) {
+      const mirror = await mirrorCommittedRecordMedia({
+        mediaId: row.id, ownerId: userId, thumbPath: committedThumb,
+      });
+      if (mirror.endsWith("_pending")) console.warn("R2 QA existing-record mirror pending:", mirror);
+    }
     uploaded.push(row);
   }
   return uploaded;

@@ -11,6 +11,8 @@ import { runScheduledMaintenance } from "./scheduled-maintenance.mjs";
 import { handleM4QaControlledUi } from "./m4-qa-controlled-page.mjs";
 import {
   R2_BUSINESS_MIRROR_PATH,
+  R2_BUSINESS_VIEW_PATH,
+  handleR2BusinessUserReadRequest,
   handleR2BusinessUserMirrorRequest,
 } from "./r2-media-user-gateway.mjs";
 
@@ -20,6 +22,10 @@ const worker = {
 
     const qaUi = handleM4QaControlledUi(request, env);
     if (qaUi) return qaUi;
+
+    if (url.pathname === R2_BUSINESS_VIEW_PATH && env?.R2_MEDIA_READ_ENABLED === "true") {
+      return handleR2BusinessUserReadRequest(request, env);
+    }
 
     if (url.pathname === R2_BUSINESS_MIRROR_PATH) {
       return handleR2BusinessUserMirrorRequest(request, env);

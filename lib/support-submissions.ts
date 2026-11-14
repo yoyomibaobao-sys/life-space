@@ -30,6 +30,7 @@ export type AdminSupportReportGroupRow = {
   target_id: string;
   target_url: string | null;
   representative_id: string;
+  actionable_submission_id: string | null;
   report_count: number | string;
   first_report_at: string;
   group_status: "open" | "resolved";
