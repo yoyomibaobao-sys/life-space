@@ -22,6 +22,7 @@ const mocks = {
   "lib/supabase": 'export const supabase=globalThis.__r21Api;',
   "lib/image-compression": 'export async function standardizeRecordPhotoFile(file){return {file,width:600,height:420}};export async function createImageThumbnailFile(){return {wasGenerated:true,file:globalThis.__r21Thumb}};',
   "lib/media-storage-upload": 'export async function uploadMediaStorageObject(path,file){return globalThis.__r21Upload(path,file)};',
+  "lib/r2-business-media-mirror": 'export async function mirrorCommittedRecordMedia(){return "disabled"};',
   "lib/storage-usage": 'export async function reserveStorageUpload(){globalThis.__r21Fake.writes.reserve++;return {ok:true,reservation_mode:"reservation"}};export async function settleStorageUploadReservation(){globalThis.__r21Fake.writes.settled++;return {ok:true}};',
   "lib/membership": 'export function normalizeMembershipRpcResult(data){return data};export function canCreateMembershipContent(data){return data?.can_create_content===true}',
   "lib/storage-upload-maintenance": 'export async function isStorageUploadMaintenance(){return false}',

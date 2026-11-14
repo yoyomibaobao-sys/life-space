@@ -1331,7 +1331,7 @@ test("seven-file UI scope uses the public projection and combined moderation RPC
   assert.match(support, /admin_moderate_record/);
   assert.match(support, /admin_list_record_moderation_events/);
   assert.match(support, /resolution === "action_taken"/);
-  assert.match(support, /target_type !== "record"/);
+  assert.match(support, /const canTakeReportAction =[\s\S]*?group\.target_type === "record"/);
   assert.match(audit, /admin_list_record_moderation_events/);
   assert.match(card, /get_my_record_moderation_status/);
   assert.match(card, /recordModerationLookup\?\.recordId === item\.id/);

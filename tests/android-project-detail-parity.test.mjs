@@ -78,6 +78,12 @@ test("mobile detail renders one header even without the website stylesheet", asy
           pluginBuild.onLoad({ filter: /\.module\.css$/ }, () => ({
             contents: "export default {}", loader: "js",
           }));
+          pluginBuild.onResolve({ filter: /^@\/lib\/use-guarded-record-image$/ }, () => ({
+            path: "guarded-record-image-hook", namespace: "test-stub",
+          }));
+          pluginBuild.onLoad({ filter: /.*/, namespace: "test-stub" }, () => ({
+            contents: "export function useGuardedRecordImage(source) { return source; }", loader: "js",
+          }));
         },
       }],
     });
