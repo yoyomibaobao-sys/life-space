@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "life-space-canary",
+  "services": [
+    {
+      "binding": "R2_BUSINESS_MEDIA_SERVICE",
+      "service": "life-space-business-media"
+    }
+  ],
+  "vars": {
+    "R2_BUSINESS_MEDIA_MODE": "isolated",
+    "R2_MEDIA_READ_ENABLED": "false",
+    "R2_MEDIA_MIRROR_WRITE_ENABLED": "false"
+  }
+}
