@@ -78,6 +78,33 @@ export function mergeFormalWranglerConfig(base, overlay) {
   return { ...base, services, vars };
 }
 
+export function addFormalPublicRuntimeVars(config, runtimeEnv = process.env) {
+  if (!isObject(config) || !isObject(config.vars)) {
+    throw new Error("formal_public_runtime_config_invalid");
+  }
+  const urlText = runtimeEnv?.NEXT_PUBLIC_SUPABASE_URL;
+  const publicKey = runtimeEnv?.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (typeof urlText !== "string" || typeof publicKey !== "string") {
+    throw new Error("formal_public_runtime_env_missing");
+  }
+  let url;
+  try { url = new URL(urlText.trim()); } catch {
+    throw new Error("formal_public_supabase_url_invalid");
+  }
+  if (url.href !== "https://eidltoikfpnrzxruvawf.supabase.co/" ||
+      !/^sb_publishable_[A-Za-z0-9_-]{16,}$/.test(publicKey.trim())) {
+    throw new Error("formal_public_supabase_identity_mismatch");
+  }
+  const vars = { ...config.vars };
+  if ((vars.NEXT_PUBLIC_SUPABASE_URL && vars.NEXT_PUBLIC_SUPABASE_URL !== url.origin) ||
+      (vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY && vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY !== publicKey.trim())) {
+    throw new Error("conflicting_formal_public_supabase_vars");
+  }
+  vars.NEXT_PUBLIC_SUPABASE_URL = url.origin;
+  vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = publicKey.trim();
+  return { ...config, vars };
+}
+
 function prepareFormalWranglerConfig() {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const basePath = path.join(root, "dist", "server", "wrangler.json");
@@ -91,7 +118,7 @@ function prepareFormalWranglerConfig() {
 
   const base = JSON.parse(fs.readFileSync(basePath, "utf8"));
   const overlay = JSON.parse(fs.readFileSync(overlayPath, "utf8"));
-  const prepared = mergeFormalWranglerConfig(base, overlay);
+  const prepared = addFormalPublicRuntimeVars(mergeFormalWranglerConfig(base, overlay));
   const bytes = Buffer.from(JSON.stringify(prepared, null, 2) + "\n", "utf8");
   fs.writeFileSync(basePath, bytes);
   const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
