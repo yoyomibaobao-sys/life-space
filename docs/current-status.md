@@ -335,3 +335,13 @@
 - **验证：**扩展定向隔离测试（7 个测试文件）60/60 PASS；TypeScript 检查 PASS；QA 配置下 Vinext 构建 PASS；QA-only 客户端构建 PASS，197,476 bytes，SHA-256 `81526d92b97c26679bce75328a0a8fe013c58b7819e2241d03b7049066731ec5`。本地统一 Worker smoke PASS：QA Origin 返回 200，生产 Origin 和关闭开关均返回 404；页面引用 QA 静态客户端，QA 产物存在而生产目录对应产物不存在。生产 `dist/client` 未修改。
 - **边界：**未打开线上 QA 页面、未执行真实认证、未发送真实镜像 HTTP 请求、未写 R2、未部署；未执行 113／115。60 项均为隔离模拟／本地模拟 R2，不能代替真实 R2 读回。QA 配置绑定既有独立 media Worker service，本轮未部署或线上核验该独立服务。
 - **报告：**`docs/release/LifeSpace-112-Media-Gateway-Integration-R01.md`。完成本轮源码与隔离验证后 STOP，等待 D 组按合法会话交接执行独立只读 R2 读回。
+
+### LifeSpace｜142 正式媒体接线与 147／148 发布前置收口（2026-11-16，北京时间）
+
+- **基线与保护：**以精确 Commit `90a9c8bc1dcccf7a5887e3d1b496cf4f790567f1` 建立独立 managed worktree。原 checkout HEAD 仍为 `6d85989`，原有 dirty 现场保持不动；本轮候选仅在独立 worktree 本地提交，不 push、不 merge、不部署。
+- **源码修复：**干净 90a9 构建默认生成的 `dist/server/wrangler.json` 缺少 `R2_BUSINESS_MEDIA_SERVICE` 和三个业务媒体变量。新增 `wrangler.site-formal-candidate.jsonc`、`scripts/prepare-w4-formal-wrangler.mjs`、`tests/w4-formal-wrangler-config.test.mjs`，并新增 `build:vinext:formal-candidate`。脚本保留既有 `R2_MEDIA_CANARY`，添加 Service Binding，且严格保证 `R2_MEDIA_READ_ENABLED=false`、`R2_MEDIA_MIRROR_WRITE_ENABLED=false`。
+- **验证：**`npm ci` 593 依赖 PASS；正式 Supabase publishable key 构建 PASS（未使用 service-role 代替、未将 key 写入文件）；W4/R2 定向测试 **83/83 PASS**；`typecheck:vinext` PASS；站点与媒体 Worker Wrangler dry-run 均 PASS；CRLF-aware diff check PASS。构建产物 `dist/server/wrangler.json` SHA-256 `d6bb33e310900644bb4f7f3491801ec373d98fce1093cc4b29319bee05a986bc`。
+- **正式控制面：**正式 `life-space.uk` Custom Domain 仍绑定 `life-space-canary`，当前 Version ID `3b35e5f4-740a-4173-9428-aaa0f133c974`。正式 Worker 只有旧 `R2_MEDIA_CANARY`，无业务 Service Binding、无业务 vars、无 `R2_MEDIA_SERVICE_AUTH_SECRET`；正式账户仅有 `life-space-media-canary` 桶，`life-space-business-media` Worker 与桶均不存在。镜像写入另缺正式 Rate Limiting binding；QA namespace 不得复用。
+- **Android：**实际 Actions APK v29 包名／版本／Origin 与 W4 同源媒体合同一致，APK SHA-256 `76461fefe4c380156dfa280ad04243ead0cdcee8730b48b7b8c69f588a91c82b`；但 Artifact channel=test，网站发布步骤 SKIPPED，正式分发未通过。
+- **兼容回退补验：**12 个新 SQL 兼容相关测试文件 **59/59 PASS**。022 最终 SQL 后像下的 141 R02 W4 隔离回退 PASS 继承；新建 SQL 后兼容回退手册，正式 Version ID 仍缺失。141 R04 因临时 Worker 404、凭据缺失，真实 HTTP 联动仍未完成，保持 PARTIAL。
+- **终态：**142 源码／配置候选 READY；正式资源与 SQL 后正式回退入口未建立；147／148 NOT READY，生产部署、正式资源创建、Secret 写入、SQL 与 R2 开关全部 STOP。详细配置见 `docs/release/LifeSpace-142-Formal-Media-Preflight-R01.md`；故障恢复顺序见 `docs/release/LifeSpace-142-SQL-Compatible-W4-Rollback-Runbook-R01.md`。
