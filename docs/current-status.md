@@ -457,9 +457,9 @@
 
 - **项目策略已获用户确认：**停止大规模、重复性 QA；不再以 160 项全部 PASS 作为上线前提。已签收证据继承，QA 保留为历史记录，不再作为每次普通修改的必经环境。后续以受控真实使用和针对性修复迭代。
 - **本轮范围：**统一源码整合包含 W4、W5、R2 媒体和 PayPal 业务代码；不执行生产 SQL、不部署正式 Worker、不切换 life-space.uk、不启用 R2 正式读写、不发布 APK、不启用 PayPal Live 收费。本轮未运行测试。
-- **统一候选：**当前本地 Release HEAD 为 `0a79d780c25356bb946546f6e72f799d5f87f4f0`；第一父链继承 `4e00ff41a9e6c1cf136c7428269923ac3d450d46`、R01 策略提交 `87fbb9457f49fdc215b656ff7eee18b619079569` 和补充文档提交 `bce0612aafb1be422ea97365a9fa5c682cf090f5`，第二父提交合入 main `535a2a5eef384700ce7dab73264f30e2e8256f28`。
+- **统一候选：**本地 Release HEAD 为 `2887b4cd8b3347b7f235b58294de883eb105aa38`，其第一父链包含 R01 策略、R2／PayPal 统一范围说明及 main 历史整合；GitHub Release 分支已更新至 `6b4132e27e5fe1a0b1e80adaa00dd60715f75661`，其最终源码树与本地 `aace7f2fe33021c316b3af1967760cf114da3ad0` 一致。
 - **保护：**原统一 checkout 的 49 项 dirty 现场保持原样；本轮在独立 managed worktree 建立 release/lifespace-r01-controlled-launch-20261116 分支，不覆盖原工作树。
-- **main 历史整合：**main 的生产健康检查提交 `535a2a5eef384700ce7dab73264f30e2e8256f28` 已由本地 merge commit `0a79d780c25356bb946546f6e72f799d5f87f4f0` 纳入 Release 分支，第二父提交为该 main Commit。`app/api/health/route.ts` 在 main、90a9 和候选中的 Git blob SHA 相同；合并前 `git merge-tree --write-tree` 与候选 Tree 完全一致，无内容冲突。PR #95 保持 Draft，不直接作为本次合并目标。当前本地合并尚未推送到 GitHub R01 分支，也未创建或合并正式 PR。
+- **main 历史整合：**main 的生产健康检查提交 `535a2a5eef384700ce7dab73264f30e2e8256f28` 已作为第二父提交纳入本地 merge commit `0a79d780c25356bb946546f6e72f799d5f87f4f0`，并由 GitHub Release 分支提交 `6b4132e27e5fe1a0b1e80adaa00dd60715f75661` 保留。`app/api/health/route.ts` 在 main、90a9 和候选中的 Git blob SHA 相同；合并树无内容差异。GitHub 比较结果：Release 分支相对 main ahead 216、behind 0。main 未被直接修改；PR #95 仍保持 Draft，本轮尚未创建新 PR 或合并到 main。
 - **统一产品范围：**W4、W5、R2 媒体和 PayPal 均纳入同一 Release Commit、构建和发布分支；不因 R2／PayPal 运行开关关闭而拆分源码。首期网站可沿用 Supabase Storage 读取路径，R2 正式读写与 PayPal Live 收费仅在各自最低运行门禁满足后启用。数据库安装、W4 部署、R2 资源切换、APK 分发和 PayPal Live 均分别核准。
 - **最低安全门禁仍保留：**SQL 顺序与事务后像、数据库与 W4 兼容、主账号和 Owner 权限、媒体 Storage 读取、恢复路径、正式 APK 包名／签名／目标环境及发布授权。停止大规模测试不等于放弃生产安全。
 - **当前状态：**统一候选分支已建立，源码中保留 W4、W5、R2 和 PayPal 模块；正式数据库尚未安装；正式媒体资源未就绪；R2 正式读写与 PayPal Live 收费未开放；未发生生产环境变更。后续状态以本节之后的最新回执为准。
