@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { mergeFormalWranglerConfig } from "../scripts/prepare-w4-formal-wrangler.mjs";
+import { mergeFormalWranglerConfig, addFormalPublicRuntimeVars } from "../scripts/prepare-w4-formal-wrangler.mjs";
 
 const overlay = JSON.parse(fs.readFileSync(
   new URL("../wrangler.site-formal-candidate.jsonc", import.meta.url), "utf8"
@@ -92,4 +92,26 @@ test("media Worker candidate is private and starts with both gates closed", () =
     R2_MEDIA_READ_ENABLED: "false",
     R2_MEDIA_MIRROR_WRITE_ENABLED: "false",
   });
+});
+
+test("formal runtime media uses only the production public Supabase URL and publishable key", () => {
+  const base = mergeFormalWranglerConfig(baseConfig(), overlay);
+  const publishableKey = "sb_publishable_abcdefghijklmnopqrstuvwxyz123456";
+  const updated = addFormalPublicRuntimeVars(base, {
+    NEXT_PUBLIC_SUPABASE_URL: "https://eidltoikfpnrzxruvawf.supabase.co",
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publishableKey,
+  });
+  assert.equal(updated.vars.NEXT_PUBLIC_SUPABASE_URL, "https://eidltoikfpnrzxruvawf.supabase.co");
+  assert.equal(updated.vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, publishableKey);
+  assert.equal(updated.vars.R2_MEDIA_READ_ENABLED, "false");
+  assert.equal(updated.vars.R2_MEDIA_MIRROR_WRITE_ENABLED, "false");
+  assert.equal(base.vars.NEXT_PUBLIC_SUPABASE_URL, undefined);
+  assert.equal(base.vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, undefined);
+  assert.throws(() => addFormalPublicRuntimeVars(base, {
+    NEXT_PUBLIC_SUPABASE_URL: "https://wrong-project.supabase.co",
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publishableKey,
+  }), /formal_public_supabase_identity_mismatch/);
+  assert.throws(() => addFormalPublicRuntimeVars(base, {
+    NEXT_PUBLIC_SUPABASE_URL: "https://eidltoikfpnrzxruvawf.supabase.co",
+  }), /formal_public_runtime_env_missing/);
 });
