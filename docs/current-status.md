@@ -457,9 +457,9 @@
 
 - **项目策略已获用户确认：**停止大规模、重复性 QA；不再以 160 项全部 PASS 作为上线前提。已签收证据继承，QA 保留为历史记录，不再作为每次普通修改的必经环境。后续以受控真实使用和针对性修复迭代。
 - **本轮范围：**统一源码整合包含 W4、W5、R2 媒体和 PayPal 业务代码；不执行生产 SQL、不部署正式 Worker、不切换 life-space.uk、不启用 R2 正式读写、不发布 APK、不启用 PayPal Live 收费。本轮未运行测试。
-- **统一候选：**本地 Release HEAD 为 `2887b4cd8b3347b7f235b58294de883eb105aa38`，其第一父链包含 R01 策略、R2／PayPal 统一范围说明及 main 历史整合；GitHub Release 分支已更新至 `6b4132e27e5fe1a0b1e80adaa00dd60715f75661`，其最终源码树与本地 `aace7f2fe33021c316b3af1967760cf114da3ad0` 一致。
+- **统一候选：**本地 Release HEAD 为 `861c7f791aa171f38f0ae2783c8f5bab26581b25`；GitHub Release 分支最新提交为 `5d6f44167cfd9022744f2c0d9aac20a081a78aeb`，两者源码树一致，Tree SHA `fdf598643eab6fc0fdb6f410bc485dbae0e1f5eb`。
 - **保护：**原统一 checkout 的 49 项 dirty 现场保持原样；本轮在独立 managed worktree 建立 release/lifespace-r01-controlled-launch-20261116 分支，不覆盖原工作树。
-- **main 历史整合：**main 的生产健康检查提交 `535a2a5eef384700ce7dab73264f30e2e8256f28` 已作为第二父提交纳入本地 merge commit `0a79d780c25356bb946546f6e72f799d5f87f4f0`，并由 GitHub Release 分支提交 `6b4132e27e5fe1a0b1e80adaa00dd60715f75661` 保留。`app/api/health/route.ts` 在 main、90a9 和候选中的 Git blob SHA 相同；合并树无内容差异。GitHub 比较结果：Release 分支相对 main ahead 216、behind 0。main 未被直接修改；PR #95 仍保持 Draft，本轮尚未创建新 PR 或合并到 main。
+- **main 历史整合：**main 的生产健康检查提交 `535a2a5eef384700ce7dab73264f30e2e8256f28` 已作为第二父提交纳入 GitHub Release 分支合并提交 `6b4132e27e5fe1a0b1e80adaa00dd60715f75661`，最新分支提交 `5d6f44167cfd9022744f2c0d9aac20a081a78aeb` 在其后追加状态记录。`app/api/health/route.ts` 的 Git blob SHA 与 main 一致；GitHub 比较结果：Release 分支相对 main ahead 216、behind 0。main 未被直接修改；PR #95 仍保持 Draft，本轮尚未创建新 PR 或合并到 main。
 - **统一产品范围：**W4、W5、R2 媒体和 PayPal 均纳入同一 Release Commit、构建和发布分支；不因 R2／PayPal 运行开关关闭而拆分源码。首期网站可沿用 Supabase Storage 读取路径，R2 正式读写与 PayPal Live 收费仅在各自最低运行门禁满足后启用。数据库安装、W4 部署、R2 资源切换、APK 分发和 PayPal Live 均分别核准。
 - **最低安全门禁仍保留：**SQL 顺序与事务后像、数据库与 W4 兼容、主账号和 Owner 权限、媒体 Storage 读取、恢复路径、正式 APK 包名／签名／目标环境及发布授权。停止大规模测试不等于放弃生产安全。
 - **当前状态：**统一候选分支已建立，源码中保留 W4、W5、R2 和 PayPal 模块；正式数据库尚未安装；正式媒体资源未就绪；R2 正式读写与 PayPal Live 收费未开放；未发生生产环境变更。后续状态以本节之后的最新回执为准。
@@ -467,3 +467,5 @@
 - **040／Guide：**040 R16 Git 来源结论为 C，原件 SHA-256 已核对；静态审查及 022 安装链兼容性评估尚未签收，不执行 SQL。058、060、061 已有通过证据继承；059 Plus 真实浏览器登录／第六条显示仍保留 PARTIAL，不再作为首期受控使用的独立 QA 阻塞。
 - **媒体／APP：**125、126、127、128、140、141 R02／R03 等已通过范围继承；141 R04 三阶段媒体开关联动仍 PARTIAL。138 正式签名 APK 与 139 真机升级证据继承，150 正式分发尚未执行。147 正式媒体 Worker 仍 NOT READY，148 正式网站部署未执行。
 - **支付：**PayPal 订单、Capture、会员确认和 Webhook 代码保留在统一源码；143 Sandbox Capture／Webhook 幂等闭环仍未完成，因此 Live 收费保持关闭。R2 业务代码同样保留在统一源码；147 正式媒体 Worker／资源仍 NOT READY，因此 R2 正式读写保持关闭。
+- **正式环境只读核查（2026-11-16）：**Supabase `eidltoikfpnrzxruvawf` 状态 ACTIVE_HEALTHY，PostgreSQL 17.6.1.141；最新已登记迁移 `20261011125530`。`market_posts.published_at`、会员服务期限字段及 `get_plus_plant_guide`、`public_guide_record_projection`、`begin_paypal_membership_capture`、`admin_moderate_record` 均未查到；`confirm_paypal_membership_payment_json` 存在。Cloudflare 正式账户目前只列出 R2 桶 `life-space-media-canary`，没有 `life-space-business-media` 桶或同名正式媒体 Worker。上述均为只读核查，未执行写入。
+- **W4 构建尝试：**本地 `build:vinext:formal-candidate` 在 120 秒执行窗口超时；未得到完整构建回执，未生成可签收的 W4 发布产物。残留 Node 进程已停止。本轮未运行测试。
