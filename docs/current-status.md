@@ -1,5 +1,13 @@
 # LifeSpace 当前开发进程（跨聊天交接）
 
+## 最新专项检查点｜123 R02 媒体源对象字节校验（2026-11-12）
+
+- 统一源码 `development/lifespace-unified-r01`，本轮起点 HEAD `54de3c136aff611ee5dd0781403a1595d42b785d`；原有 Android Gradle、`mobile-shell/index.html`、`.wp10-delivery/` 未提交成果保持原状。
+- 修复 `cloudflare/r2-media-user-gateway.mjs`：对 Supabase Storage 原图／缩略图分别查询对象长度并与下载字节比较；`media.size_bytes` 继续只表示两个文件合计计费量。真实隔离样本 14,663 + 10,997 = 25,660；不匹配或 Storage 元数据不可用时禁止后续 R2 请求。
+- 定向测试 `tests/r2-media-user-gateway-media-id.test.mjs` 5/5 PASS；网关安全、QA 一次性 UI 和签名 stage-bytes 定向回归合计 41/41 PASS。继承 112 原 60/60 证据，不重新执行全任务。
+- 仅 SOURCE FIX + ISOLATED TEST。未部署 Worker、未真实镜像、未写 R2、未修改计费 RPC；本轮补丁及 SHA 另存专项交付文件，保持未提交，等待统一总控安排。
+
+
 > 最近整理：2026-10-15（北京时间）。本文件是**人工／执行任务结束时更新的检查点**，不是自动实时监控、上线批准或完整验收报告。
 >
 > 可信度：Git／代码与正式站状态由 2026-10-15 只读核查确认；R6 的真机结果引用用户提供的 Work 终态报告；较早的 QA 与 Cloudflare 配置记录为历史检查点，继续操作前应重新核对。
@@ -336,6 +344,105 @@
 - **边界：**未打开线上 QA 页面、未执行真实认证、未发送真实镜像 HTTP 请求、未写 R2、未部署；未执行 113／115。60 项均为隔离模拟／本地模拟 R2，不能代替真实 R2 读回。QA 配置绑定既有独立 media Worker service，本轮未部署或线上核验该独立服务。
 - **报告：**`docs/release/LifeSpace-112-Media-Gateway-Integration-R01.md`。完成本轮源码与隔离验证后 STOP，等待 D 组按合法会话交接执行独立只读 R2 读回。
 
+### LifeSpace｜原160项统一目录续办：022、027、038、040、097、123（2026-11-12）
+
+- **实际统一源码：** `development/lifespace-unified-r01`，本轮开始 HEAD `54de3c136aff611ee5dd0781403a1595d42b785d`；并行修改及未跟踪交付目录全部保护，没有重置或整文件覆盖。本段仅记录本轮实际操作，不代表发布。
+- **123：** 当前统一工作区已有媒体 full/thumb 独立字节验证的未提交修改；实际核验签名补丁 SHA-256 `6537c909e25f02f63a983c50b190987293aaa71be922c4cddd7ce36a8e559717`，未重复打补丁。继承原41/41 PASS；本轮联合定向媒体4项PASS。无真实R2写入／读回／部署。
+- **097：** 对照并验证独立工作树最小补丁 SHA-256 `02350a7df967235380edf0ced1c83ab2de5031bd485c92c129f385ba7f99b1b5`，已应用到统一工作区的 `lib/android-remote-api.ts` 与 `tests/android-single-runtime-prerequisites.test.mjs`。相关联合定向路由与权限测试通过；尚无真实QA HTTP删除与Android真机验收；没有实际删除。
+- **027：** 在 `lib/auth-return.ts` 加入Supabase环境与认证邮件回调Origin匹配：生产限定正式Origin，QA必须显式提供 `NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN` 的独立HTTPS回调地址，缺失、错配、不合法均拒绝。新增 `tests/account-and-region.test.mjs` 环境错配测试并通过；实际Supabase callback白名单、CAPTCHA/Turnstile开关与真实邮件认证未验，QA配置必须相应设置。
+- **040：** Vercel `life-space` 项目只读可见，最近查询部署 READY，来源提交 `56207d328b6d7f869aa0d94351b8e0d5acc1a37e`；仓库 `vercel.json` 声明UTC 03:17的 `/api/internal/storage-deletion-worker`。该路由在Storage清理前后各调用一次 `process_cloud_trial_lifecycle`。正式库只读 `pg_get_functiondef` 明确存在遍历 `market_posts` 并调用 `request_delete_market_post` 的旧清理代码路径，存在误删集市信息的风险；但其具体生产触发范围与UTC 04:03维护记录来源尚未关闭，未触发或修改任务。禁止恢复720小时自动结束。
+- **038：** 继承037原24条真实HTTP PASS及038原24/24隔离测试PASS；本轮仅看到已连接浏览器中的ChatGPT标签页，没有可操作的QA A/B认证浏览器会话。真实签发、到期、缓存及回收站Owner专项仍未完成；不得标记真实HTTP PASS。
+- **022：** 继承019、020 R02、021与R39的已签审查和确定的安装顺序；本轮未完成同一隔离数据库中R39与020实际事务联合测试，未执行生产SQL。保留PARTIAL；不将已审SQL当成安装完成。
+- **本轮测试：** 四文件联合定向首次31项中30 PASS，旧地区空城市名称断言1 FAIL（与本次路径无直接关系）；按涉及改动的精确名称再跑15/15 PASS。TypeScript `npx tsc --noEmit --incremental false` 本轮执行超时，不能记录PASS；统一正式构建和Android真机均未完成。
+- **结论：** 上述成果均限于源码／只读控制面／真实DB只读与隔离测试。本轮没有正式DDL/DML、真实删除、Storage清理、Webhook、R2写入、Worker部署、生产发布或Git提交。未完成项目继续PARTIAL，必须补实际证据后才可置PASS。
+
+### LifeSpace｜原160项：统一QA与关键阻断续办（2026-11-12，040/022/088及关联）
+
+- **040 最新只读生产事实：** 正式 Vercel `life-space` production 最新查询部署 `dpl_5KTPCp5nBRa59DfvLAQjGt3tQkp4`，Git `f5420dee0100c09e0090055dda8783071e73173c`，该提交的 `vercel.json` 实际声明UTC `03:17` Cron维护入口；源路由会在Storage批量删除前后各调用一次 `process_cloud_trial_lifecycle`。正式库 `pg_get_functiondef` MD5 `3f6e2056a63ac07811a56ff461204640`，在cleanup_due_at到期后仍循环 `market_posts` 并调用 `request_delete_market_post`。2026-10-30到11-12的14天每日有一条`source=vercel`的维护审计，时间集中UTC `04:03:55`，11-10 `lifecycle_processed=1`；审计未证明删除已经发生，也不能用03:17源码推断04:03具体调度来源。**风险未排除。**
+- **040 最小安全候选：** `docs/release/LifeSpace-040-Market-Lifecycle-Safety-Candidate.sql`，SHA256 `b29d4c9d216c3300e7238fdb4b07c5c73bd4644ecc98e5b6e3cba3c2078f1f34`。仅在完全匹配当前正式函数MD5、前像位置/路径时，移去历史cleanup阶段自动删除集市帖子循环；其余试用通知、档案/Storage删除、错误及重试逻辑原样继承，避免绕开其它清理链。`tests/lifespace-040-market-lifecycle-source.test.mjs`静态守卫测试3/3 PASS；尚未进行该候选的真实PostgreSQL隔离执行与动态后像测试。**不得对生产执行候选**，正式修复需再次独立授权及守卫/兼容验收。
+- **022 精确继承而非重跑：** 从Library找到原022最终R02独立签收 `PASS / SOURCE-READY`，其PGlite联合5/5（正序、逆序、RLS漂移、020回滚、重复拒绝/17保护）及历史源签验已通过。本轮Windows原件SHA再核：R39 `50de092582aa58d1238aa1175225d14b5af42a49b852c868806632567a2dbc8b`，020 `eb4a2860dabcc1f00b5a62e7b5fff1515d4c47b4136224b56a13e9133dc9fc82`。但原报告明确未执行完整249KB R39(含ADM2/R11)+020单个一次性真实PG数据库全链；本机Docker Linux引擎当前不可达，未假称本轮新完整事务PASS。022保持已签的SOURCE-READY，完整动态联合仍缺独立环境。
+- **088 APK只读核验：** `D:\LifeSpace-QA-Android10-Pending-20261019\artifacts\088-unified-qa-build-20261112\LifeSpace-088-QA-20261112-2026111201.apk`，5,236,552字节，SHA256 `491a3bbdacd5345e44b7d4d2f081b1e16bb418500af19f7d88898c7026ee6464`；AAPT manifest确认真实`com.youshi.cultivation.w5qa20261112r088`、versionCode `2026111201`；APK内Capacitor server hostname 指向 `life-space-w4-r25-qa-20261109.yoyomibaobao.workers.dev`，无serverUrl，独立包名不同于R26。QA网站只读HEAD当前HTTP 200。签名v2继承088原通过回执，本轮没有重做签名校验（本机Java环境未自动配置）。
+- **088/R26队列保护：** 因Android包名不同，088不能直接访问旧R26应用私有WebView IndexedDB/pending，也不能证明旧队列已迁入；应保留原R26包及其资料，不覆盖、不卸载。088可创建隔离QA自有pending样本测重试。需要历史数据迁移/覆盖保留的单独安全路径及实际真机前后快照，不能以新包复测替代。
+- **QA集中验收条件：** 088编译时间早于本轮027、097及123整合，不能认定该APK包含这些后续改动。QA网站已在线并不代表部署有最新统一源码。真正集中验收需要同一已冻结源码构建的独立QA网站/APK、明确 `NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN` 白名单与CAPTCHA、`NEXT_PUBLIC_CLOUD_EXPORT_ORIGIN` 匹配QA服务、真实A/B凭据及合法签名URL；本轮无部署、真实删除或R2写入。后续单次Android10验收先保留R26，给088独立包建立QA样本，再分别验登录/回调、环境错配拒绝、待上传安全重试、Owner限制、媒体签名URL时间与缓存；真实删除/R2写入仍需单独授权。
+- **本轮验证：** 040来源守卫3/3 PASS；统一源码TypeScript执行 `node ./node_modules/typescript/bin/tsc --noEmit --incremental false` exitCode 0 PASS。未重复088 Gradle打包；未执行新的Web部署或构建。历史未提交共享Android改动继续保持。禁止将040静态测试等同动态风险排除。
+
+### LifeSpace｜原160项：040隔离实测、022联合边界与统一QA最终构建（2026-11-12，最新）
+
+- **040 实际PG17隔离验收：** Docker自建独立 PostgreSQL 17.11，正式函数真实只读前像MD5 `3f6e2056a63ac07811a56ff461204640`，本地重新建立完全一致。040候选微调：取消trial cleanup对market_posts的自动删除后，同时移除它们在cleanup完成判定中的占用统计，但继续保留archive/storage删除失败重试及正常结束接口。最终候选 `docs/release/LifeSpace-040-Market-Lifecycle-Safety-Candidate.sql` SHA `9adec9557d23554c69c46ae7ebe921029c1427bf55d72a78e6544b3ee709c35d`。隔离执行SUCCESS，后像MD5 `aae1f18f432f49658f55a9d2083f5144`。真实PG样本验证活跃帖和主动结束帖保留、取消会员帖子不改、Archive清理、未完成Storage作业阻断、失败码记录与再试恢复；重复安装被精确前像指纹拒绝；人为SQL异常使事务回滚并恢复原MD5。源码静态测试5/5 PASS。证据 `docs/release/LifeSpace-040-PostgreSQL-Isolated-Receipt.md`。**正式风险未排除：候选没有安装正式库，需独立审批+恢复点+正式守卫/兼容验收。**
+- **022 真实PG联合补验：** R39原件SHA `50de092582aa58d1238aa1175225d14b5af42a49b852c868806632567a2dbc8b` 与020 SHA `eb4a2860dabcc1f00b5a62e7b5fff1515d4c47b4136224b56a13e9133dc9fc82` 再核无误。隔离库020逆序触发严格前像拒绝且RPC不存在；真实PG的目标目录合成前像能够启动原R39，但原R11 `adm_r09_preflight_failed` 对缺失的准确生产ACL/RLS/Policy/视图等拒绝，事务没有提交且`market_posts.published_at`未创建。**022原源级SOURCE-READY与历史PGlite5/5继承不变；本轮完整原R39+020同一PG真实动态PASS尚未取得，仍PARTIAL，不得冒称最终实库验收通过。** 详情 `docs/release/LifeSpace-022-PostgreSQL-Joint-Receipt.md`。
+- **统一Android QA正式候选：** 独立构建副本 `D:\LifeSpace-QA-Unified-20261112-Build` 冻结HEAD `54de3c136aff611ee5dd0781403a1595d42b785d` 与受保护未提交增量；为027补Android esbuild认证回调QA同源编译变量，`scripts/build-mobile-offline.mjs` SHA `ebb102f6e905cd54e2345fc5f67fdcd475bd53a47b622f0db7fbaf64af62c448`。Gradle 166项BUILD SUCCESSFUL exitCode0，APK `LifeSpace-Unified-QA-20261112-2026111202.apk` SHA `6529d80f36e0c283fa53944cdd90fd6de60a30a44a1f11d7eed649c6309c81a5`，包 `com.youshi.cultivation.w5qa20261112unified`，versionCode `2026111202`，v2 debug签名PASS。QA Supabase/Worker/027/097代码内嵌核对PASS。
+- **统一网站QA最终候选：** Vinext/Vite构建exitCode0，客户端241文件/服务端383文件；在公开客户端bundle中补充并验证同QA Origin的Turnstile公开SiteKey，最终候选包 `D:\LifeSpace-QA-Unified-20261112-Build\LifeSpace-Unified-QA-Web-20261112-Final.zip`，7,548,254字节、SHA `89c70b8d647c84cce8bc638d556212d9b8f68db403741822b679c2d5312aa5ca`。前一版无站点Key的Web ZIP为历史中间产物，不作为最终候选。没有实际部署。
+- **旧R26与集中验收：** 新APK独立包名/私有沙盒，不覆盖或继承原R26的WebView IndexedDB/pending；旧数据不得卸载/清理。新包只能以自有QA测试队列先验安全重试；旧数据迁移另需现场前后快照和合法迁移方案。027需正式/QA认证回调白名单及Turnstile真实邮件；038需A/B真实签名URL有效期/缓存；088需设备503/UNKNOWN幂等；097需QA HTTPS API与Owner路由的真机会话；123需另行授权真实R2写入与独立SHA读回。网站和APK均未部署/安装、未做生产SQL、未执行Cron或真实删除。完整交付记录 `docs/release/LifeSpace-Unified-QA-20261112-Build-Receipt.md`。
+
+
+
+
+
+### LifeSpace｜隔离QA网站部署回执（2026-11-12 UTC 05:54，原160项目录）
+
+- **授权边界：** 用户仅批准部署隔离QA网站；正式 `life-space.uk` / `life-space-canary`、正式Supabase、Cron、R2媒体Worker、Android APK 均未修改。
+- **部署目标：** Cloudflare Worker `life-space-w4-r25-qa-20261109`（账户 `5765d2d135aa20de90c898ab93ad4c11`），在线地址 `https://life-space-w4-r25-qa-20261109.yoyomibaobao.workers.dev/`。
+- **新部署：** `8672233c-2c9a-4f4a-aa7b-27c50c669814`，版本 `5b3d890e-e3bf-4b19-8e58-db61657c8abf`，Cloudflare控制面确认100% QA流量；原版本 `a867633d-218e-4db7-8b21-5d631f318981` 保留用于回退。
+- **输入原件：** `D:\LifeSpace-QA-Unified-20261112-Build\LifeSpace-Unified-QA-Web-20261112-Final.zip`，大小7,548,254字节，SHA-256 `89c70b8d647c84cce8bc638d556212d9b8f68db403741822b679c2d5312aa5ca`。Web构建原件未改。
+- **发布保护：** 原始dist/server/wrangler.json内默认Worker为正式 `life-space-canary`，故单独生成 `dist/server/wrangler.isolated-qa-web-only.json` 精确锁定隔离QA Worker及账户；保持原QA 13项绑定（名称/类型/值逐一一致），QA Supabase `mablwxlipcgbmbnfdbkc`，PayPal、搜索索引和R2业务媒体模式为关闭。首次候选 `66bef967-4738-4d0a-844a-a109e4aa3184` 曾意外包含 `R2_MEDIA_CANARY`，**只上传未激活**；纠正后最终版本无R2桶绑定，已核实且部署。
+- **实际验证：** Wrangler versions upload及versions deploy均exitCode0；Cloudflare API确认100%生效且正式Worker版本仍为 `3b35e5f4-740a-4173-9428-aaa0f133c974`。Cloudflare Browser Rendering对隔离QA首页实际请求返回HTML，页面标题“有时·耕作 | LifeSpace for Cultivation”。本机Node fetch和curl访问新旧QA域名均网络超时，无法作为HTTP负例；真实QA A/B身份、注册邮件、签名URL、动态媒体、Android真机仍待单独验收。
+- **结果：** **隔离QA网站发布及基础页面渲染PASS；不等于027/038/088/097/123等整项PASS。** 未执行生产SQL、正式Worker切换、定时任务、真实删除、R2写入、APK安装。
+
+- **附加安全核账（部署后）：** 上传阶段曾产生但未激活的版本 `66bef967-4738-4d0a-844a-a109e4aa3184` 含不应带入QA的 `R2_MEDIA_CANARY` 桶绑定；已调用 Cloudflare Worker Version DELETE 成功，随后的GET返回404。最终QA版本 `5b3d890e-e3bf-4b19-8e58-db61657c8abf` 仍为100%流量且无R2桶绑定；正式 `life-space-canary` 版本保持 `3b35e5f4-740a-4173-9428-aaa0f133c974`。未删除原QA回退版本或任何存储对象。
+
+### LifeSpace｜统一正式上线目标与执行终点（2026-11-12）
+
+- **唯一最终交付：** 依据原160项唯一执行目录，把W4网站、W5 Android、正式Supabase、Cloudflare网站/媒体Worker与R2媒体系统合为同一可追溯版本，最终将经验证的正式网站更新到 `https://life-space.uk`，并交付Android正式版本、媒体链路和正式真实运行验收。**QA仅是必要验证门禁，不是整个项目的STOP或交付终点。**
+- **禁止任务膨胀：** 原160编号不变，不新增SR类执行任务、固定执行组或长期分叉版本。子修复、源码回执、独立worktree仅是同一编号内部证据；既有PASS直接继承，不重做无影响的历史测试。
+- **统一基线：** `development/lifespace-unified-r01` 是当前唯一集成候选；先核对实际HEAD、未提交/未跟踪成果及每份签收补丁，逐项安全合入，不覆盖、不清理、不重置，不把QA中间包当正式候选。
+- **优先顺序由真实阻断决定：** 040生产旧生命周期集市删除风险需完成正式安全修复门禁；022真实同库R39→020联合动态缺口与023备份恢复/旧Worker兼容；027/038/088/097/123及相邻项目按真实使用链路开展必要的认证、权限、待上传、媒体和R2验收；然后统一生产变更窗口、精确部署、读回、回退验证和上线后的业务核账。能共用同一版本/会话/设备的验收一轮连续完成。
+- **当前证据与未完成边界：** 040候选已在独立PG17隔离通过，但正式函数尚未修改、风险未解除；022仍缺精确前像下完整R39+020同一PostgreSQL实例动态PASS；统一QA网站已部署到 `life-space-w4-r25-qa-20261109`、QA Android APK `2026111202` 已构建但未安装，不能将QA通过等同正式签收；旧R26私有待上传资料须保护；真实R2镜像写入/独立SHA读回、正式数据库恢复门禁及网站正式运行尚缺。
+- **操作授权边界：** 此决定明确**最终上线方向**，但不是跳过单项高风险操作门禁的授权。正式数据库DDL/DML、Cron/生产Worker部署、真实删除、R2写入/镜像迁移、正式Android发布须在核实目标、备份、权限、回退条件并取得对应明确授权后执行；不得以“完成QA”为由永久终止总目标。
+- **汇报标准：** 每轮只报告原编号真实已关闭的数量、唯一统一版本、离生产上线最近的阻断及可直接执行的下一动作；SOURCE-READY、QA BUILD PASS、隔离测试PASS与真实正式运行PASS分别标识。整个项目完成条件为生产W4+W5+数据库+Worker+R2全部可追溯发布并实际验收，而非单一QA Worker部署。
+
+### 原160项｜2026-11-12正式上线门禁补验（040、022、023）
+- **022 完整真实PG联合 PASS / SOURCE-READY**：使用正式项目只读schema-only导出（937834字节、SHA 7d004c749aa8c49f3f1a01189eedc65c983fb55503f03924f2c82a8df95b95e8），在无网络的正式同版本PG17.6.1.141空库完整恢复，真实R39与020 R02按顺序分别COMMIT exit0；逆序拒绝、两SQL重复拒绝、R39策略漂移阻断、COMMIT前异常回滚PASS；三Guide策略与RPC精确后像、合成Plus/Free/匿名数据库权限PASS。正式未安装，真实JWT/HTTP门禁另验。详见 docs/release/LifeSpace-022-PostgreSQL-Joint-Receipt.md。
+- **040 独立安全安装准备 PASS（正式风险尚未解除）**：正式函数MD5仍3f6e2056a63ac07811a56ff461204640；最终SQL SHA9adec9557d23554c69c46ae7ebe921029c1427bf55d72a78e6544b3ee709c35d。在R39前像、R39+020联合后像两个隔离副本均安装通过并达后像MD5 aae1f18f432f49658f55a9d2083f5144。受守卫独立安装及回滚文件 docs/release/LifeSpace-040-Production-Install-Guarded.sql（SHA384b3955fb65aac11880874b0a2f1c07f8838162f1ef7c9eb2152c403ea0ab30）、docs/release/LifeSpace-040-Production-Rollback-Guarded.sql（SHAda6bf1684c32e35df26b4b40da988892f2172a9384545870e6569c02ff26af19）均经实际隔离安装→回滚PASS。生产须先形成可验证备份并另获最小函数写入授权。详见040原报告续验。
+- **023 PARTIAL：正式恢复点不满足生产门禁**：正式PG17.6.1.141，QA PG17.11.0.002；正式5认证账号、20项目、41记录、53媒体、6集市、124 Storage对象（metadata 37,404,186字节）。发现1条公开未回收但无下属记录的项目孤儿，不改Owner。CLI物理备份列表 backups=null、pitr_enabled=false（walg_enabled=true不能代替可恢复PITR）；仅完成schema真实恢复和历史QA备份SHA复核，正式用户数据及Storage 124对象同一时点加密备份/独立还原缺失。详见 docs/release/LifeSpace-023-Production-Recovery-and-Compatibility-Receipt.md。
+- **正式W4/W5/R2状态**：life-space.uk仍绑定life-space-canary旧Worker版本3b35e5f4-740a-4173-9428-aaa0f133c974；QA Worker版本5b3d890e-e3bf-4b19-8e58-db61657c8abf。R2真实迁移未验；旧Android R26本机pending不受新独立QA APK迁移保证。统一源码HEAD仍54de3c136aff611ee5dd0781403a1595d42b785d，所有未提交成果原样受保护。无正式DDL/DML、Cron修改、Worker部署、R2写入或Android安装。当前唯一生产优先门禁是023可恢复的一致备份+停写和必要的操作批准。
+
+
+### 2026-11-12｜040/022正式安装顺序再核验（覆盖前段040可先安装的解读）
+- **040不能先于R39上线：** 隔离PG中040先安装虽可PASS，但随后原版R39触发 R08-S02 STOP: protected function drift public.process_cloud_trial_lifecycle(integer)。因此正式顺序必须是 **R39 R02 → 020 R02 → 040**，且先通过023恢复点与停写门禁。
+- 新的 docs/release/LifeSpace-040-Production-Install-Gate.psql 已在R39+020后隔离库原子安装PASS，MD5进入 aae1f18f432f49658f55a9d2083f5144；重复安装拒绝且函数不变。docs/release/LifeSpace-040-Production-Rollback-Candidate.sql 已隔离回滚至原MD5 3f6e2056a63ac07811a56ff461204640。无生产写入。
+- **022 SOURCE-READY：** 正式schema恢复隔离测试的完整R39→020、17函数NO-OP、RLS角色矩阵、逆序/重复/漂移拒绝均PASS；正式未安装。
+- **023仍为生产STOP：** 缺正式数据和124个Storage对象同一时间完整备份与独立恢复，不得执行正式DDL、Cron修改或Worker部署。
+
+### 原160项｜023正式数据＋Storage本地恢复补验（2026-11-12最新）
+- **正式数据库数据级加密备份与真实还原PASS：** 正式只读数据导出3,410,571字节，压缩Windows用户级DPAPI密文669,974字节、SHA256 8f68b198a5c3daec2d491cb67ed56b924a25535141ca8c56ae7290c20d292cee，存 D:\LifeSpace-023-Encrypted-Recovery-20261112。利用正式已签的schema在无网络的Supabase PG17.6.1.141独立库中stdin解密恢复，103个COPY块、psql退出0。正式与独立恢复12张关键表全行哈希12/12一致，账号/会话/支付/Owner/Storage目录计数及指纹一致。
+- **Storage实际字节备份及本机恢复PASS：** 124/124正式对象经只读HTTPS获取，每个大小与数据库元数据一致，总37,404,186字节，逐文件SHA256及DPAPI加密；独立进程对124个密文逐个解密并按SHA256复核PASS，密文清单SHA 86108676400220e32a782815236b1db6a9d0d049459f053810e9c3c45b07a61f，存同目录。备份前后云端对象数量、总字节及目录指纹相同。没有对生产Storage或R2执行任何写入。
+- **023状态依然是PARTIAL / 正式安装STOP：** 该本机DPAPI备份只允许当前Windows账户解密，没有跨设备恢复密钥/异地独立副本；无正式受控停写窗口产生的DB+Storage原子一致恢复点，且没有独立Storage服务的真实对象重新导入验收。因此040、R39、020均仍不得正式安装。真实JWT/正式Worker/R2/旧R26升级均继续原门禁。
+- **安全备注：** 本轮一次Supabase CLI dry-run向诊断工具日志输出数据库连接口令；禁止传播该日志，生产变更前应在单独授权下评估口令轮换。正文与回执不复述凭据。
+- **完整新增回执：** docs/release/LifeSpace-023-Production-Recovery-and-Compatibility-Receipt.md 后续实测段落。统一源码HEAD 54de3c1和全部并行未提交文件受保护，无生产数据库修改、Cron变更、Worker部署或正式媒体写入。
+
+### 原160项｜023恢复续办真实状态（2026-11-12 本轮）
+- **凭据事件PASS：** 原CLI dry-run打印的PGUSER确认为临时`cli_login_postgres.eidltoikfpnrzxruvawf`而非长期postgres；正式库pg_roles只读显示口令有效期至2026-11-12 07:08:02 UTC且已过期。role与06:56—07:03 UTC原诊断执行记录吻合，不输出临时口令。未擅自轮换生产凭据；若未来发现长期口令泄漏需另行处理。
+- **原备份继续继承：** 正式数据库12关键表全行fingerprint 12/12、生产Storage 124/124对象离线SHA及37,404,186字节恢复PASS，无需重做。
+- **新隔离Storage接口验收未通过：** 创建独立内部Docker网络和正式同版PG、在隔离库重新从原加密备份导入schema与103COPY数据均PASS。但专属官方Supabase Storage API无法启动：Docker镜像拉取出现`containerd.metadata...meta.db: input/output error`并超时；C盘一度零剩余、当前约0.2GB。未产生任何接口对象PUT/真实API读回和Owner私有负例，不得签PASS。没有执行Docker全局prune、服务重置或删除已有镜像卷。
+- **媒体Owner关联：** 53/53 `public.media`均关联有效记录且Owner一致；53原图、26缩略图Storage路径直接匹配。扩展至项目封面、记录主图和集市路径，123私有媒体桶对象中87个被所核对业务路径引用，另36个暂不在这些路径映射内，**不能认定可删除**。
+- **原设备不可用后的恢复：NOT VERIFIED。** 现有Windows DPAPI备份依赖同一账号；仍需用户外部公钥或KMS/授权异地存放和真正另设备恢复测试。临时本机数据库恢复不代表跨设备验证。
+- **联合上线窗口方案REVIEW-READY：** 已在`docs/release/LifeSpace-023-Production-Recovery-and-Compatibility-Receipt.md`补全W4/W5/Worker/R2、Vercel Cron、Storage任务、支付Webhook与队列停写排空、同一冻结快照、R39→020→040、旧站兼容HTTP、回滚及解冻逐项PASS/STOP门禁。023仍`PARTIAL / PRODUCTION WRITE GATE STOP`；原022/040隔离PASS继承。HEAD `54de3c1`及所有原未提交成果未变，未对生产/共享QA执行写入或发布。
+
+### 原160项｜023隔离Storage API真实写回与独立读回（2026-11-12最终续验）
+- **真实Storage恢复PASS：** Docker已恢复。本地专用`lifespace-023-recovery-only-20261112`内部网络内Storage API连接独立存储数据库和Docker卷；基于原DPAPI加密源124个对象、37,404,186字节，分批真实Storage HTTP POST合计124/124成功。另起独立HTTP GET对124/124逐个比对原始字节数和SHA256，全部exit0；本地库124对象、总字节37,404,186。
+- **代表性权限矩阵PASS：** 隔离测试RLS/JWT，私有媒体Owner HTTP200；跨Owner HTTP400拒绝；匿名HTTP400拒绝；公开avatars匿名HTTP200，2,400,191字节。该策略和身份属于隔离环境，不冒充正式生产JWT/RLS动态PASS。历史源`public.media`53/53与record/Owner一致、53原图与26缩略图路径匹配继续继承。
+- **新回执：** `docs/release/LifeSpace-023-Isolated-Storage-API-Actual-Restore-20261112.md` SHA256 `a1827ab5cc4d5a0012d3bde0730e1bdc04daf521d9c12fb6297af4c4a638628f`，原023综合回执已补最新实测，先前“Storage API NOT VERIFIED”结论被本轮结果替代。
+- **023整体仍PARTIAL/生产写入门禁STOP：** 原设备不可用时的跨设备DPAPI密钥/异机恢复未实测；无授权生产停写/排空窗口与DB+Storage同一时点一致恢复点。正式W4+W5+R2联合上线、R39→020→040生产SQL及Worker/R2发布不得提前执行。统一分支HEAD当前`6d85989bee46c98fac54527d11022ad5e3dcb671`（并行会话已经改动），本轮未重置/覆盖未提交成果。
+
+
+### 原160项｜144 现役旧 Worker 与 R07 SQL 兼容（2026-11-13）
+- **144 旧站兼容 FAIL，正式 SQL／停写／部署／切流 STOP。** 现役 v93 版本 3b35e5f4-740a-4173-9428-aaa0f133c974 的 335 个原始部署模块实际在 workerd 运行，连接已核对 R39→020→040 后像的独立隔离库副本。公开与私有项目、审核隐藏、Plus Guide、旧站带图发布和双图读回、集市主动结束与 040 到期后保留集市均已实测。
+- **已确认回退：** 旧页 /admin/support 选择「已采取处理」会调用 admin_update_support_submission(uuid,text,text,text)，R39 后 HTTP 200 但业务返回 moderation_rpc_required，举报保持 submitted、无处置审计。相同隔离样本及 JWT 对照精确前像 HTTP 200、resolved/action_taken。请求补充与越权拒绝均通过。需由总控安排具备审核 RPC 调用链的 W4 候选复验，结合 023/040 决定开窗。专项回执 LifeSpace-144-V93-R07-Compatibility-Receipt.md；原始脱敏证据 D:\LifeSpace-144-V93-R07-HTTP-20261113。
+
+### 原160项｜144 新 W4 候选审核兼容 R02（2026-11-13）
+- **144 新 W4 候选审核路径 FAIL，V93 兼容 FAIL 继续有效。** 统一候选 6d85989bee46c98fac54527d11022ad5e3dcb671 已接入 admin_moderate_record。使用 137 已构建 Worker，在专用隔离 R39 R02→020 R02→040 后像环境中真实打开 /admin/support。管理员列表请求及独立详情请求均返回 HTTP 404/PGRST202，库内缺 admin_list_support_report_groups 和 admin_get_support_report_group_details，无法在页面进入「已采取处理」。
+- **第二阻断：** 同一合成公开记录举报，数据库仅允许历史举报类别，审核 RPC 接受三项新原因码并要求与原举报 category 一致。spam 返回 invalid_reason_code，改送 other_severe 返回 submission_target_mismatch，改写样本类别也被 support_submissions_category_check 拒绝并回滚。普通用户页面拒绝，直接请求返回 permission_denied；举报保持 submitted、记录仍公开，审核状态与两类审计均无新增。专项回执 LifeSpace-144-W4-Candidate-Moderation-Receipt-R02.md，脱敏原始证据 D:\LifeSpace-144-W4-Candidate-R02-20261113。正式 SQL、停写、部署、切流继续 STOP。
+
 ### LifeSpace｜142 正式媒体接线与 147／148 发布前置收口（2026-11-16，北京时间）
 
 - **基线与保护：**以精确 Commit `90a9c8bc1dcccf7a5887e3d1b496cf4f790567f1` 建立独立 managed worktree。原 checkout HEAD 仍为 `6d85989`，原有 dirty 现场保持不动；本轮候选仅在独立 worktree 本地提交，不 push、不 merge、不部署。
@@ -345,3 +452,18 @@
 - **Android：**实际 Actions APK v29 包名／版本／Origin 与 W4 同源媒体合同一致，APK SHA-256 `76461fefe4c380156dfa280ad04243ead0cdcee8730b48b7b8c69f588a91c82b`；但 Artifact channel=test，网站发布步骤 SKIPPED，正式分发未通过。
 - **兼容回退补验：**12 个新 SQL 兼容相关测试文件 **59/59 PASS**。022 最终 SQL 后像下的 141 R02 W4 隔离回退 PASS 继承；新建 SQL 后兼容回退手册，正式 Version ID 仍缺失。141 R04 因临时 Worker 404、凭据缺失，真实 HTTP 联动仍未完成，保持 PARTIAL。
 - **终态：**142 源码／配置候选 READY；正式资源与 SQL 后正式回退入口未建立；147／148 NOT READY，生产部署、正式资源创建、Secret 写入、SQL 与 R2 开关全部 STOP。详细配置见 `docs/release/LifeSpace-142-Formal-Media-Preflight-R01.md`；故障恢复顺序见 `docs/release/LifeSpace-142-SQL-Compatible-W4-Rollback-Runbook-R01.md`。
+
+### LifeSpace｜受控正式上线执行 R01（2026-11-16）
+
+- **项目策略已获用户确认：**停止大规模、重复性 QA；不再以 160 项全部 PASS 作为上线前提。已签收证据继承，QA 保留为历史记录，不再作为每次普通修改的必经环境。后续以受控真实使用和针对性修复迭代。
+- **本轮范围：**只做统一源码发布候选整合和版本准备；不执行生产 SQL、不部署正式 Worker、不切换 life-space.uk、不启用 R2、不发布 APK、不启用 PayPal 正式收费。本轮未运行测试。
+- **统一候选：**以 4e00ff41a9e6c1cf136c7428269923ac3d450d46 为当前候选，父提交 90a9c8bc1dcccf7a5887e3d1b496cf4f790567f1。该候选位于 6d85989bee46c98fac54527d11022ad5e3dcb671 的后续提交链上，不重复 cherry-pick。
+- **保护：**原统一 checkout 的 49 项 dirty 现场保持原样；本轮在独立 managed worktree 建立 release/lifespace-r01-controlled-launch-20261116 分支，不覆盖原工作树。
+- **发布边界：**PR #95 保持 Draft，不作为本次直接合并目标。main 的生产健康检查提交 535a2a5eef384700ce7dab73264f30e2e8256f28 必须保留；本轮不改 main、不创建会触发 CI 的 PR。
+- **首期运行方式：**先准备与正式数据库合同兼容的 W4 和 W5；网站首期沿用已验证的 Supabase Storage 读取路径，R2 读写保持关闭；PayPal 正式收费保持关闭。数据库安装、W4 部署、APK 分发均须分别核准和取得对应授权。
+- **最低安全门禁仍保留：**SQL 顺序与事务后像、数据库与 W4 兼容、主账号和 Owner 权限、媒体 Storage 读取、恢复路径、正式 APK 包名／签名／目标环境及发布授权。停止大规模测试不等于放弃生产安全。
+- **当前状态：**统一候选分支已建立；正式数据库尚未安装；正式媒体资源未就绪；R2 与 PayPal 未开放；未发生生产环境变更。后续状态以本节之后的最新回执为准。
+- **继承的最新数据库／审核状态：**022 五步 SQL 安装链已在隔离库复签 PASS，正式安装未执行；023 隔离恢复 12/12 表、124/124 对象 PASS，正式窗口尚未开启；144 R04 正常后台审核动作在隔离环境 PASS，正式 SQL 仍未安装。此前 144 R02 的失败记录保留为历史，不覆盖 R04 的后续修复结果。
+- **040／Guide：**040 R16 Git 来源结论为 C，原件 SHA-256 已核对；静态审查及 022 安装链兼容性评估尚未签收，不执行 SQL。058、060、061 已有通过证据继承；059 Plus 真实浏览器登录／第六条显示仍保留 PARTIAL，不再作为首期受控使用的独立 QA 阻塞。
+- **媒体／APP：**125、126、127、128、140、141 R02／R03 等已通过范围继承；141 R04 三阶段媒体开关联动仍 PARTIAL。138 正式签名 APK 与 139 真机升级证据继承，150 正式分发尚未执行。147 正式媒体 Worker 仍 NOT READY，148 正式网站部署未执行。
+- **支付：**143 Sandbox Capture／Webhook 闭环仍未完成；正式收费保持关闭。R2 正式读写保持关闭。
