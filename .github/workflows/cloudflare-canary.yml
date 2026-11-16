@@ -1,112 +1,84 @@
-name: Deploy Cloudflare canary
+name: LifeSpace T13 Formal W4 Stage
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
   contents: read
-  statuses: write
 
 concurrency:
-  group: cloudflare-canary
-  cancel-in-progress: true
+  group: lifespace-t13-w4-stage
+  cancel-in-progress: false
 
 jobs:
-  deploy-canary:
-    name: Build, deploy, and verify isolated canary
+  stage-formal-w4:
+    name: Build and upload an undeployed W4 version
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
-      # These NEXT_PUBLIC_* values must exist in the vinext *build* process so
-      # the browser supabase chunk is inlined. Worker runtime vars cannot fix
-      # client hydration. Publishable browser configuration is intentionally
-      # public and remains subject to the signed-in user's JWT and RLS.
       NEXT_PUBLIC_SUPABASE_URL: https://eidltoikfpnrzxruvawf.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_2cw-3WJnyD6x_CnPiDEiqQ_04violBa
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
     steps:
-      - name: Check out the verified main branch
+      - name: Check out T13 release source
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify immutable source and production account
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${CLOUDFLARE_ACCOUNT_ID}" = "5765d2d135aa20de90c898ab93ad4c11"
+          test "$(git rev-parse HEAD^)" = "63ed71a6d233913ac3e327271dc15eee97298eb8"
+          test "$(git show -s --format=%T HEAD^)" = "7999d0b3e9bdef1f0336b1d0fad01f17159a5a8b"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/cloudflare-canary.yml"
+          echo "T13_RELEASE_SOURCE=PASS"
+          echo "FORMAL_CLOUDFLARE_ACCOUNT=PASS"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: "24"
           cache: npm
 
-      - name: Install application dependencies
+      - name: Install locked dependencies
         run: npm ci
 
-      - name: Run Cloudflare safety tests
-        run: node --test tests/cloudflare-r2-canary.test.mjs
-
-      - name: Build the isolated Cloudflare application
-        run: npm run build:vinext
-
-      - name: Ensure the isolated R2 canary bucket exists
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: node scripts/ensure-cloudflare-r2-canary-bucket.mjs
-
-      - name: Generate one-deployment canary secrets
+      - name: Validate formal W4 and private media contracts
         shell: bash
         run: |
-          r2_canary_secret="$(openssl rand -hex 32)"
-          cron_secret="$(openssl rand -hex 32)"
-          echo "::add-mask::$r2_canary_secret"
-          echo "::add-mask::$cron_secret"
-          {
-            echo "R2_CANARY_SECRET=$r2_canary_secret"
-            echo "CRON_SECRET=$cron_secret"
-          } >> "$GITHUB_ENV"
+          set -euo pipefail
+          npm run test:w4-formal-config
+          npm run typecheck:vinext
+          node --test tests/r2-media-service-stage.test.mjs tests/r2-media-business.test.mjs tests/r2-media-gate-switches.test.mjs
 
-      - name: Deploy the isolated Worker
-        id: deploy
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # vinext resolves its virtual modules and emits a no-bundle Worker
-          # plus the matching deployment config under dist/server.
-          command: deploy --config dist/server/wrangler.json
-          secrets: |
-            R2_CANARY_SECRET
-            CRON_SECRET
+      - name: Build formal W4 candidate with both R2 gates closed
+        run: npm run build:vinext:formal-candidate
 
-      - name: Verify R2 write, read, and cleanup
-        env:
-          CLOUDFLARE_CANARY_URL: ${{ steps.deploy.outputs.deployment-url }}
-        run: npm run test:r2-canary
-
-      - name: Report the canary result on the commit
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CANARY_JOB_STATUS: ${{ job.status }}
+      - name: Assert generated Worker bindings and closed release gates
         shell: bash
         run: |
-          case "$CANARY_JOB_STATUS" in
-            success)
-              state="success"
-              description="Worker deploy and R2 round trip passed"
-              ;;
-            failure)
-              state="failure"
-              description="Cloudflare canary workflow failed"
-              ;;
-            *)
-              state="error"
-              description="Cloudflare canary workflow was cancelled"
-              ;;
-          esac
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import assert from "node:assert/strict";
+          const cfg = JSON.parse(fs.readFileSync("dist/server/wrangler.json", "utf8"));
+          assert.equal(cfg.name, "life-space-canary");
+          assert.equal(cfg.vars?.R2_BUSINESS_MEDIA_MODE, "isolated");
+          assert.equal(cfg.vars?.R2_MEDIA_READ_ENABLED, "false");
+          assert.equal(cfg.vars?.R2_MEDIA_MIRROR_WRITE_ENABLED, "false");
+          assert.ok(cfg.services?.some(s=>s.binding==="R2_BUSINESS_MEDIA_SERVICE" && s.service==="life-space-business-media"));
+          assert.ok(cfg.r2_buckets?.some(b=>b.binding==="R2_MEDIA_CANARY" && b.bucket_name==="life-space-media-canary"));
+          assert.ok(cfg.assets?.binding==="ASSETS");
+          assert.ok(!cfg.triggers?.crons?.length);
+          console.log("T13_FORMAL_W4_GENERATED_CONFIG=PASS");
+          NODE
 
-          gh api --method POST \
-            "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
-            -f state="$state" \
-            -f context="Cloudflare canary" \
-            -f description="$description" \
-            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+      - name: Upload candidate version only (NO production traffic switch)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler versions upload --config dist/server/wrangler.json --keep-vars --strict
+          echo "T13_W4_VERSION_STAGED_NOT_DEPLOYED=PASS"
