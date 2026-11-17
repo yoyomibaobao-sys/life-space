@@ -34,15 +34,20 @@ test("package.json routes vinext production builds through the public env guard"
   assert.doesNotMatch(buildScript, /SUPABASE_SERVICE_ROLE_KEY/);
 });
 
-test("Cloudflare canary still injects public Supabase env into the vinext build job", () => {
+test("formal W4 stage injects public Supabase env into the vinext candidate build job", () => {
   const workflow = read(".github/workflows/cloudflare-canary.yml");
-  assert.match(workflow, /npm run build:vinext/);
+  assert.match(workflow, /npm run build:vinext:formal-candidate/);
   assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL: https:\/\/[a-z0-9]+\.supabase\.co/);
   assert.match(
     workflow,
     /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_[A-Za-z0-9_-]+/
   );
-  assert.match(workflow, /must exist in the vinext \*build\* process/);
+  assert.match(
+    workflow,
+    /NEXT_PUBLIC_TURNSTILE_SITE_KEY: \$\{\{ vars\.NEXT_PUBLIC_TURNSTILE_SITE_KEY \}\}/
+  );
+  assert.match(workflow, /NEXT_PUBLIC_SITE_URL: https:\/\/life-space\.uk/);
+  assert.match(workflow, /NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN: https:\/\/life-space\.uk/);
   assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY/);
 });
 

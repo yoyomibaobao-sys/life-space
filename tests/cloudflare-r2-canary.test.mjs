@@ -161,15 +161,13 @@ test("the canary checker reads credentials only from the process environment", (
   assert.doesNotMatch(checker, /console\.(?:log|error)\([^\n]*secret/i);
 });
 
-test("Cloudflare deployment uses low-privilege public auth config and encrypted infrastructure secrets", () => {
+test("formal W4 staging workflow uses low-privilege public auth config and uploads an undeployed version", () => {
   const workflow = read(".github/workflows/cloudflare-canary.yml");
 
   assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /branches:\s*\n\s*- main/);
-  assert.match(
-    workflow,
-    /permissions:\s*\n\s*contents: read\s*\n\s*statuses: write/
-  );
+  assert.doesNotMatch(workflow, /^\s*push:/m);
+  assert.match(workflow, /permissions:\s*\n\s*contents: read/);
+  assert.doesNotMatch(workflow, /statuses:\s*write/);
   assert.match(
     workflow,
     /NEXT_PUBLIC_SUPABASE_URL: https:\/\/[a-z0-9]+\.supabase\.co/
@@ -178,23 +176,21 @@ test("Cloudflare deployment uses low-privilege public auth config and encrypted 
     workflow,
     /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_[A-Za-z0-9_-]+/
   );
+  assert.match(
+    workflow,
+    /NEXT_PUBLIC_TURNSTILE_SITE_KEY: \$\{\{ vars\.NEXT_PUBLIC_TURNSTILE_SITE_KEY \}\}/
+  );
   assert.doesNotMatch(workflow, /cloudflare-canary\.invalid|cloudflare-canary-placeholder/);
   assert.match(read("package.json"), /"build:vinext": "node scripts\/build-vinext.mjs"/);
-  assert.match(workflow, /npm run build:vinext/);
-  assert.match(workflow, /ensure-cloudflare-r2-canary-bucket\.mjs/);
-  assert.match(workflow, /cloudflare\/wrangler-action@v4/);
-  assert.match(workflow, /deploy --config dist\/server\/wrangler\.json/);
+  assert.match(workflow, /npm run build:vinext:formal-candidate/);
+  assert.match(workflow, /npm run test:w4-formal-config/);
   assert.match(workflow, /secrets\.CLOUDFLARE_API_TOKEN/);
   assert.match(workflow, /secrets\.CLOUDFLARE_ACCOUNT_ID/);
-  assert.match(workflow, /steps\.deploy\.outputs\.deployment-url/);
-  assert.match(workflow, /npm run test:r2-canary/);
-  assert.match(workflow, /name: Report the canary result on the commit/);
-  assert.match(workflow, /if: always\(\)/);
-  assert.match(workflow, /gh api --method POST/);
-  assert.match(workflow, /context="Cloudflare canary"/);
+  assert.match(workflow, /versions upload --config dist\/server\/wrangler\.json --keep-vars --strict/);
+  assert.match(workflow, /FORMAL_W4_VERSION_STAGED_NOT_DEPLOYED=PASS/);
+  assert.doesNotMatch(workflow, /wrangler deploy|versions deploy|deploy --config dist\/server\/wrangler\.json/);
   assert.doesNotMatch(workflow, /^\s*schedule:/m);
-  assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY/);
-  assert.doesNotMatch(workflow, /sb_secret_/);
+  assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY|sb_secret_/);
 });
 
 test("browser Supabase clients prefer the modern publishable key", () => {
