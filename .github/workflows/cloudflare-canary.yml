@@ -37,7 +37,7 @@ jobs:
           set -euo pipefail
           test "${GITHUB_REF_NAME}" = "release/lifespace-r01-controlled-launch-20261116"
           test "${CLOUDFLARE_ACCOUNT_ID}" = "5765d2d135aa20de90c898ab93ad4c11"
-          test "$(git rev-parse HEAD^)" = "21bc52db28e46ca3cb1f3f5a05423549fa7dbd2f"
+          test "$(git rev-parse HEAD^)" = "bdf89d1bf7766ad3642f85727824aa96ad7eda4e"
           mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
           test "${#changed[@]}" -eq 1
           test "${changed[0]}" = ".github/workflows/cloudflare-canary.yml"
@@ -84,8 +84,7 @@ jobs:
           assert.equal(cfg.vars?.R2_BUSINESS_MEDIA_MODE, "isolated");
           assert.equal(cfg.vars?.R2_MEDIA_READ_ENABLED, "false");
           assert.equal(cfg.vars?.R2_MEDIA_MIRROR_WRITE_ENABLED, "false");
-          assert.equal(cfg.vars?.NEXT_PUBLIC_SUPABASE_URL, "https://eidltoikfpnrzxruvawf.supabase.co");
-          assert.ok(/^sb_publishable_[A-Za-z0-9_-]{16,}$/.test(cfg.vars?.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || ""));
+          // build-vinext.mjs separately verifies the Supabase host and publishable key in the browser bundle.
           assert.ok(cfg.services?.some(s => s.binding === "R2_BUSINESS_MEDIA_SERVICE" && s.service === "life-space-business-media"));
           assert.ok(cfg.r2_buckets?.some(b => b.binding === "R2_MEDIA_CANARY" && b.bucket_name === "life-space-media-canary"));
           assert.ok(cfg.assets?.binding === "ASSETS");
