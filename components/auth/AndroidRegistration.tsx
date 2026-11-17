@@ -55,7 +55,7 @@ export function AndroidRegistration({ online, onBack, onLogin, onLocalUse, onCon
       }
       if (data.user && (data.user.identities ?? []).length === 0) { setMessage(t.auth.already_registered); return; }
       if (data.session?.user) {
-        await completeAndroidAuthLogin(data.session.user);
+        await completeAndroidAuthLogin(data.session.user, data.session);
         onSignedIn(data.session.user.id);
       } else {
         onConfirmEmail(cleanEmail);

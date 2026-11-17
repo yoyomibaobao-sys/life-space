@@ -66,14 +66,62 @@ async function loadAuthModule() {
   });
 }
 
+test("Android startup storage commits the exact verified Session when no staged value exists", async () => {
+  const previousWindow = globalThis.window;
+  const values = new Map();
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+      removeItem: (key) => values.delete(key),
+    },
+  };
+  try {
+    const storageModule = await loadModule("lib/android-safe-startup-storage.ts", {
+      "@capacitor/core": "export const Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android', isPluginAvailable: () => true }; export const registerPlugin = () => ({ inspectOfflineOwnerProofReadOnly: async () => ({ status: 'valid', persistentStateUnchanged: true, ownerMatchesExpected: true, sessionMatchesExpected: true }) });",
+      "@/lib/local-owner-context": "export const offlineSessionContinuity = () => null; export const wasLocalOwnerExplicitlySignedOut = () => true;",
+    });
+    const storage = storageModule.createAndroidSafeStartupStorage("https://project-ref.supabase.co");
+    const authKey = "sb-project-ref-auth-token";
+    const verifiedSession = {
+      user: { id: "owner" },
+      access_token: "verified-access-token",
+      refresh_token: "verified-refresh-token",
+    };
+    assert.equal(await storage.commitVerifiedSession("owner", verifiedSession), true);
+    const persisted = JSON.parse(values.get(authKey));
+    assert.equal(persisted.user.id, "owner");
+    assert.equal(persisted.access_token, verifiedSession.access_token);
+    assert.equal(persisted.refresh_token, verifiedSession.refresh_token);
+    assert.equal(await storage.getItem(authKey), values.get(authKey));
+
+    const otherSession = {
+      user: { id: "other-owner" },
+      access_token: "other-access-token",
+      refresh_token: "other-refresh-token",
+    };
+    await storage.clearOnExplicitLogout();
+    await storage.setItem(authKey, JSON.stringify(otherSession));
+    assert.equal(await storage.commitVerifiedSession("owner", verifiedSession), false);
+    assert.equal(values.has(authKey), false);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
 function createAuthHarness(authModule, {
   user = null,
   rememberedOwner = null,
   explicit = false,
   online = false,
   proof = null,
+  verifiedUser,
+  getUserError = null,
 } = {}) {
   let sessionUser = user;
+  let getSessionCalls = 0;
+  let lastGetUserJwt = null;
   let serviceOnline = online;
   let explicitlySignedOut = explicit;
   let remembered = rememberedOwner;
@@ -82,13 +130,20 @@ function createAuthHarness(authModule, {
   let cacheClearCalls = 0;
   const client = {
     auth: {
-      getSession: async () => ({
-        data: { session: sessionUser ? { user: sessionUser } : null },
-        error: null,
-      }),
-      getUser: async () => {
+      getSession: async () => {
+        getSessionCalls += 1;
+        return {
+          data: { session: sessionUser ? { user: sessionUser } : null },
+          error: null,
+        };
+      },
+      getUser: async (jwt) => {
         getUserCalls += 1;
-        return { data: { user: sessionUser }, error: null };
+        lastGetUserJwt = jwt || null;
+        return {
+          data: { user: verifiedUser === undefined ? sessionUser : verifiedUser },
+          error: getUserError,
+        };
       },
       signOut: async () => {
         sessionUser = null;
@@ -126,6 +181,8 @@ function createAuthHarness(authModule, {
     setOnline: (value) => { serviceOnline = value; },
     setSessionUser: (value) => { sessionUser = value; },
     getUserCalls: () => getUserCalls,
+    getSessionCalls: () => getSessionCalls,
+    lastGetUserJwt: () => lastGetUserJwt,
     cacheClearCalls: () => cacheClearCalls,
   };
 }
@@ -231,8 +288,16 @@ test("explicit logout then unified login clears signed-out and restores authenti
   assert.equal(harness.controller.getSnapshot().explicitSignedOut, true);
   assert.equal(harness.controller.getSnapshot().status, "signed-out");
   harness.setSessionUser(owner);
+  const session = {
+    user: owner,
+    access_token: "test-access-token",
+    refresh_token: "test-refresh-token",
+  };
+  const getSessionCallsBeforeLogin = harness.getSessionCalls();
   harness.controller.beginLogin();
-  await harness.controller.completeLogin(owner);
+  await harness.controller.completeLogin(owner, session);
+  assert.equal(harness.lastGetUserJwt(), session.access_token);
+  assert.equal(harness.getSessionCalls(), getSessionCallsBeforeLogin);
   assert.equal(harness.controller.getSnapshot().explicitSignedOut, false);
   assert.equal(harness.controller.getSnapshot().status, "signed-in");
   assert.equal(auth.resolveAuthenticatedOwnerContext(harness.controller.getSnapshot(), { userId: owner.id })?.userId, owner.id);
@@ -243,6 +308,29 @@ test("explicit logout then unified login clears signed-out and restores authenti
   assert.match(shell, /openCloudLogin\("profile"\)/);
   assert.match(shell, /openCloudLogin\("project-destination"\)/);
   assert.doesNotMatch(shell, /kind: "creation-login"|<CloudLogin copy=\{copy\} onSuccess=\{\(\) => undefined\}/);
+});
+
+test("interactive Android login rejects a server-verified identity mismatch", async () => {
+  const authModule = await loadAuthModule();
+  const owner = { id: "owner", email: "owner@example.test" };
+  const harness = createAuthHarness(authModule, {
+    user: null,
+    online: true,
+    verifiedUser: { id: "different-owner", email: "other@example.test" },
+  });
+  await harness.controller.initialize();
+  harness.setSessionUser(owner);
+  harness.controller.beginLogin();
+  await assert.rejects(
+    harness.controller.completeLogin(owner, {
+      user: owner,
+      access_token: "test-access-token",
+      refresh_token: "test-refresh-token",
+    }),
+    /online_identity_not_verified/,
+  );
+  assert.equal(harness.lastGetUserJwt(), "test-access-token");
+  assert.equal(harness.controller.getSnapshot().status, "signed-out");
 });
 
 test("explicit signed-out startup ignores a persisted session and token refresh", async () => {
@@ -514,7 +602,7 @@ test("hosted login page connects native Android login to verified session persis
   assert.match(login, /import \{ beginAndroidAuthLogin, completeAndroidAuthLogin, failAndroidAuthLogin \} from "@\/lib\/android-auth-state"/);
   assert.match(login, /if \(isNativeApp\) \{\s*beginAndroidAuthLogin\(\)/);
   assert.match(login, /const \{ data, error \} = await supabase\.auth\.signInWithPassword/);
-  assert.match(login, /serverLoginSucceeded = true;\s*if \(isNativeApp\) \{\s*await completeAndroidAuthLogin\(data\.user\)/);
+  assert.match(login, /serverLoginSucceeded = true;\s*if \(isNativeApp\) \{\s*await completeAndroidAuthLogin\(data\.user, data\.session\)/);
   assert.match(login, /if \(androidLoginStarted\) \{\s*failAndroidAuthLogin\(\)/);
   assert.match(login, /if \(androidLoginStarted && !serverLoginSucceeded\) \{\s*failAndroidAuthLogin\(\)/);
   assert.match(login, /const returnTo = getSafeReturnTo\([\s\S]*?router\.replace\(returnTo\)/);
@@ -528,7 +616,7 @@ test("Android login keeps its form mounted during a pending request and reports 
   const login = shell.slice(shell.indexOf("function CloudLogin("), shell.indexOf("function ProjectForm("));
   assert.match(login, /beginAndroidAuthLogin\(\)[\s\S]*if \(!serverLoginSucceeded\) failAndroidAuthLogin\(\)/);
   assert.match(login, /setSubmitting\(true\)[\s\S]*await loginBundledWithTurnstile/);
-  assert.match(login, /completeAndroidAuthLogin\(user\)/);
+  assert.match(login, /completeAndroidAuthLogin\(user, session\)/);
   assert.match(login, /role="alert"/);
   assert.match(login, /setCaptchaToken\(null\)[\s\S]*setCaptchaResetKey/);
   assert.equal((shell.match(/<CloudLogin\b/g) || []).length, 1); // One bundled login screen.
@@ -541,7 +629,11 @@ test("Android login keeps its form mounted during a pending request and reports 
   harness.controller.beginLogin();
   assert.equal(harness.controller.getSnapshot().status, "checking");
   harness.setSessionUser(newUser);
-  await harness.controller.completeLogin(newUser);
+  await harness.controller.completeLogin(newUser, {
+    user: newUser,
+    access_token: "test-access-token",
+    refresh_token: "test-refresh-token",
+  });
   assert.equal(harness.controller.getSnapshot().status, "signed-in");
 
   const session = await loadModule("lib/android-auth-session.ts", {

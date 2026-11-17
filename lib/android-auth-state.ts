@@ -64,14 +64,18 @@ export function resolveAndroidReadOwner(auth: AndroidAuthSnapshot): StoredLocalO
 }
 
 type AuthUser = { id: string; email?: string | null };
-type AuthSession = { user?: AuthUser | null; access_token?: string } | null;
+type AuthSession = {
+  user?: AuthUser | null;
+  access_token?: string;
+  refresh_token?: string;
+} | null;
 type AuthClient = {
   auth: {
     getSession: () => Promise<{
       data: { session: AuthSession };
       error: unknown;
     }>;
-    getUser: () => Promise<{
+    getUser: (jwt?: string) => Promise<{
       data: { user: AuthUser | null };
       error: unknown;
     }>;
@@ -191,8 +195,14 @@ export function createAndroidAuthController(options: AndroidAuthControllerOption
     return snapshot;
   }
 
-  async function acceptVerifiedUser(user: AuthUser, epoch: number) {
-    const stored = await options.client.auth.getSession();
+  async function acceptVerifiedUser(
+    user: AuthUser,
+    epoch: number,
+    verifiedSession?: AuthSession,
+  ) {
+    const stored = verifiedSession
+      ? { data: { session: verifiedSession }, error: null }
+      : await options.client.auth.getSession();
     if (epoch !== authEpoch || options.isExplicitlySignedOut()) return;
     if (stored.error || stored.data.session?.user?.id !== user.id) {
       if (isConfirmedInvalidAndroidSession(stored.error)) await invalidateConfirmedSession();
@@ -200,14 +210,17 @@ export function createAndroidAuthController(options: AndroidAuthControllerOption
       else publishChecking("service-unavailable");
       return;
     }
-    // Server getUser has authenticated this Owner. Only now may a staged
-    // interactive Android Session be persisted for the native seal operation.
-    const safeToSeal = await commitVerifiedAndroidStartupSession(user.id);
+    const session = stored.data.session;
+    // Persist only the exact Session whose access token was verified by the
+    // authenticated getUser request; the staged storage value must match it.
+    const safeToSeal = await commitVerifiedAndroidStartupSession(user.id, session);
+    if (!safeToSeal) {
+      publishChecking("service-unavailable");
+      return;
+    }
     try {
-      // If an interactive Session could not be committed, the native plugin
-      // must not attempt to seal against an older WebView localStorage token.
-      if (safeToSeal) await options.offlineOwner?.seal(
-        { userId: user.id, email: user.email || null }, stored.data.session,
+      await options.offlineOwner?.seal(
+        { userId: user.id, email: user.email || null }, session,
       );
     } catch (error) {
       if (epoch !== authEpoch || options.isExplicitlySignedOut()) return;
@@ -431,17 +444,41 @@ export function createAndroidAuthController(options: AndroidAuthControllerOption
       // A login request alone does not validate the new identity.
       publishChecking("verifying");
     },
-    async completeLogin(user: AuthUser) {
+    async completeLogin(user: AuthUser, session: AuthSession) {
       authEpoch += 1;
-      loginInProgress = false;
       initialized = true;
       pendingSessionUserId = user.id;
-      // A user-initiated login has received a server-issued Session. Allow
-      // the *fresh* getUser validation even after a previous explicit logout;
-      // do not grant Owner access until that validation succeeds.
+      loginInProgress = true;
+      // Verify the exact Session returned by signInWithPassword. Do not depend
+      // on the startup storage adapter exposing an uncommitted staged Session.
       options.clearExplicitSignOut();
       publishChecking("verifying");
-      await revalidate();
+      const epoch = authEpoch;
+      let retryableFailure = false;
+      try {
+        if (!session?.access_token || session.user?.id !== user.id) {
+          await invalidateConfirmedSession();
+        } else {
+          const { data, error } = await options.client.auth.getUser(session.access_token);
+          if (epoch !== authEpoch || options.isExplicitlySignedOut()) return snapshot;
+          if (isConfirmedInvalidAndroidSession(error) ||
+              (data.user?.id && data.user.id !== user.id) ||
+              (!error && !data.user?.id)) {
+            await invalidateConfirmedSession();
+          } else if (error) {
+            retryableFailure = true;
+          } else if (data.user) {
+            await acceptVerifiedUser(data.user, epoch, session);
+          }
+        }
+      } catch {
+        retryableFailure = true;
+      } finally {
+        loginInProgress = false;
+      }
+      if (retryableFailure && epoch === authEpoch && !options.isExplicitlySignedOut()) {
+        await restoreOfflineOwner(epoch);
+      }
       if (snapshot.status !== "signed-in" || snapshot.sessionUserId !== user.id) {
         throw new Error("online_identity_not_verified");
       }
@@ -538,8 +575,8 @@ export function beginAndroidAuthLogin() {
   androidAuthController.beginLogin();
 }
 
-export function completeAndroidAuthLogin(user: AuthUser) {
-  return androidAuthController.completeLogin(user);
+export function completeAndroidAuthLogin(user: AuthUser, session: AuthSession) {
+  return androidAuthController.completeLogin(user, session);
 }
 
 export function failAndroidAuthLogin() {

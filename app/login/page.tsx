@@ -118,7 +118,7 @@ export default function LoginPage() {
 
       serverLoginSucceeded = true;
       if (isNativeApp) {
-        await completeAndroidAuthLogin(data.user);
+        await completeAndroidAuthLogin(data.user, data.session);
       }
 
       try {

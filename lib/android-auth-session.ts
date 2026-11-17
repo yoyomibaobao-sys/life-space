@@ -33,5 +33,5 @@ export async function loginBundledWithTurnstile(input: {
   });
   if (result.error) throw result.error;
   if (!result.data.user || !result.data.session) throw new Error("session_missing");
-  return result.data.user;
+  return { user: result.data.user, session: result.data.session };
 }

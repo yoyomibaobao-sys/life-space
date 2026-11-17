@@ -302,13 +302,15 @@ test("bundled Auth restores a session and requires Turnstile for login", async (
   const client = { auth: {
     getSession: async () => ({ data: { session: { user: { id: "owner" } } }, error: null }),
     getUser: async () => ({ data: { user: { id: "owner" } }, error: null }),
-    signInWithPassword: async (input) => { loginInput = input; return { data: { user: { id: "owner" }, session: {} }, error: null }; },
+    signInWithPassword: async (input) => { loginInput = input; return { data: { user: { id: "owner" }, session: { user: { id: "owner" }, access_token: "test-access-token", refresh_token: "test-refresh-token" } }, error: null }; },
   } };
   assert.equal((await module.restoreBundledSession(client, false)).id, "owner");
   assert.equal((await module.restoreBundledSession(client, true)).id, "owner");
   await assert.rejects(module.loginBundledWithTurnstile({ email: "A@EXAMPLE.COM", password: "secret", captchaToken: null, siteKeyConfigured: true }, client), /turnstile_token_required/);
   await assert.rejects(module.loginBundledWithTurnstile({ email: "a@example.com", password: "secret", captchaToken: "x", siteKeyConfigured: false }, client), /turnstile_site_key_missing/);
-  await module.loginBundledWithTurnstile({ email: "A@EXAMPLE.COM", password: "secret", captchaToken: "token", siteKeyConfigured: true }, client);
+  const login = await module.loginBundledWithTurnstile({ email: "A@EXAMPLE.COM", password: "secret", captchaToken: "token", siteKeyConfigured: true }, client);
+  assert.equal(login.user.id, "owner");
+  assert.equal(login.session.access_token, "test-access-token");
   assert.equal(loginInput.email, "a@example.com");
   assert.equal(loginInput.options.captchaToken, "token");
 });

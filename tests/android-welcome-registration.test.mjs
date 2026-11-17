@@ -135,7 +135,7 @@ test("Android-only header and registration presentation keeps website and auth c
   assert.match(registration, /checked=\{crossBorder\}/);
   assert.match(shell, /<AuthCaptcha\s+action="auth"/);
   assert.match(shell, /if \(!AUTH_CAPTCHA_ENABLED \|\| !captchaToken\)/);
-  assert.match(registration, /await completeAndroidAuthLogin\(data\.session\.user\)/);
+  assert.match(registration, /await completeAndroidAuthLogin\(data\.session\.user, data\.session\)/);
   const [captcha, widget] = await Promise.all([
     "components/AuthCaptcha.tsx", "components/auth/TurnstileChallengeView.tsx",
   ].map((file) => readFile(new URL(`../${file}`, import.meta.url), "utf8")));

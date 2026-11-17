@@ -86,14 +86,32 @@ export function createAndroidSafeStartupStorage(environment: string) {
       if (trustedCachedSession) window.localStorage.removeItem(key);
       stagedSession = null;
     },
-    async commitVerifiedSession(ownerId: string) {
+    async commitVerifiedSession(ownerId: string, verifiedSession?: {
+      user?: { id?: string } | null;
+      access_token?: string;
+      refresh_token?: string;
+    } | null) {
       await inspectOnce();
-      if (trustedCachedSession) return true;
-      if (!stagedSession) return false;
+      if (!verifiedSession && trustedCachedSession && !stagedSession) return true;
       try {
-        const payload = JSON.parse(stagedSession) as { user?: { id?: string } };
-        if (payload?.user?.id !== ownerId) return false;
-        window.localStorage.setItem(authKey, stagedSession);
+        const staged = stagedSession
+          ? JSON.parse(stagedSession) as {
+              user?: { id?: string } | null;
+              access_token?: string;
+              refresh_token?: string;
+            }
+          : null;
+        const candidate = staged || verifiedSession;
+        if (candidate?.user?.id !== ownerId ||
+            !candidate.access_token || !candidate.refresh_token) return false;
+        if (verifiedSession && (
+          verifiedSession.user?.id !== ownerId ||
+          candidate.access_token !== verifiedSession.access_token ||
+          candidate.refresh_token !== verifiedSession.refresh_token
+        )) return false;
+        const serialized = stagedSession || (verifiedSession ? JSON.stringify(verifiedSession) : null);
+        if (!serialized) return false;
+        window.localStorage.setItem(authKey, serialized);
         stagedSession = null;
         trustedCachedSession = true;
         return true;

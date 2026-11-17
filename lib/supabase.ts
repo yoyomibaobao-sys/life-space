@@ -21,8 +21,17 @@ const androidStartupStorage = isNativeAndroidAuthStartup()
   ? createAndroidSafeStartupStorage(process.env.NEXT_PUBLIC_SUPABASE_URL!)
   : null;
 
-export async function commitVerifiedAndroidStartupSession(ownerId: string) {
-  return androidStartupStorage?.commitVerifiedSession(ownerId) ?? true;
+type AndroidStartupSession = {
+  user?: { id?: string } | null;
+  access_token?: string;
+  refresh_token?: string;
+} | null;
+
+export async function commitVerifiedAndroidStartupSession(
+  ownerId: string,
+  session?: AndroidStartupSession,
+) {
+  return androidStartupStorage?.commitVerifiedSession(ownerId, session) ?? true;
 }
 
 export async function clearAndroidStartupSessionOnExplicitLogout() {
