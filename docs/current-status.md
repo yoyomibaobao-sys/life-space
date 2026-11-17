@@ -469,3 +469,57 @@
 - **支付：**PayPal 订单、Capture、会员确认和 Webhook 代码保留在统一源码；143 Sandbox Capture／Webhook 幂等闭环仍未完成，因此 Live 收费保持关闭。R2 业务代码同样保留在统一源码；147 正式媒体 Worker／资源仍 NOT READY，因此 R2 正式读写保持关闭。
 - **正式环境只读核查（2026-11-16）：**Supabase `eidltoikfpnrzxruvawf` 状态 ACTIVE_HEALTHY，PostgreSQL 17.6.1.141；最新已登记迁移 `20261011125530`。`market_posts.published_at`、会员服务期限字段及 `get_plus_plant_guide`、`public_guide_record_projection`、`begin_paypal_membership_capture`、`admin_moderate_record` 均未查到；`confirm_paypal_membership_payment_json` 存在。Cloudflare 正式账户目前只列出 R2 桶 `life-space-media-canary`，没有 `life-space-business-media` 桶或同名正式媒体 Worker。上述均为只读核查，未执行写入。
 - **W4 构建尝试：**本地 `build:vinext:formal-candidate` 在 120 秒执行窗口超时；未得到完整构建回执，未生成可签收的 W4 发布产物。残留 Node 进程已停止。本轮未运行测试。
+
+### LifeSpace｜正式 Android 登录持久化最小修复候选（2026-11-17）
+
+- **缺陷依据：**正式 Android 10 真机包 versionCode 29 / versionName 1.0.5-rc137，登录后可进入个人空间，但强制停止再启动未保持登录。生产加载的 `app/login/page` chunk 只执行 `supabase.auth.signInWithPassword` 后跳转，没有调用 Android auth controller 的 begin/complete/fail 接线；只读检查未发现 Supabase auth token，Keystore 只读检查返回 `missing_binding`。
+- **最小源码修复：**当前受控 Release worktree 分支 `release/lifespace-r01-controlled-launch-20261116`，基线 HEAD `008e07a7d02a11ef7ea3d48fea35c5d8d0de1eb3`。仅修改 `app/login/page.tsx` 与 `tests/android-auth-connectivity.test.mjs`：原生 Android 登录前调用 `beginAndroidAuthLogin`；Supabase 成功后调用 `completeAndroidAuthLogin(data.user)`，沿既有服务端 `getUser` 验证、暂存 Session 提交和 Keystore Seal 路径；凭据／网络失败时释放登录 gate。普通 Web 登录不调用 Android controller，保留原有验证码、remember-email、returnTo 和跳转行为；remember-email 写入失败不阻断登录。
+- **验证：**`node --test tests/android-auth-connectivity.test.mjs` 21/21 PASS；`npm run typecheck:vinext` PASS；`npx eslint app/login/page.tsx` PASS；`git diff --check` PASS。对测试文件单独运行 ESLint 时报告5处既有 `@next/next/no-assign-module-variable` 错误（原测试辅助变量 `module`，非本轮新增行），不据此宣称测试文件lint通过。
+- **构建状态：**`npm run build:vinext` 本地执行两次均无输出并超时；后续直接运行 `node scripts/build-vinext.mjs` 得到明确退出码 1：当前 worktree 与进程环境均缺少 `NEXT_PUBLIC_SUPABASE_URL` 和 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`。两项正式 Supabase 公共构建值存在于 `.github/workflows/android-apk.yml`，可从该工作流按正式环境注入，不需要写入仓库文件。`NEXT_PUBLIC_TURNSTILE_SITE_KEY` 则来自 GitHub Actions repository variable，本机未配置。Cloudflare 正式账户只读清单显示 `LifeSpace` 与 `LifeSpace PR95 Android QA` 两个均允许 `life-space.uk` 的 Turnstile widget；尚未核实 Actions variable 当前指向哪一个，因此不猜测、不用空值构建以免关闭前端 CAPTCHA。无 W4 构建产物、无候选 APK；未部署、push、merge、提交或重签。超时遗留 Node 进程已核对并清理，无构建进程仍运行。
+- **现场保护：**保留既有未跟踪目录 `.lifespace-sql-install-local/`，未读取、删除或纳入补丁；当前仅两份本轮源码／测试文件有修改。未触碰正式数据库、Cloudflare Worker、正式网站流量、PayPal、R2、手机应用数据或既有 APK。
+- **当前结论：**源码与定向逻辑测试已通过，但**真机重启后持久登录尚未复验**；需要候选构建可用并在获准的候选环境／包中验证 Session 持久化、Keystore Owner/Session 绑定及强制停止重启恢复。不得将源码测试等同正式修复已上线。
+
+### LifeSpace｜Android 登录修复 QA 构建续办（2026-11-17）
+
+- **QA 构建配置：**本轮只读核实隔离 Worker `lifespace-site-media-qa-20261028` 位于 Cloudflare 独立隔离账户（非正式账户），其公开环境指向 QA Supabase `mablwxlipcgbmbnfdbkc`，Turnstile Site Key 与认证回调均匹配该 QA Origin；PayPal 前端开关为 false，R2 业务模式为 isolated。没有复用另一工作树指向 `127.0.0.1` 的本地 Supabase 配置。
+- **本地构建环境：**在当前独立 worktree 创建仅含上述 QA 公共变量的 `.env.local`；已核实被 `.gitignore` 忽略，不含 Service Role、Secret、密码或 Token，不纳入 Git。
+- **Vinext 构建：**直接运行 `node scripts/build-vinext.mjs`，exitCode 0；构建器报告客户端 Supabase bundle 检查通过（2 chunks，选用 publishable key）。客户端 manifest 中 `app/login/page.tsx` 对应页面 chunk，并明确导入 `android-auth-state` chunk，确认 Android 认证状态模块进入候选页面构建。QA Supabase、QA Turnstile 与 QA Origin 均出现在对应客户端构建资产；共享运行时还包含生产环境选择常量，必须通过 QA 包身份与 Origin 的真实运行验收，不能只凭字符串存在判断实际使用目标。
+- **部署闸门 STOP：**本次生成的 `dist/server/wrangler.json` 仍是默认正式配置：Worker 名称 `life-space-canary`，绑定正式桶 `life-space-media-canary`，没有 QA 业务媒体 Service Binding。它不是可直接部署的 QA 配置，**禁止使用该文件部署**。已只读核实真正隔离 Worker 的现有服务绑定、公开变量及 Secret 名称；尚未生成并复核完整保留其绑定／变量／Secret 的独立 QA Wrangler 配置。
+- **本轮边界：**仅完成 QA 配置读取、忽略文件配置和本地 Vinext 构建；未部署 Cloudflare Worker、未修改正式网站／数据库／R2／PayPal，未 push、merge、commit，未重建或安装 APK，未操作手机数据。
+- **下一步：**基于现有隔离 Worker 的真实设置制作专用 QA 部署配置，逐项核对目标账户、Worker、R2／Service Binding、开关和 Secret 保留；通过后才部署隔离 QA Worker。随后核对手机现有包名与版本，使用独立 QA 包验登录、Keystore Owner/Session 绑定及强制停止重启恢复，保留正式包及其本地资料。
+- **Android 真机只读盘点：**ADB 重新确认华为 HMA-AL00 已连接（设备序列沿用既有记录）。设备同时安装正式包 `com.youshi.cultivation`（versionCode 29，versionName `1.0.5-rc137`）及独立 QA 包 `com.youshi.cultivation.w5qa20261109r18`（versionCode 2026112605，versionName `1.0.0-w5-r26-137-r05`）。两包并存；本轮未安装、卸载、覆盖或清除任何包／数据。现有 QA 包可作为后续隔离网站部署后的真机验证载体，暂不需要为网页登录接线另造 APK。
+
+### LifeSpace｜Android 登录修复 QA Worker 部署（2026-11-17）
+
+- **专用配置：**更新受控文件 `wrangler.m4-qa.jsonc`（SHA-256 `aa52e5fed26d7c537af4c7ec0eb663133d5e52e6dba183eff03188f31e205c9d`），明确列出从隔离 Worker 当前版本读取的 21 项非 Secret 变量、7 个必需 Secret 名称、`R2_BUSINESS_MEDIA_SERVICE` Service Binding、`R2_MEDIA_MIRROR_RATE_LIMITER`（60 次／60 秒，namespace `2026110201`）、`ASSETS`、空 Cron 列表、`keep_vars=true`。Supabase URL 指向 QA 项目 `mablwxlipcgbmbnfdbkc`；PayPal 仍关闭；未配置正式 R2 桶绑定。
+- **部署预检：**Wrangler 4.128.0 执行 `deploy --dry-run --config wrangler.m4-qa.jsonc` PASS；读取 QA assets 258 个文件，上传估算 376.13 KiB（gzip 86.12 KiB）。配置与部署前 Worker 的公开变量、资源绑定及 Secret 名称逐项比对 PASS。
+- **实际部署：**Cloudflare API 只读回查确认此前 Wrangler 命令虽返回 exitCode 1，实际已创建并激活 QA Version 30，故没有重复部署。Version ID `6c6ab5a8-936a-4a41-9665-e324fba63fbc`；Deployment ID `d4d4726f-ec6f-42a8-85e3-cb94a2397fc3`；时间 `2026-11-17T02:57:51Z`；流量 100%。上一版 v29 `efb5c327-9203-4277-ac23-139a61fd7efc` 保留为回退锚点。
+- **部署后核账：**Version 30 仍含完整 21 项非 Secret 变量、7 项 Secret、QA 媒体 Service Binding、原限流绑定和 Assets；M4 QA 控制变量未变，R2 QA 读取开关仍为 true；Cron schedules 仍为空，workers.dev 开启、Preview URLs 关闭。正式 Worker、正式 Supabase、正式 R2 与 PayPal Live 未修改。
+- **保留的既有配置提醒：**`M4_QA_RECOVERY_UI_ENABLED=true`，但原 `M4_QA_RECOVERY_UNTIL=1794517104` 对应 `2026-11-12T20:58:24Z`，目前已过期。本轮按原值保留，未擅自延长恢复窗口；这不是本次登录修复的变更范围。
+- **HTTP 实测边界：**本地 Runner 访问 QA Origin 时连接超时；Cloudflare 执行环境的外部请求被平台策略拒绝（403，明确提示该环境不允许请求此域名）。这两项不能证明网站失败，也不能作为 HTTP 200 证据。当前浏览器标签中没有 QA 登录页；Android 设备前台为 YouTube，本轮未切换设备界面。故**部署 PASS，真实浏览器登录／Android Session 持久化仍待验收**。
+- **本轮现场保护：**没有再次部署、没有操作手机、没有覆盖或清除正式／QA APP 数据，没有执行数据库 SQL、R2 写入、正式切流、push、merge 或 commit。QA 本地 `.env.local` 仍被 Git 忽略；保留既有未跟踪目录 `.lifespace-sql-install-local/`。
+- **下一步：**请在已连接的电脑 Chrome／Edge 打开 QA 登录页，确认页面实际加载后告知我；随后继续真实登录和 Android 强制停止／重启恢复验收。登录密码请只在设备页面输入，不要发到聊天中。
+### LifeSpace｜QA 浏览器 B／Android A 登录与 Keystore 真机验收（2026-11-17）
+
+- **浏览器 B 登录：**Chrome 页面实际进入隔离 QA `/archive`。身份为 `pr95-sync-b-20261013-1719`；云空间 1 条；基线记录 `PR95 同步隔离 B 20261013` 显示「仅自己可见」。页面 DOM 与用户截图一致。
+- **Android A 登录：**华为 HMA-AL00 上现有 QA 包 `com.youshi.cultivation.w5qa20261109r18`（versionCode 2026112605）实际加载 QA Worker，WebView 账号为 `pr95-sync-a-20261013-1719`；Plus 1 GB、经验卡 27、云空间 34、临时空间 1。
+- **在线 Session 复验：**从 Android WebView 的 QA Supabase 缓存 Session 发起只读 `GET /auth/v1/user`，HTTP 200；服务端用户 ID 与本地 Session 用户 ID 一致，邮箱身份为 A。未输出或保存 Access／Refresh Token。
+- **强制停止恢复：**仅对 QA 包执行 `am force-stop`，再启动 MainActivity；未清除数据、未卸载、未重装、未重启整台手机。重新读取 WebView 后 A 身份仍在，Plus／经验卡／云空间／临时空间数据仍可见。**QA APP 强制停止后重新启动恢复 PASS。**
+- **Keystore 只读核验：**调用 `inspectOfflineOwnerProofReadOnly`，返回 `status=valid`、`keyAliasPresent=true`、`proofDecryptable=true`、`ownerMatchesExpected=true`、`sessionMatchesExpected=true`、`environmentMatches=true`、`originMatches=true`、`installBindingMatches=true`、`persistentStateUnchanged=true`。此项为真实 Android Keystore 只读检查，未修改 proof／key／generation。
+- **A/B 样本隔离：**B 浏览器显示 B 账号及 B 基线记录，不包含 A 账号或 A 的 `140-R06-W5-POSTUPGRADE-20261114-1628` 样本；A Android 页面显示 A 账号及 A 基线，不包含 B 的 `PR95 同步隔离 B 20261013` 样本。所检查的这两组样本未见跨账号混显；这不是全库所有数据的穷尽性审计。
+- **尚未关闭的最后一项：**本轮没有退出 A 账号再执行一次全新的 Android 密码登录，因此尚未直接证明本次新增的 `beginAndroidAuthLogin → signInWithPassword → completeAndroidAuthLogin → Keystore Seal` 接线在全新登录中完整执行。为避免在不知道密码时丢失现有有效 A 会话，未擅自退出。整机重启测试也未执行；当前 PASS 仅覆盖应用强制停止／重新启动。
+- **边界：**本轮只操作 QA APP；正式 APP、正式网站、正式 Supabase、正式 R2、PayPal 均未修改；没有 SQL 写入、R2 写入、Git commit、push 或 merge。
+- **下一步：**保留当前 A 会话。待确认 A 的 QA 密码可用后，再安排一次受控的退出／重新登录验收；密码只在手机输入，不通过聊天传递。
+
+### LifeSpace｜正式 Android 登录接线与 W4 正式候选续办（2026-11-17 最新）
+
+- **正式真机登录：**华为 HMA-AL00 正式包 `com.youshi.cultivation`、versionName `1.0.5-rc137`、versionCode 29。用户在手机本机输入密码后，正式 Supabase 创建新 Android/HUAWEI Session；Owner 与此前正式管理员身份匹配，首页可进入。未记录密码、Access Token 或 Refresh Token。
+- **Keystore 结果：**重新登录后只读检查返回 `missing_binding`；此前退出登录已按显式退出合同撤销旧设备绑定。检查没有修改 Keystore、proof、generation 或 App 数据。正式包仍保持安装和当前登录页状态，未重启、未再次退出、未清除数据。
+- **生产根因证据：**通过正式 WebView 读取 `https://life-space.uk/login` 的实际线上 HTML 与页面 chunk `page-BsX3flwb.js`。线上 bundle 包含 `signInWithPassword`，但不包含 `beginAndroidAuthLogin`、`completeAndroidAuthLogin`、`failAndroidAuthLogin`；因此正式密码登录没有接入 Android Auth Controller 的登录 gate、已验证 Session 提交及 Keystore Seal。与本次 Session 已创建、Keystore 返回 `missing_binding` 的现象吻合。该项仍须在修复上线后用正式真机复验，不能仅凭源码通过宣称已修复。
+- **源码最小修复：**沿用受控 Release worktree，基线 HEAD `008e07a7d02a11ef7ea3d48fea35c5d8d0de1eb3`。登录页仅在原生 Android 路径增加 begin／complete／fail 接线；普通 Web 登录路径保持原行为。测试辅助变量改名为 `authModule`，仅消除 ESLint 的既有 `@next/next/no-assign-module-variable` 报错。正式 Wrangler 配置准备脚本增加 `keep_vars: true`，避免部署时清除未写入候选配置的现有 Dashboard vars；对应断言已加入配置测试。
+- **验证：**Android Auth 与正式 Wrangler 配置两组测试合计 **26/26 PASS**；直接运行等价 TypeScript 命令 `node node_modules/typescript/bin/tsc --noEmit -p tsconfig.vinext.json --pretty false` **PASS**；涉及文件 ESLint **PASS**；`git diff --check` **PASS**（仅有 LF／CRLF 提示，无 diff 错误）。`npm run typecheck:vinext` 与嵌套 npm build 包装命令在 Runner 窗口超时；改用直接 Node 入口完成构建和 TypeScript 检查，未把超时误报为 PASS。
+- **正式构建候选：**通过进程环境注入正式 Supabase URL／Publishable Key、正式 Turnstile Site Key 与正式 Origin，未将任何密钥写入仓库文件。直接运行 `node scripts/build-vinext.mjs` exit 0；客户端 Supabase bundle 检查通过。登录页 manifest entry 为 `page-BIsXCsb1.js`（SHA-256 `eb41b0a69fd3941f842992d03147a33c4d1610cbb58c9304abc6a651e7141e10`），其静态 imports 明确包含 `android-auth-state-C1VCjblx.js`（SHA-256 `cf01affec03ba7cc3005ae992be220194367c28b60555fe1ac38e9ab20b7f108`）。随后生成 `dist/server/wrangler.json`，配置 SHA-256 `8b5fed5f659fae69733ac812d979184fbf0dfcb007cb4e3ad273725f3002207a`；目标 Worker `life-space-canary`，保留 `life-space-media-canary` 桶与 `life-space-business-media` Service Binding，R2 mode=`isolated`、读写两个开关均为 false，`keep_vars=true`。Wrangler `deploy --dry-run` 复验 PASS：353 modules，预计上传 3752.08 KiB（gzip 991.36 KiB）；明确显示 `--dry-run: exiting now`。
+- **Cloudflare 正式配置只读更新：**当前正式 `life-space-canary` 已有 `R2_BUSINESS_MEDIA_SERVICE → life-space-business-media` Service Binding，且绑定 `life-space-media-canary` 桶；R2 业务模式仍 isolated，读／镜像写开关均 false。正式媒体 Worker 已存在。此状态更新 supersedes 本文件 2026-11-16 旧核查中“正式媒体 Worker／Service Binding 不存在”的记录；未修改 Cloudflare 配置。
+- **Supabase 正式库只读核查：**最新登记迁移为 `20261116145357`；`private.storage_deletion_write_gate.writes_stopped=true`。当前已存在 `market_posts.published_at`、`get_plus_plant_guide` 及管理员审核相关 RPC。复核确认 `public.public_guide_record_projection` **实际存在**，其 `security_invoker=true`、`security_barrier=true`，anon/authenticated 均有 SELECT，列定义与正式源码查询一致；虽然迁移 `20261108130901` 未登记，但该 view 与其依赖的 `is_record_effectively_public` 函数、`records_select_own_or_public` RLS policy 均已存在，故不构成本轮发布阻断，不运行整份旧迁移。另缺 `begin_paypal_membership_capture`，但 PayPal 仍关闭；`membership_service_ends_at` 当前源码无直接引用，不据此扩大本轮 SQL 范围。当前登录接线修复不需要生产 SQL。
+- **正式发布前基线与回退锚点：**Cloudflare 当前 `life-space-canary` 生产部署 ID `57d4b473-4ad2-4beb-b227-2329a547e4d3`，100% 指向 Worker version 96：`76f96d92-13ab-4307-a0d0-63155a939d3c`（2026-11-16 21:01:27Z）。版本 96 的部署说明为 T13 W4 public Supabase runtime media fix，维护冻结、R2 读写关闭。若新版本部署后异常，可用 `wrangler rollback 76f96d92-13ab-4307-a0d0-63155a939d3c --name life-space-canary --yes` 回到该已验证基线。
+- **当前发布边界：**尚未执行生产 SQL、Worker 部署或流量切换；R2 读／镜像写仍关闭，PayPal Live 仍关闭，APK 未重建或安装。生产数据库、正式 APP 与用户数据保持原状。下一步是将已验证的登录接线候选提交并部署到 `life-space-canary`；部署后立即核对正式 `/login` 资源、登录会话与 Keystore 绑定。R2 开关、PayPal、生产 SQL 和 APK 发布继续独立处理。

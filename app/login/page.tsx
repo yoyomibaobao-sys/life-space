@@ -10,6 +10,7 @@ import AuthCaptcha, { AUTH_CAPTCHA_ENABLED } from "@/components/AuthCaptcha";
 import { buildRegisterHref, getSafeReturnTo } from "@/lib/auth-return";
 import { useIsNativeApp } from "@/lib/capacitor/useIsNativeApp";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { beginAndroidAuthLogin, completeAndroidAuthLogin, failAndroidAuthLogin } from "@/lib/android-auth-state";
 
 function isNetworkError(message: string) {
   const text = message.toLowerCase();
@@ -84,14 +85,27 @@ export default function LoginPage() {
     setLoading(true);
     setMessage("");
 
+    let androidLoginStarted = false;
+    let serverLoginSucceeded = false;
+
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      if (isNativeApp) {
+        beginAndroidAuthLogin();
+        androidLoginStarted = true;
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
         options: { captchaToken: captchaToken || undefined },
       });
 
       if (error) {
+        if (androidLoginStarted) {
+          failAndroidAuthLogin();
+          androidLoginStarted = false;
+        }
+
         if (isNetworkError(error.message)) {
           setMessage(t.auth.network_local_fallback);
           setShowLocalFallback(true);
@@ -102,19 +116,37 @@ export default function LoginPage() {
         return;
       }
 
-      if (remember) {
-        localStorage.setItem("remember_email", cleanEmail);
-      } else {
-        localStorage.removeItem("remember_email");
+      serverLoginSucceeded = true;
+      if (isNativeApp) {
+        await completeAndroidAuthLogin(data.user);
+      }
+
+      try {
+        if (remember) {
+          localStorage.setItem("remember_email", cleanEmail);
+        } else {
+          localStorage.removeItem("remember_email");
+        }
+      } catch {
+        // Remembering an email is optional and must not block authentication.
       }
 
       const returnTo = getSafeReturnTo(
         new URLSearchParams(window.location.search).get("returnTo"),
       );
       router.replace(returnTo);
-    } catch {
-      setMessage(t.auth.network_local_fallback);
-      setShowLocalFallback(true);
+    } catch (error) {
+      if (androidLoginStarted && !serverLoginSucceeded) {
+        failAndroidAuthLogin();
+      }
+
+      if (isNativeApp && serverLoginSucceeded) {
+        const detail = error instanceof Error ? error.message : String(error);
+        setMessage(getLoginErrorMessage(detail, t.auth));
+      } else {
+        setMessage(t.auth.network_local_fallback);
+        setShowLocalFallback(true);
+      }
     } finally {
       setCaptchaResetKey((value) => value + 1);
       setLoading(false);
