@@ -523,3 +523,12 @@
 - **Supabase 正式库只读核查：**最新登记迁移为 `20261116145357`；`private.storage_deletion_write_gate.writes_stopped=true`。当前已存在 `market_posts.published_at`、`get_plus_plant_guide` 及管理员审核相关 RPC。复核确认 `public.public_guide_record_projection` **实际存在**，其 `security_invoker=true`、`security_barrier=true`，anon/authenticated 均有 SELECT，列定义与正式源码查询一致；虽然迁移 `20261108130901` 未登记，但该 view 与其依赖的 `is_record_effectively_public` 函数、`records_select_own_or_public` RLS policy 均已存在，故不构成本轮发布阻断，不运行整份旧迁移。另缺 `begin_paypal_membership_capture`，但 PayPal 仍关闭；`membership_service_ends_at` 当前源码无直接引用，不据此扩大本轮 SQL 范围。当前登录接线修复不需要生产 SQL。
 - **正式发布前基线与回退锚点：**Cloudflare 当前 `life-space-canary` 生产部署 ID `57d4b473-4ad2-4beb-b227-2329a547e4d3`，100% 指向 Worker version 96：`76f96d92-13ab-4307-a0d0-63155a939d3c`（2026-11-16 21:01:27Z）。版本 96 的部署说明为 T13 W4 public Supabase runtime media fix，维护冻结、R2 读写关闭。若新版本部署后异常，可用 `wrangler rollback 76f96d92-13ab-4307-a0d0-63155a939d3c --name life-space-canary --yes` 回到该已验证基线。
 - **当前发布边界：**尚未执行生产 SQL、Worker 部署或流量切换；R2 读／镜像写仍关闭，PayPal Live 仍关闭，APK 未重建或安装。生产数据库、正式 APP 与用户数据保持原状。下一步是将已验证的登录接线候选提交并部署到 `life-space-canary`；部署后立即核对正式 `/login` 资源、登录会话与 Keystore 绑定。R2 开关、PayPal、生产 SQL 和 APK 发布继续独立处理。
+
+### LifeSpace｜正式 W4 登录接线部署与真机续验（2026-11-17）
+
+- **Release 分支同步：**本地 Release 与 GitHub 远端历史有分叉。保留双方提交后，GitHub Release 分支通过单文件提交同步 CI 工作流，远端提交 `4426c045361874890b0f7a97fc9135abd7e0d493`，父提交 `bdf89d1bf7766ad3642f85727824aa96ad7eda4e`。本地 Git push 因远端 HTTPS 连接超时未确认成功；GitHub API 已读回上述远端 Commit 与工作流文件。
+- **正式候选 CI：**GitHub Actions run `44045478384` 成功；身份检查、依赖安装、Android Auth／W4／R2 测试、TypeScript、正式构建、绑定与开关断言、Version Upload 全部 PASS。
+- **正式 Worker：**Cloudflare `life-space-canary` 新版本 v97，Version ID `bfc91b02-c041-4827-80f7-23829678a236`。已创建 Deployment ID `4f1bcf50-f684-4fdd-a66f-d9bcb7cb422d`，100% 流量指向 v97，时间 `2026-11-17T08:20:14Z`。v96 `76f96d92-13ab-4307-a0d0-63155a939d3c` 保留为回退锚点。
+- **配置核验：**v97 保留 `R2_MEDIA_CANARY → life-space-media-canary`、`R2_BUSINESS_MEDIA_SERVICE → life-space-business-media`、正式 Supabase URL／Publishable Key、CRON／PayPal／R2／Supabase secrets。R2 模式为 `isolated`，`R2_MEDIA_READ_ENABLED=false`，`R2_MEDIA_MIRROR_WRITE_ENABLED=false`。没有执行 SQL、PayPal Live 或 R2 开关启用。
+- **真机状态：**ADB 设备 HMA-AL00 在线，正式包 `com.youshi.cultivation` versionCode 29／`1.0.5-rc137` 未重装、未清数据。已启动正式 MainActivity，WebView 当前 URL 为 `https://life-space.uk/profile`。本轮没有退出登录或改动 APP 本地数据。
+- **尚待验收：**Runner 直接请求 `https://life-space.uk/login` 超时，不能作为 HTTP 失败证据；手机 WebView 资源级新代码读取尚未完成。下一步在不清数据的前提下刷新正式 WebView，确认新登录 chunk 加载，再由用户在手机本机输入密码完成一次受控重新登录，检查 Keystore proof、Owner／Session 绑定及强制停止恢复。不得通过聊天收集密码。
