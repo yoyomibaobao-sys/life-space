@@ -37,25 +37,10 @@ jobs:
           set -euo pipefail
           test "${GITHUB_REF_NAME}" = "release/lifespace-r01-controlled-launch-20261116"
           test "${CLOUDFLARE_ACCOUNT_ID}" = "5765d2d135aa20de90c898ab93ad4c11"
-          test "$(git rev-parse HEAD^)" = "be6041867e112911a55468295c8e62c603d2276f"
-          mapfile -t changed < <(git diff --name-only HEAD^ HEAD | sort)
-          expected=(
-            ".github/workflows/cloudflare-canary.yml"
-            "app/login/page.tsx"
-            "components/auth/AndroidRegistration.tsx"
-            "lib/android-auth-session.ts"
-            "lib/android-auth-state.ts"
-            "lib/android-safe-startup-storage.ts"
-            "lib/supabase.ts"
-            "mobile-offline-src/main.tsx"
-            "tests/android-auth-connectivity.test.mjs"
-            "tests/android-single-runtime-prerequisites.test.mjs"
-            "tests/android-welcome-registration.test.mjs"
-          )
-          test "${#changed[@]}" -eq "${#expected[@]}"
-          for index in "${!expected[@]}"; do
-            test "${changed[$index]}" = "${expected[$index]}"
-          done
+          test "$(git rev-parse HEAD^)" = "a012195836b7e39f0b7b68f210535450caa9fbdc"
+          mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
+          test "${#changed[@]}" -eq 1
+          test "${changed[0]}" = ".github/workflows/cloudflare-canary.yml"
           test -n "${NEXT_PUBLIC_TURNSTILE_SITE_KEY}"
           echo "LIFESPACE_RELEASE_SOURCE=PASS"
           echo "FORMAL_CLOUDFLARE_ACCOUNT=PASS"
