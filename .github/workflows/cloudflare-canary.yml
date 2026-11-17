@@ -37,7 +37,7 @@ jobs:
           set -euo pipefail
           test "${GITHUB_REF_NAME}" = "release/lifespace-r01-controlled-launch-20261116"
           test "${CLOUDFLARE_ACCOUNT_ID}" = "5765d2d135aa20de90c898ab93ad4c11"
-          test "$(git rev-parse HEAD^)" = "a012195836b7e39f0b7b68f210535450caa9fbdc"
+          test "$(git rev-parse HEAD^)" = "ae7f0c8342a9f1521919354cb17fc990c4849963"
           mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
           test "${#changed[@]}" -eq 1
           test "${changed[0]}" = ".github/workflows/cloudflare-canary.yml"
