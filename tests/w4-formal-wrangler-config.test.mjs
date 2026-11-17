@@ -30,6 +30,7 @@ test("formal site overlay adds only the private media service and closed gates",
   assert.equal(merged.name, "life-space-canary");
   assert.equal(merged.main, base.main);
   assert.equal(merged.compatibility_date, base.compatibility_date);
+  assert.equal(merged.keep_vars, true);
   assert.deepEqual(merged.assets, base.assets);
   assert.deepEqual(merged.r2_buckets, base.r2_buckets);
   assert.deepEqual(merged.services, [{

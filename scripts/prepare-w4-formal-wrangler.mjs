@@ -75,7 +75,9 @@ export function mergeFormalWranglerConfig(base, overlay) {
     vars[key] = expected;
   }
 
-  return { ...base, services, vars };
+  // Preserve existing dashboard vars that are not represented in this build overlay.
+  // Wrangler otherwise deletes them before applying the configured vars.
+  return { ...base, keep_vars: true, services, vars };
 }
 
 function prepareFormalWranglerConfig() {

@@ -66,7 +66,7 @@ async function loadAuthModule() {
   });
 }
 
-function createAuthHarness(module, {
+function createAuthHarness(authModule, {
   user = null,
   rememberedOwner = null,
   explicit = false,
@@ -100,7 +100,7 @@ function createAuthHarness(module, {
       },
     },
   };
-  const controller = module.createAndroidAuthController({
+  const controller = authModule.createAndroidAuthController({
     client,
     isServiceOnline: () => serviceOnline,
     loadRememberedOwner: () => remembered,
@@ -131,9 +131,9 @@ function createAuthHarness(module, {
 }
 
 test("remembered local owner is not an authenticated Android session", async () => {
-  const module = await loadAuthModule();
+  const authModule = await loadAuthModule();
   const rememberedOwner = { userId: "remembered", email: "old@example.test" };
-  const harness = createAuthHarness(module, { rememberedOwner, online: true });
+  const harness = createAuthHarness(authModule, { rememberedOwner, online: true });
   await harness.controller.initialize();
   assert.equal(harness.controller.getSnapshot().status, "signed-out");
   assert.equal(harness.controller.getSnapshot().sessionUserId, null);
@@ -141,32 +141,32 @@ test("remembered local owner is not an authenticated Android session", async () 
 });
 
 test("authenticated owner requires signed-in session and exact owner match", async () => {
-  const module = await loadAuthModule();
+  const authModule = await loadAuthModule();
   const ownerA = { userId: "owner-a", email: "a@example.test" };
   const ownerB = { userId: "owner-b", email: "b@example.test" };
   assert.equal(
-    module.resolveAuthenticatedOwnerContext(
+    authModule.resolveAuthenticatedOwnerContext(
       { status: "signed-in", sessionUserId: "owner-a" },
       ownerA,
     ),
     ownerA,
   );
   assert.equal(
-    module.resolveAuthenticatedOwnerContext(
+    authModule.resolveAuthenticatedOwnerContext(
       { status: "signed-out", sessionUserId: null },
       ownerA,
     ),
     null,
   );
   assert.equal(
-    module.resolveAuthenticatedOwnerContext(
+    authModule.resolveAuthenticatedOwnerContext(
       { status: "signed-in", sessionUserId: "owner-b" },
       ownerA,
     ),
     null,
   );
   assert.equal(
-    module.resolveAuthenticatedOwnerContext(
+    authModule.resolveAuthenticatedOwnerContext(
       { status: "signed-in", sessionUserId: "owner-b" },
       ownerB,
     ),
@@ -175,10 +175,10 @@ test("authenticated owner requires signed-in session and exact owner match", asy
 });
 
 test("outage exposes only proof-backed local Owner until online revalidation", async () => {
-  const module = await loadAuthModule();
+  const authModule = await loadAuthModule();
   const user = { id: "owner", email: "owner@example.test" };
   const proof = { userId: user.id };
-  const harness = createAuthHarness(module, { user, online: true, proof });
+  const harness = createAuthHarness(authModule, { user, online: true, proof });
   const statuses = [];
   const unsubscribe = harness.controller.subscribe(() => {
     statuses.push(harness.controller.getSnapshot().status);
@@ -191,7 +191,7 @@ test("outage exposes only proof-backed local Owner until online revalidation", a
   await harness.controller.revalidate();
   assert.equal(harness.controller.getSnapshot().status, "offline-owner-read");
   assert.equal(harness.controller.getSnapshot().sessionUserId, null);
-  assert.deepEqual(module.resolveAndroidReadOwner(harness.controller.getSnapshot()), proof);
+  assert.deepEqual(authModule.resolveAndroidReadOwner(harness.controller.getSnapshot()), proof);
 
   harness.setSessionUser(user);
   harness.setOnline(true);
@@ -203,9 +203,9 @@ test("outage exposes only proof-backed local Owner until online revalidation", a
 });
 
 test("offline explicit logout survives reconnect and clears cache without restoring auth", async () => {
-  const module = await loadAuthModule();
+  const authModule = await loadAuthModule();
   const user = { id: "owner", email: "owner@example.test" };
-  const harness = createAuthHarness(module, { user, online: false });
+  const harness = createAuthHarness(authModule, { user, online: false });
   await harness.controller.initialize();
   assert.equal(harness.controller.getSnapshot().status, "checking");
   assert.equal(harness.controller.getSnapshot().sessionUserId, null);
@@ -246,9 +246,9 @@ test("explicit logout then unified login clears signed-out and restores authenti
 });
 
 test("explicit signed-out startup ignores a persisted session and token refresh", async () => {
-  const module = await loadAuthModule();
+  const authModule = await loadAuthModule();
   const user = { id: "owner", email: "owner@example.test" };
-  const harness = createAuthHarness(module, {
+  const harness = createAuthHarness(authModule, {
     user,
     explicit: true,
     online: false,
@@ -507,6 +507,20 @@ test("CloudLogin eligibility and screen stability follow auth and connectivity s
     /setScreen|goList|window\.location|location\.replace|signOut/,
   );
   assert.doesNotMatch(read("lib/android-connectivity.ts"), /signOut|VPN|vpn/);
+});
+
+test("hosted login page connects native Android login to verified session persistence without changing web login", () => {
+  const login = read("app/login/page.tsx");
+  assert.match(login, /import \{ beginAndroidAuthLogin, completeAndroidAuthLogin, failAndroidAuthLogin \} from "@\/lib\/android-auth-state"/);
+  assert.match(login, /if \(isNativeApp\) \{\s*beginAndroidAuthLogin\(\)/);
+  assert.match(login, /const \{ data, error \} = await supabase\.auth\.signInWithPassword/);
+  assert.match(login, /serverLoginSucceeded = true;\s*if \(isNativeApp\) \{\s*await completeAndroidAuthLogin\(data\.user\)/);
+  assert.match(login, /if \(androidLoginStarted\) \{\s*failAndroidAuthLogin\(\)/);
+  assert.match(login, /if \(androidLoginStarted && !serverLoginSucceeded\) \{\s*failAndroidAuthLogin\(\)/);
+  assert.match(login, /const returnTo = getSafeReturnTo\([\s\S]*?router\.replace\(returnTo\)/);
+  assert.match(login, /const isNativeApp = useIsNativeApp\(\)/);
+  assert.match(login, /if \(isNativeApp\)[\s\S]*?completeAndroidAuthLogin/);
+  assert.match(login, /else \{\s*setMessage\(t\.auth\.network_local_fallback\);\s*setShowLocalFallback\(true\);/);
 });
 
 test("Android login keeps its form mounted during a pending request and reports invalid credentials", async () => {
