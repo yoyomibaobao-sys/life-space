@@ -1,6 +1,9 @@
 name: LifeSpace Formal W4 Candidate Stage
 
 on:
+  push:
+    branches:
+      - release/lifespace-r01-r2-rate-limit-20261118
   workflow_dispatch:
 
 permissions:
@@ -21,6 +24,11 @@ jobs:
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
       NEXT_PUBLIC_SITE_URL: https://life-space.uk
       NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN: https://life-space.uk
+      NEXT_PUBLIC_APP_URL: https://life-space.uk
+      NEXT_PUBLIC_PAYPAL_ENABLED: "false"
+      NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: "false"
+      NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN: https://life-space.uk
+      NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED: "false"
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
@@ -35,9 +43,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "${GITHUB_REF_NAME}" = "release/lifespace-r01-controlled-launch-20261116"
+          test "${GITHUB_REF_NAME}" = "release/lifespace-r01-r2-rate-limit-20261118"
           test "${CLOUDFLARE_ACCOUNT_ID}" = "5765d2d135aa20de90c898ab93ad4c11"
-          test "$(git rev-parse HEAD^)" = "ae7f0c8342a9f1521919354cb17fc990c4849963"
+          test "$(git rev-parse HEAD^)" = "f6f7c8c56f633cf7e70090a55068b5cbe5b2b660"
           mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
           test "${#changed[@]}" -eq 1
           test "${changed[0]}" = ".github/workflows/cloudflare-canary.yml"
@@ -62,9 +70,14 @@ jobs:
           npm run test:w4-formal-config
           node --test \
             tests/android-auth-connectivity.test.mjs \
+            tests/android-single-runtime-prerequisites.test.mjs \
+            tests/android-welcome-registration.test.mjs \
             tests/r2-media-service-stage.test.mjs \
             tests/r2-media-business.test.mjs \
-            tests/r2-media-gate-switches.test.mjs
+            tests/r2-media-gate-switches.test.mjs \
+            tests/r2-business-media-normal-path.test.mjs \
+            tests/r2-media-user-gateway-media-id.test.mjs \
+            tests/r2-media-user-gateway-security.test.mjs
           npm run typecheck:vinext
 
       - name: Build formal W4 candidate
@@ -84,6 +97,11 @@ jobs:
           assert.equal(cfg.vars?.R2_BUSINESS_MEDIA_MODE, "isolated");
           assert.equal(cfg.vars?.R2_MEDIA_READ_ENABLED, "false");
           assert.equal(cfg.vars?.R2_MEDIA_MIRROR_WRITE_ENABLED, "false");
+          assert.deepEqual(cfg.ratelimits, [{
+            name: "R2_MEDIA_MIRROR_RATE_LIMITER",
+            namespace_id: "2026111801",
+            simple: { limit: 60, period: 60 },
+          }]);
           // build-vinext.mjs separately verifies the Supabase host and publishable key in the browser bundle.
           assert.ok(cfg.services?.some(s => s.binding === "R2_BUSINESS_MEDIA_SERVICE" && s.service === "life-space-business-media"));
           assert.ok(cfg.r2_buckets?.some(b => b.binding === "R2_MEDIA_CANARY" && b.bucket_name === "life-space-media-canary"));
