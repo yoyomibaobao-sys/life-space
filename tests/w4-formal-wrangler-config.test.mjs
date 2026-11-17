@@ -20,6 +20,7 @@ function baseConfig(overrides = {}) {
       binding: "R2_MEDIA_CANARY",
       bucket_name: "life-space-media-canary",
     }],
+    ratelimits: [],
     ...overrides,
   };
 }
@@ -37,6 +38,11 @@ test("formal site overlay adds only the private media service and closed gates",
     binding: "R2_BUSINESS_MEDIA_SERVICE",
     service: "life-space-business-media",
   }]);
+  assert.deepEqual(merged.ratelimits, [{
+    name: "R2_MEDIA_MIRROR_RATE_LIMITER",
+    namespace_id: "2026111801",
+    simple: { limit: 60, period: 60 },
+  }]);
   assert.deepEqual(merged.vars, {
     R2_BUSINESS_MEDIA_MODE: "isolated",
     R2_MEDIA_READ_ENABLED: "false",
@@ -50,12 +56,40 @@ test("formal site overlay is idempotent and preserves unrelated bindings and var
   const base = baseConfig({
     services: [{ binding: "EXISTING_SERVICE", service: "existing-worker" }],
     vars: { EXISTING_FLAG: "keep" },
+    ratelimits: [{
+      name: "EXISTING_RATE_LIMITER",
+      namespace_id: "2026111701",
+      simple: { limit: 10, period: 10 },
+    }],
   });
   const once = mergeFormalWranglerConfig(base, overlay);
   const twice = mergeFormalWranglerConfig(once, overlay);
   assert.deepEqual(twice, once);
   assert.equal(twice.services.length, 2);
   assert.equal(twice.vars.EXISTING_FLAG, "keep");
+  assert.deepEqual(twice.ratelimits, [
+    { name: "EXISTING_RATE_LIMITER", namespace_id: "2026111701", simple: { limit: 10, period: 10 } },
+    { name: "R2_MEDIA_MIRROR_RATE_LIMITER", namespace_id: "2026111801", simple: { limit: 60, period: 60 } },
+  ]);
+});
+
+test("formal site overlay refuses a reused rate-limit namespace", () => {
+  assert.throws(() => mergeFormalWranglerConfig(baseConfig({
+    ratelimits: [{
+      name: "ANOTHER_RATE_LIMITER",
+      namespace_id: "2026111801",
+      simple: { limit: 10, period: 10 },
+    }],
+  }), overlay), /formal_rate_limit_namespace_id_already_bound/);
+});
+
+test("formal site overlay refuses a changed rate-limit contract", () => {
+  const invalid = { ...overlay, ratelimits: [{
+    name: "R2_MEDIA_MIRROR_RATE_LIMITER",
+    namespace_id: "2026111801",
+    simple: { limit: 60, period: 30 },
+  }] };
+  assert.throws(() => mergeFormalWranglerConfig(baseConfig(), invalid), /unexpected_formal_media_rate_limit_binding/);
 });
 
 test("formal site overlay refuses an unexpected Worker identity or canary bucket", () => {

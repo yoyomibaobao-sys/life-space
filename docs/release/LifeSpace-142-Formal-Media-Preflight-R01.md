@@ -24,8 +24,8 @@
 **本轮发现的可重复构建缺口：**从干净 `90a9c8b` 直接执行原 `build:vinext`，生成的 `dist/server/wrangler.json` 不含 Service Binding 和三个业务媒体变量。为避免依赖一次性手工补丁，新增正式候选 overlay 和构建后合并脚本。
 
 - `package.json` 新增 `build:vinext:formal-candidate`；原 `deploy:vinext` 明确使用 `dist/server/wrangler.json`。
-- `wrangler.site-formal-candidate.jsonc`：仅定义站点 Worker Service Binding 与关闭状态变量。
-- `scripts/prepare-w4-formal-wrangler.mjs`：严格核对 Worker 名称和既有 `R2_MEDIA_CANARY`，拒绝冲突 Binding 或任何已开启的门禁；只向构建产物合并服务绑定及三个关闭状态变量。
+- `wrangler.site-formal-candidate.jsonc`：定义站点 Worker Service Binding、正式 Rate Limiting binding 与关闭状态变量。
+- `scripts/prepare-w4-formal-wrangler.mjs`：严格核对 Worker 名称和既有 `R2_MEDIA_CANARY`，拒绝冲突 Service／Rate Limiting binding 或任何已开启的门禁；向构建产物合并服务绑定、限流绑定及三个关闭状态变量。
 - `wrangler.media-formal-candidate.jsonc`：独立媒体 Worker 配置，保留私有桶绑定和读写关闭状态。
 
 ### 候选配置合同
@@ -34,6 +34,7 @@
 
 - 保留既有 `R2_MEDIA_CANARY → life-space-media-canary`。
 - 增加 `R2_BUSINESS_MEDIA_SERVICE → life-space-business-media`。
+- 增加 `R2_MEDIA_MIRROR_RATE_LIMITER`：正式 `namespace_id=2026111801`，`limit=60`、`period=60`。
 - `R2_BUSINESS_MEDIA_MODE=isolated`。
 - `R2_MEDIA_READ_ENABLED=false`。
 - `R2_MEDIA_MIRROR_WRITE_ENABLED=false`。
@@ -55,6 +56,16 @@
 | `tests/w4-formal-wrangler-config.test.mjs` | `d5950a36c4366c80a5fb7f1e23ef52f0541c2010317472a3c5b47cf50b9ac009` |
 | `wrangler.media-formal-candidate.jsonc` | `061cd69ce7b74cf61481d0a5c5312d0d180afb544b592e0a94aebca1b06e1992` |
 | 构建产物 `dist/server/wrangler.json` | `d6bb33e310900644bb4f7f3491801ec373d98fce1093cc4b29319bee05a986bc` |
+
+### 2026-11-18 正式限流绑定续办候选
+
+- 基准源码：HEAD `5a381189d0c0f969b51a38f1c3383d6ba2bb7c22`，在独立干净 Worktree 构建；未复用早期 `dist`，也未改动原工作树中的其他未提交文件。
+- 正式构建变量：正式 Supabase URL／Publishable Key 与正式 Turnstile Site Key；PayPal、R2 镜像和 Trial 媒体代理客户端开关均关闭。
+- Rate Limiting binding：`R2_MEDIA_MIRROR_RATE_LIMITER`，`namespace_id=2026111801`，`limit=60`、`period=60`。正式账户 6 个 Worker 的 111 个历史版本已扫描，未发现既有 Rate Limiting binding；QA ID `2026110201` 未复用。
+- 构建与验证：`node scripts/build-vinext.mjs` PASS；`npm run typecheck:vinext` PASS；Android Auth／Android 单运行时前置／R2 正常路径／W4 配置／R2 用户网关安全定向测试合计 63/63 PASS；`wrangler deploy --dry-run --config dist/server/wrangler.json` PASS。
+- 本次续办文件 SHA-256：`wrangler.site-formal-candidate.jsonc` `9f0b927e910d23436503e8b9aa85a3ae8da98849ffc036d3f710cb239b4fdadb`；`scripts/prepare-w4-formal-wrangler.mjs` `a280a6a66a0c251c0e73373107d5db427fd86a37794a617924a6c9f0c3f506ad`；`tests/w4-formal-wrangler-config.test.mjs` `1d7a0cbb76c4bf998cd63f731a303e90fbaa411d6af1b72bd365ac4ce68bdfc0`；本次 `dist/server/wrangler.json` `636572376bea16b53b37349277262ccaa821efaf5fc3e32f4da35525caaad8cc`。
+- Dry-run 明确显示 `R2_MEDIA_MIRROR_RATE_LIMITER (60 requests/60s)`、`R2_BUSINESS_MEDIA_SERVICE` 与旧 `R2_MEDIA_CANARY`；`R2_MEDIA_READ_ENABLED=false`、`R2_MEDIA_MIRROR_WRITE_ENABLED=false`，模式 `isolated`。
+- **未上传新 Worker 版本、未创建 Deployment、未改变正式流量。**正式 `life-space-canary` 仍由 v98 100% 承接；v99 保持已上传但未部署。新候选部署需另行授权，且部署后仍保持 R2 两项开关关闭。
 
 ## 3. 构建与隔离验证
 
@@ -100,8 +111,8 @@
 - 同一个随机 Secret 值必须分别配置在站点 Worker 与媒体 Worker；代码要求至少 32 字节。
 - 站点 Worker 现有 `SUPABASE_SERVICE_ROLE_KEY` 保留原位；媒体 Worker 不需要也不得复制该 service-role secret。
 - 当前私有 Worker 入口只暴露内部读取与受控阶段写入；未启用旧迁移入口时，不额外创建 `R2_MEDIA_MIGRATION_SECRET` 或 `R2_MEDIA_SIGNING_SECRET`。
-- 镜像写入还要求站点 Worker 有 Cloudflare Rate Limiting binding：`R2_MEDIA_MIRROR_RATE_LIMITER`。正式配置当前缺失。
-- QA 配置中的 namespace_id `2026110201` 仅属 QA，不得复制到正式账户。正式写入开关启用前，必须另行创建正式 Rate Limiting namespace 并配置 `ratelimits` binding。
+- 镜像写入还要求站点 Worker 有 Cloudflare Rate Limiting binding：`R2_MEDIA_MIRROR_RATE_LIMITER`。正式部署候选已补齐该绑定；当前生产 Worker 尚未部署此绑定。
+- Cloudflare Rate Limiting binding 的 `namespace_id` 是账户内自行指定的正整数，不需要另建独立 namespace 资源；必须保证同一 Cloudflare 账户内唯一。QA 的 `2026110201` 仅属 QA，不得复制到正式账户。正式候选使用 `2026111801`，`limit=60`、`period=60`；只读扫描正式账户 6 个 Worker 的全部 111 个历史版本，未发现既有 Rate Limiting binding。正式写入开关启用前仍须先部署并核验此绑定。
 - 本轮未读取、输出或写入任何正式 Secret 值。
 
 ## 6. Android v29 合同核对
@@ -124,7 +135,7 @@
 1. 在正式账户创建私有 R2 桶 `life-space-business-media`；保持公开访问关闭，不启用 r2.dev 或公开域名。
 2. 创建媒体 Worker `life-space-business-media`，按 `wrangler.media-formal-candidate.jsonc` 配置 `R2_BUSINESS_MEDIA`，关闭 workers.dev、preview URL 和所有公开路由。
 3. 在媒体 Worker 与站点 Worker 配置同一个 `R2_MEDIA_SERVICE_AUTH_SECRET`；不改变现有 Supabase service-role secret。
-4. 如需启用镜像写入，另建正式 Rate Limiting namespace，配置站点 binding `R2_MEDIA_MIRROR_RATE_LIMITER`；不得使用 QA namespace ID。
+4. 如需启用镜像写入，站点 binding `R2_MEDIA_MIRROR_RATE_LIMITER` 使用正式唯一 `namespace_id=2026111801`、`limit=60`、`period=60`；不创建独立 namespace 资源，不使用 QA ID `2026110201`。部署绑定与开启镜像写入是两个独立步骤，绑定部署后仍保持写入开关关闭，待单独授权和验收后才可开启。
 
 **B. 先媒体 Worker，后站点 W4**
 

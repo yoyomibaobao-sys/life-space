@@ -7,6 +7,16 @@
       "service": "life-space-business-media"
     }
   ],
+  "ratelimits": [
+    {
+      "name": "R2_MEDIA_MIRROR_RATE_LIMITER",
+      "namespace_id": "2026111801",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    }
+  ],
   "vars": {
     "R2_BUSINESS_MEDIA_MODE": "isolated",
     "R2_MEDIA_READ_ENABLED": "false",

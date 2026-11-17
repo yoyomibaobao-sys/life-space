@@ -14,6 +14,11 @@ const REQUIRED_FLAGS = Object.freeze({
   R2_MEDIA_READ_ENABLED: "false",
   R2_MEDIA_MIRROR_WRITE_ENABLED: "false",
 });
+const REQUIRED_RATE_LIMITER = Object.freeze({
+  name: "R2_MEDIA_MIRROR_RATE_LIMITER",
+  namespace_id: "2026111801",
+  simple: Object.freeze({ limit: 60, period: 60 }),
+});
 
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -34,6 +39,20 @@ export function mergeFormalWranglerConfig(base, overlay) {
   }
   if (!Array.isArray(overlay.services) || overlay.services.length !== 1) {
     throw new Error("formal_media_service_binding_required");
+  }
+  if (!Array.isArray(overlay.ratelimits) || overlay.ratelimits.length !== 1) {
+    throw new Error("formal_media_rate_limit_binding_required");
+  }
+  const rateLimiter = overlay.ratelimits[0];
+  if (!isObject(rateLimiter) ||
+      rateLimiter.name !== REQUIRED_RATE_LIMITER.name ||
+      rateLimiter.namespace_id !== REQUIRED_RATE_LIMITER.namespace_id ||
+      !isObject(rateLimiter.simple) ||
+      rateLimiter.simple.limit !== REQUIRED_RATE_LIMITER.simple.limit ||
+      rateLimiter.simple.period !== REQUIRED_RATE_LIMITER.simple.period ||
+      Object.keys(rateLimiter).some((key) => !["name", "namespace_id", "simple"].includes(key)) ||
+      Object.keys(rateLimiter.simple).some((key) => !["limit", "period"].includes(key))) {
+    throw new Error("unexpected_formal_media_rate_limit_binding");
   }
   const service = overlay.services[0];
   if (!isObject(service) ||
@@ -75,9 +94,39 @@ export function mergeFormalWranglerConfig(base, overlay) {
     vars[key] = expected;
   }
 
+  if (base.ratelimits !== undefined && !Array.isArray(base.ratelimits)) {
+    throw new Error("existing_rate_limit_bindings_invalid");
+  }
+  const ratelimits = (base.ratelimits || []).map((item) => ({
+    ...item,
+    ...(isObject(item?.simple) ? { simple: { ...item.simple } } : {}),
+  }));
+  const sameName = ratelimits.filter((item) => item?.name === REQUIRED_RATE_LIMITER.name);
+  if (sameName.length > 1) throw new Error("duplicate_formal_rate_limit_binding_name");
+  if (ratelimits.some((item) =>
+    item?.namespace_id === REQUIRED_RATE_LIMITER.namespace_id &&
+    item?.name !== REQUIRED_RATE_LIMITER.name
+  )) {
+    throw new Error("formal_rate_limit_namespace_id_already_bound");
+  }
+  if (sameName.length === 1) {
+    const existing = sameName[0];
+    if (existing.namespace_id !== REQUIRED_RATE_LIMITER.namespace_id ||
+        !isObject(existing.simple) ||
+        existing.simple.limit !== REQUIRED_RATE_LIMITER.simple.limit ||
+        existing.simple.period !== REQUIRED_RATE_LIMITER.simple.period) {
+      throw new Error("conflicting_existing_formal_rate_limit_binding");
+    }
+  } else {
+    ratelimits.push({
+      ...REQUIRED_RATE_LIMITER,
+      simple: { ...REQUIRED_RATE_LIMITER.simple },
+    });
+  }
+
   // Preserve existing dashboard vars that are not represented in this build overlay.
   // Wrangler otherwise deletes them before applying the configured vars.
-  return { ...base, keep_vars: true, services, vars };
+  return { ...base, keep_vars: true, services, vars, ratelimits };
 }
 
 function prepareFormalWranglerConfig() {
@@ -106,6 +155,7 @@ function prepareFormalWranglerConfig() {
       binding: "R2_BUSINESS_MEDIA_SERVICE",
       service: MEDIA_WORKER,
     },
+    rate_limit_binding: REQUIRED_RATE_LIMITER,
     preserved_site_bucket: REQUIRED_SITE_BUCKET,
     gates: REQUIRED_FLAGS,
     sha256,
