@@ -152,6 +152,7 @@ export async function POST(request: Request) {
         path: "/",
         sameSite: "lax",
         secure,
+        httpOnly: true,
       },
       cookies: {
         getAll() {
