@@ -91,7 +91,7 @@ type AuthStateListenerClient = {
 type CookieSyncActions = {
   sync: (session: SupabaseCookieSession | null | undefined) => Promise<boolean>;
   clear: () => Promise<boolean>;
-};;
+};
 
 /** Install once beside the web Supabase singleton; never used by native Android. */
 export function installSupabaseSessionCookieSync(
