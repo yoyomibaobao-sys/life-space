@@ -52,6 +52,7 @@ jobs:
           test -n "${EXPECTED_RELEASE_SHA}"
           test "$(git rev-parse HEAD)" = "${EXPECTED_RELEASE_SHA}"
           test -n "${NEXT_PUBLIC_TURNSTILE_SITE_KEY}"
+          test -n "${CLOUDFLARE_API_TOKEN}"
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED}" = "true"
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE}" = "production"
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN}" = "https://life-space.uk"
@@ -137,7 +138,9 @@ jobs:
           assert.ok(!containsKey(chunksDir, "lifespace-site-media-qa-20261028"), "qa_media_origin_leaked_to_formal_client_bundle");
           assert.ok(!containsKey("dist/server", "lifespace-site-media-qa-20261028"), "qa_media_origin_leaked_to_formal_worker_bundle");
           assert.ok(!containsKey("dist/server", "mablwxlipcgbmbnfdbkc"), "qa_supabase_ref_leaked_to_formal_worker_bundle");
+          assert.ok(containsKey("dist/server", "session_sync_unavailable"), "owner_session_cookie_route_missing_from_worker_bundle");
           console.log("FORMAL_W4_CONFIG_TURNSTILE_R2_MIRROR=PASS");
+          console.log("OWNER_SESSION_COOKIE_ROUTE_BUNDLED=PASS");
           NODE
 
       - name: Snapshot active production deployment before candidate upload
@@ -160,7 +163,11 @@ jobs:
           assert.ok(Array.isArray(deployments.deployments) && deployments.deployments.length > 0, "active_deployment_missing");
           assert.ok(Array.isArray(versions.items), "worker_versions_missing");
           const latest = deployments.deployments[0];
-          assert.ok(Array.isArray(latest.versions) && latest.versions.length > 0, "active_versions_missing");
+          assert.equal(latest.id, "b171ae4b-7b9f-4368-a3aa-8f36b6b1f82b", "unexpected_active_deployment_before_stage");
+          assert.deepEqual(latest.versions, [{
+            version_id: "5eed206e-5394-4f76-8926-b768fb204add",
+            percentage: 100,
+          }], "unexpected_active_worker_version_before_stage");
           assert.equal(latest.versions.reduce((sum, item) => sum + item.percentage, 0), 100, "active_traffic_not_100_percent");
           const snapshot = {
             deployments: deployments.deployments.map(item => ({
