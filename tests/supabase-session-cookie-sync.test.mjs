@@ -95,6 +95,12 @@ test("session bridge verifies tokens, restricts origin, sets SSR cookies and cle
   assert.match(route, /cookieClient\.auth\.getUser/);
   assert.match(route, /response\.cookies\.set/);
   assert.match(route, /httpOnly: true/);
+
+  const gateway = readFileSync(
+    new URL("../cloudflare/r2-media-user-gateway.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(gateway, /httpOnly: true/);
   assert.match(route, /export async function DELETE/);
   assert.match(route, /sb-\$\{projectRef\}-auth-token/);
 });
