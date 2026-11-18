@@ -101,6 +101,7 @@ function createRequestUserClient(request, env) {
       path: "/",
       sameSite: "lax",
       secure: new URL(request.url).protocol === "https:",
+      httpOnly: true,
     },
     cookies: {
       getAll() { return parseCookies(request.headers.get("cookie") || ""); },
