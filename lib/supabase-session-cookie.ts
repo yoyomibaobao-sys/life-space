@@ -84,20 +84,45 @@ type AuthStateListenerClient = {
     onAuthStateChange(
       callback: (event: string, session: SupabaseCookieSession | null) => void,
     ): { data: { subscription: { unsubscribe: () => void } } };
+    getSession(): Promise<{ data: { session: SupabaseCookieSession | null } }>;
   };
-};
+}
+
+type CookieSyncActions = {
+  sync: (session: SupabaseCookieSession | null | undefined) => Promise<boolean>;
+  clear: () => Promise<boolean>;
+};;
 
 /** Install once beside the web Supabase singleton; never used by native Android. */
-export function installSupabaseSessionCookieSync(client: AuthStateListenerClient) {
+export function installSupabaseSessionCookieSync(
+  client: AuthStateListenerClient,
+  actions: CookieSyncActions = {
+    sync: syncSupabaseSessionCookie,
+    clear: clearSupabaseSessionCookie,
+  },
+) {
   if (typeof window === "undefined") return () => undefined;
 
+  let authEventObserved = false;
   const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
+    authEventObserved = true;
     if (event === "SIGNED_OUT" || (event === "INITIAL_SESSION" && !session)) {
-      void clearSupabaseSessionCookie();
+      void actions.clear();
       return;
     }
-    if (session) void syncSupabaseSessionCookie(session);
+    if (session) void actions.sync(session);
   });
+
+  // INITIAL_SESSION normally covers this case. Explicitly read the persisted
+  // session as a fallback so an already-open desktop session still receives
+  // its SSR cookie mirror if the initial auth event is missed or delayed.
+  // Any auth event takes precedence, preventing a late stale read from
+  // restoring cookies after sign-out or a newer session transition.
+  void client.auth.getSession().then(({ data }) => {
+    if (authEventObserved) return;
+    if (data.session) void actions.sync(data.session);
+    else void actions.clear();
+  }).catch(() => undefined);
 
   return () => subscription.unsubscribe();
 }
