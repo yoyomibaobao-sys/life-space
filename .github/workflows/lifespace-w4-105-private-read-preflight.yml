@@ -50,7 +50,23 @@ jobs:
           assert_request CROSS_SITE_FULL 403 full -H 'Sec-Fetch-Site: cross-site'
           assert_request CROSS_SITE_THUMB 403 thumb -H 'Sec-Fetch-Site: cross-site'
 
+          SITE="https://life-space.uk"
+          assert_request FORMAL_ANON_FULL 404 full
+          assert_request FORMAL_ANON_THUMB 404 thumb
+          assert_request FORMAL_INVALID_BEARER_FULL 401 full -H 'Authorization: Bearer deliberately-invalid-preflight-token'
+          assert_request FORMAL_INVALID_BEARER_THUMB 401 thumb -H 'Authorization: Bearer deliberately-invalid-preflight-token'
+          assert_request FORMAL_CROSS_SITE_FULL 403 full -H 'Sec-Fetch-Site: cross-site'
+          assert_request FORMAL_CROSS_SITE_THUMB 403 thumb -H 'Sec-Fetch-Site: cross-site'
+
+          login_status="$(curl --silent --show-error --connect-timeout 8 --max-time 25 \
+            -D "$tmpdir/login_headers" -o "$tmpdir/login_body" -w '%{http_code}' \
+            'https://life-space.uk/login')"
+          echo "FORMAL_LOGIN_HTTP=${login_status}"
+          test "$login_status" = "200"
+          grep -qi 'content-type: text/html' "$tmpdir/login_headers"
+
           echo "PREVIEW_105_ANON_AND_INVALID_SESSION_DENIAL=PASS"
+          echo "FORMAL_105_ANON_AND_INVALID_SESSION_DENIAL=PASS"
           echo "NO_PRIVATE_IMAGE_BYTES_EXPOSED=PASS"
 
       - name: Explain verification boundary
@@ -58,10 +74,11 @@ jobs:
         run: |
           {
             echo "## W4 105 private-image read preflight"
-            echo "- Anonymous full/thumb GET denied (HTTP 404)"
-            echo "- Invalid bearer full/thumb GET denied (HTTP 401)"
-            echo "- Cross-site full/thumb GET denied (HTTP 403)"
+            echo "- Preview and production anonymous full/thumb GET denied (HTTP 404)"
+            echo "- Preview and production invalid bearer full/thumb GET denied (HTTP 401)"
+            echo "- Preview and production cross-site full/thumb GET denied (HTTP 403)"
             echo "- Every denial private/no-store, nosniff, and no image bytes"
+            echo "- Formal /login GET returns HTTP 200 and text/html"
             echo "- **A valid authenticated non-Owner session has NOT been tested here.**"
             echo "- No production code, database, Worker deployment, or traffic changes"
           } >> "$GITHUB_STEP_SUMMARY"
