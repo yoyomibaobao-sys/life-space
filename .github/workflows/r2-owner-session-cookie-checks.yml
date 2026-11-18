@@ -14,6 +14,9 @@ on:
       - ".github/workflows/r2-owner-session-cookie-checks.yml"
       - ".github/workflows/cloudflare-canary.yml"
       - "tests/cloudflare-r2-canary.test.mjs"
+      - "tests/android-auth-connectivity.test.mjs"
+      - "tests/android-single-runtime-prerequisites.test.mjs"
+      - "lib/android-api-inventory.ts"
 
 permissions:
   contents: read
@@ -46,6 +49,8 @@ jobs:
           tests/r2-media-user-gateway-security.test.mjs
           tests/record-media-gate.test.mjs
           tests/cloudflare-r2-canary.test.mjs
+          tests/android-auth-connectivity.test.mjs
+          tests/android-single-runtime-prerequisites.test.mjs
       - name: Lint changed TypeScript files
         run: >
           npx eslint
