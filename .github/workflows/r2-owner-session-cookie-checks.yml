@@ -12,6 +12,7 @@ on:
       - "cloudflare/r2-media-user-gateway.mjs"
       - "tests/supabase-session-cookie-sync.test.mjs"
       - ".github/workflows/r2-owner-session-cookie-checks.yml"
+      - ".github/workflows/cloudflare-canary.yml"
 
 permissions:
   contents: read
