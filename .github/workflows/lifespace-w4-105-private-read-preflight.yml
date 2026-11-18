@@ -1,0 +1,67 @@
+name: LifeSpace W4 105 private media read preflight
+
+on:
+  pull_request:
+    branches:
+      - release/lifespace-r01-r2-client-20261118
+    paths:
+      - ".github/workflows/lifespace-w4-105-private-read-preflight.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  private-media-live-negative:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      SITE: "https://9eb02418-life-space-canary.yoyomibaobao.workers.dev"
+      MEDIA_ID: "1b18d827-be9d-4839-a532-1339bf5aaf8d"
+    steps:
+      - name: Verify no anonymous or invalid-session access to Owner private images
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+
+          assert_request() {
+            local title="$1"
+            local expected="$2"
+            local variant="$3"
+            shift 3
+            local url="${SITE}/api/media/record-image?id=${MEDIA_ID}&variant=${variant}"
+            local status
+            status="$(curl --silent --show-error --connect-timeout 8 --max-time 25 \
+              -D "$tmpdir/headers" -o "$tmpdir/body" -w '%{http_code}' \
+              -H 'Cache-Control: no-cache' "$@" "$url")"
+            echo "${title}_HTTP=${status}"
+            test "$status" = "$expected"
+            grep -q '"error":"image_unavailable"' "$tmpdir/body"
+            grep -qi '^cache-control: private, no-store' "$tmpdir/headers"
+            grep -qi '^x-content-type-options: nosniff' "$tmpdir/headers"
+            if grep -q 'JFIF' "$tmpdir/body"; then echo "Unexpected private image bytes"; exit 1; fi
+          }
+
+          assert_request ANON_FULL 404 full
+          assert_request ANON_THUMB 404 thumb
+          assert_request INVALID_BEARER_FULL 401 full -H 'Authorization: Bearer deliberately-invalid-preflight-token'
+          assert_request INVALID_BEARER_THUMB 401 thumb -H 'Authorization: Bearer deliberately-invalid-preflight-token'
+          assert_request CROSS_SITE_FULL 403 full -H 'Sec-Fetch-Site: cross-site'
+          assert_request CROSS_SITE_THUMB 403 thumb -H 'Sec-Fetch-Site: cross-site'
+
+          echo "PREVIEW_105_ANON_AND_INVALID_SESSION_DENIAL=PASS"
+          echo "NO_PRIVATE_IMAGE_BYTES_EXPOSED=PASS"
+
+      - name: Explain verification boundary
+        shell: bash
+        run: |
+          {
+            echo "## W4 105 private-image read preflight"
+            echo "- Anonymous full/thumb GET denied (HTTP 404)"
+            echo "- Invalid bearer full/thumb GET denied (HTTP 401)"
+            echo "- Cross-site full/thumb GET denied (HTTP 403)"
+            echo "- Every denial private/no-store, nosniff, and no image bytes"
+            echo "- **A valid authenticated non-Owner session has NOT been tested here.**"
+            echo "- No production code, database, Worker deployment, or traffic changes"
+          } >> "$GITHUB_STEP_SUMMARY"
