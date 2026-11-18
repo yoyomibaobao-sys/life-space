@@ -13,6 +13,9 @@ on:
       - "cloudflare/r2-media-user-gateway.mjs"
       - "tests/supabase-session-cookie-sync.test.mjs"
       - "tests/cloudflare-r2-canary.test.mjs"
+      - "tests/android-auth-connectivity.test.mjs"
+      - "tests/android-single-runtime-prerequisites.test.mjs"
+      - "lib/android-api-inventory.ts"
 
 permissions:
   contents: read
@@ -23,7 +26,7 @@ concurrency:
 
 jobs:
   stage-formal-w4:
-    if: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '#96') || contains(github.event.head_commit.message, '#97')) }}
+    if: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '#96') || contains(github.event.head_commit.message, '#97') || contains(github.event.head_commit.message, '#98')) }}
     name: Build and upload an undeployed formal W4 version
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -59,7 +62,7 @@ jobs:
           test -n "${EXPECTED_RELEASE_SHA}"
           test "$(git rev-parse HEAD)" = "${EXPECTED_RELEASE_SHA}"
           git merge-base --is-ancestor "5084336e86170b1724c52bdd9b685215a5988075" "${GITHUB_SHA}"
-          git log -1 --format=%B | grep -E "#(96|97)" >/dev/null
+          git log -1 --format=%B | grep -E "#(96|97|98)" >/dev/null
           test -n "${NEXT_PUBLIC_TURNSTILE_SITE_KEY}"
           test -n "${CLOUDFLARE_API_TOKEN}"
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED}" = "true"
