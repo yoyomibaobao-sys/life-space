@@ -25,7 +25,7 @@ function baseConfig(overrides = {}) {
   };
 }
 
-test("formal site overlay adds only the private media service and closed gates", () => {
+test("formal site overlay adds the private media service and enables the verified R2 gates", () => {
   const base = baseConfig();
   const merged = mergeFormalWranglerConfig(base, overlay);
   assert.equal(merged.name, "life-space-canary");
@@ -45,8 +45,8 @@ test("formal site overlay adds only the private media service and closed gates",
   }]);
   assert.deepEqual(merged.vars, {
     R2_BUSINESS_MEDIA_MODE: "isolated",
-    R2_MEDIA_READ_ENABLED: "false",
-    R2_MEDIA_MIRROR_WRITE_ENABLED: "false",
+    R2_MEDIA_READ_ENABLED: "true",
+    R2_MEDIA_MIRROR_WRITE_ENABLED: "true",
   });
   assert.equal(base.services, undefined);
   assert.equal(base.vars, undefined);
@@ -101,7 +101,7 @@ test("formal site overlay refuses an unexpected Worker identity or canary bucket
   ), /existing_canary_r2_binding_missing_or_changed/);
 });
 
-test("formal site overlay refuses a conflicting service target or enabled gate", () => {
+test("formal site overlay refuses a conflicting service target or disabled gate", () => {
   assert.throws(() => mergeFormalWranglerConfig(baseConfig({
     services: [{
       binding: "R2_BUSINESS_MEDIA_SERVICE",
@@ -109,8 +109,8 @@ test("formal site overlay refuses a conflicting service target or enabled gate",
     }],
   }), overlay), /conflicting_existing_media_service_binding/);
   assert.throws(() => mergeFormalWranglerConfig(baseConfig({
-    vars: { R2_MEDIA_READ_ENABLED: "true" },
-  }), overlay), /existing_media_gate_not_closed/);
+    vars: { R2_MEDIA_READ_ENABLED: "false" },
+  }), overlay), /existing_media_gate_mismatch/);
 });
 
 test("media Worker candidate is private and starts with both gates closed", () => {

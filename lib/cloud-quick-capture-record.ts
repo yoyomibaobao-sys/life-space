@@ -178,7 +178,7 @@ async function uploadQuickCapturePhoto({
     const mirror = await mirrorCommittedRecordMedia({
       mediaId: committedMediaId, ownerId: userId, thumbPath: savedThumbPath,
     });
-    if (mirror.endsWith("_pending")) console.warn("R2 QA quick-capture mirror pending:", mirror);
+    if (mirror.endsWith("_pending")) console.warn("R2 quick-capture mirror pending:", mirror);
   }
   return committedMediaId;
 }

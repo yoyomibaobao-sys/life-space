@@ -8,7 +8,7 @@ import {
   isAndroidReleaseDownloadPath,
 } from "./android-release-download.mjs";
 import { runScheduledMaintenance } from "./scheduled-maintenance.mjs";
-import { handleM4QaControlledUi } from "./m4-qa-controlled-page.mjs";
+
 import {
   R2_BUSINESS_MIRROR_PATH,
   R2_BUSINESS_VIEW_PATH,
@@ -20,8 +20,14 @@ const worker = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    const qaUi = handleM4QaControlledUi(request, env);
-    if (qaUi) return qaUi;
+    // This route is compiled only into explicitly QA-scoped Worker builds.
+    // Production builds replace the scope at build time and tree-shake the
+    // handler module, including its QA origin and Supabase CSP constants.
+    if (process.env.NEXT_PUBLIC_LIFESPACE_BUILD_SCOPE !== "production") {
+      const { handleM4QaControlledUi } = await import("./m4-qa-controlled-page.mjs");
+      const qaUi = handleM4QaControlledUi(request, env);
+      if (qaUi) return qaUi;
+    }
 
     if (url.pathname === R2_BUSINESS_VIEW_PATH && env?.R2_BUSINESS_MEDIA_MODE === "isolated") {
       return handleR2BusinessUserReadRequest(request, env);

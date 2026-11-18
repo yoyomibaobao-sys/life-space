@@ -1,20 +1,21 @@
 const DEFAULT_SIGNED_IN_PATH = "/archive";
 export const OFFICIAL_AUTH_ORIGIN = "https://life-space.uk";
 const PRODUCTION_SUPABASE = "https://eidltoikfpnrzxruvawf.supabase.co";
-const QA_SUPABASE = "https://mablwxlipcgbmbnfdbkc.supabase.co";
+const QA_SUPABASE = process.env.NEXT_PUBLIC_LIFESPACE_BUILD_SCOPE === "production" ? "" : "https://mablwxlipcgbmbnfdbkc.supabase.co";
 
 function resolveAuthRedirectOrigin() {
   const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
   const configured = process.env.NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN?.trim();
   if (!projectUrl && !configured) return OFFICIAL_AUTH_ORIGIN; // Legacy production web builds.
   if (projectUrl === PRODUCTION_SUPABASE && !configured) return OFFICIAL_AUTH_ORIGIN;
-  if (projectUrl !== PRODUCTION_SUPABASE && projectUrl !== QA_SUPABASE) throw new Error("unknown_auth_environment");
-  if (projectUrl === QA_SUPABASE && !configured) throw new Error("qa_auth_redirect_origin_missing");
+  const isQaEnvironment = Boolean(QA_SUPABASE) && projectUrl === QA_SUPABASE;
+  if (projectUrl !== PRODUCTION_SUPABASE && !isQaEnvironment) throw new Error("unknown_auth_environment");
+  if (isQaEnvironment && !configured) throw new Error("qa_auth_redirect_origin_missing");
   const url = new URL(configured || OFFICIAL_AUTH_ORIGIN);
   if (url.protocol !== "https:" || url.origin !== (configured || OFFICIAL_AUTH_ORIGIN) || url.username || url.password) {
     throw new Error("invalid_auth_redirect_origin");
   }
-  if (projectUrl === QA_SUPABASE && url.origin === OFFICIAL_AUTH_ORIGIN) throw new Error("qa_auth_redirect_to_production_rejected");
+  if (isQaEnvironment && url.origin === OFFICIAL_AUTH_ORIGIN) throw new Error("qa_auth_redirect_to_production_rejected");
   if (projectUrl === PRODUCTION_SUPABASE && url.origin !== OFFICIAL_AUTH_ORIGIN) throw new Error("production_auth_redirect_mismatch");
   return url.origin;
 }

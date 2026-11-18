@@ -1726,7 +1726,7 @@ saveRecentArchiveBrowse({
         const mirror = await mirrorCommittedRecordMedia({
           mediaId: committedMedia.id, ownerId: user.id, thumbPath: uploadedThumbPath,
         });
-        if (mirror.endsWith("_pending")) console.warn("R2 QA additional photo mirror pending:", mirror);
+        if (mirror.endsWith("_pending")) console.warn("R2 additional photo mirror pending:", mirror);
       }
 
       const [displayMediaRow] = await attachMediaDisplayUrls(

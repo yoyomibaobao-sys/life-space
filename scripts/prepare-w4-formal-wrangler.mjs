@@ -11,8 +11,8 @@ const REQUIRED_SITE_BUCKET = {
 };
 const REQUIRED_FLAGS = Object.freeze({
   R2_BUSINESS_MEDIA_MODE: "isolated",
-  R2_MEDIA_READ_ENABLED: "false",
-  R2_MEDIA_MIRROR_WRITE_ENABLED: "false",
+  R2_MEDIA_READ_ENABLED: "true",
+  R2_MEDIA_MIRROR_WRITE_ENABLED: "true",
 });
 const REQUIRED_RATE_LIMITER = Object.freeze({
   name: "R2_MEDIA_MIRROR_RATE_LIMITER",
@@ -67,7 +67,7 @@ export function mergeFormalWranglerConfig(base, overlay) {
   }
   for (const [key, expected] of Object.entries(REQUIRED_FLAGS)) {
     if (overlay.vars[key] !== expected) {
-      throw new Error("formal_media_gate_must_start_closed:" + key);
+      throw new Error("formal_media_gate_not_enabled_for_release:" + key);
     }
   }
   if ("r2_buckets" in overlay || "routes" in overlay || "workers_dev" in overlay ||
@@ -89,7 +89,7 @@ export function mergeFormalWranglerConfig(base, overlay) {
   const vars = { ...(isObject(base.vars) ? base.vars : {}) };
   for (const [key, expected] of Object.entries(REQUIRED_FLAGS)) {
     if (vars[key] !== undefined && vars[key] !== expected) {
-      throw new Error("existing_media_gate_not_closed:" + key);
+      throw new Error("existing_media_gate_mismatch:" + key);
     }
     vars[key] = expected;
   }

@@ -42,11 +42,14 @@ export type EmptyCloudTrashResult = CloudTrashMutationResult & {
 // R10 QA Android cannot send its isolated Supabase session to the production
 // /api/trash origin. Reuse the already-installed, authenticated Owner-checking
 // RPCs on QA only; production-native and web continue using the existing API.
+const ISOLATED_QA_SUPABASE_HOST =
+  process.env.NEXT_PUBLIC_LIFESPACE_BUILD_SCOPE === "production" ? "" : "mablwxlipcgbmbnfdbkc.supabase.co";
+
 function usesIsolatedQaNativeTrash() {
-  if (!Capacitor.isNativePlatform()) return false;
+  if (!ISOLATED_QA_SUPABASE_HOST || !Capacitor.isNativePlatform()) return false;
   try {
     return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || "").hostname ===
-      "mablwxlipcgbmbnfdbkc.supabase.co";
+      ISOLATED_QA_SUPABASE_HOST;
   } catch {
     return false;
   }

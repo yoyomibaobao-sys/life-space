@@ -918,7 +918,7 @@ export default function AddRecord({
       const mirror = await mirrorCommittedRecordMedia({
         mediaId, ownerId: userId, thumbPath: uploadedThumbPath,
       });
-      if (mirror.endsWith("_pending")) console.warn("R2 QA record mirror pending:", mirror);
+      if (mirror.endsWith("_pending")) console.warn("R2 record mirror pending:", mirror);
     }
 
     return actualBytes;

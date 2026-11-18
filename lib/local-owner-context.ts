@@ -89,7 +89,7 @@ type OfflineOwnerKeystore = {
   revokeOfflineOwner(): Promise<void>;
 };
 const offlineOwnerKeystore = registerPlugin<OfflineOwnerKeystore>("OfflineOwnerKeystore");
-const QA_AUTH_ORIGIN = "https://mablwxlipcgbmbnfdbkc.supabase.co";
+const QA_AUTH_ORIGIN = process.env.NEXT_PUBLIC_LIFESPACE_BUILD_SCOPE === "production" ? "" : "https://mablwxlipcgbmbnfdbkc.supabase.co";
 const PROD_AUTH_ORIGIN = "https://eidltoikfpnrzxruvawf.supabase.co";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 let offlineProofEpoch = 0;
@@ -102,7 +102,9 @@ function nativeOfflineOwnerAvailable() {
 
 function offlineAuthEnvironment() {
   const origin = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/$/, "");
-  return origin === QA_AUTH_ORIGIN || origin === PROD_AUTH_ORIGIN ? origin : null;
+  if (origin === PROD_AUTH_ORIGIN) return origin;
+  if (QA_AUTH_ORIGIN && origin === QA_AUTH_ORIGIN) return origin;
+  return null;
 }
 
 /** The SDK's cached JWT supplies continuity hints, not trusted identity or expiry.

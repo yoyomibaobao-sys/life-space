@@ -1010,7 +1010,7 @@ async function syncImage(params: {
       // Preserve local bytes and the exact operation for independent audit.
       throw new Error("R2镜像无法确认安全恢复点，已保留本机原图，须先按操作ID核账。");
     }
-    if (mirror.endsWith("_pending")) console.warn("R2 QA pending-sync mirror pending:", mirror);
+    if (mirror.endsWith("_pending")) console.warn("R2 pending-sync mirror pending:", mirror);
     await updateLocalImageCloudSyncOperation(image.id, operationId, {
       status: "synced",
       cloud_archive_id: cloudArchiveId,
@@ -1494,7 +1494,7 @@ async function syncPendingCloudArchiveUnlocked(params: {
             userId,
           });
           imageCount += 1;
-          // The cloud source is committed, but a QA R2 full/thumb journal
+          // The cloud source is committed, but an R2 full/thumb journal
           // may still need user-directed verification. Never report PASS here.
           if (process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED === "true" &&
               (mirrorOutcome === "full_pending" || mirrorOutcome === "thumb_pending")) {

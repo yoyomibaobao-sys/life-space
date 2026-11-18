@@ -24,10 +24,13 @@ type ConnectivityControllerOptions = {
 };
 
 const PRODUCTION_SUPABASE_REF = "eidltoikfpnrzxruvawf";
-const ISOLATED_QA_SUPABASE_REF = "mablwxlipcgbmbnfdbkc";
+const ISOLATED_QA_SUPABASE_REF =
+  process.env.NEXT_PUBLIC_LIFESPACE_BUILD_SCOPE === "production" ? "" : "mablwxlipcgbmbnfdbkc";
 export const PRODUCTION_HEALTH_URL = "https://life-space.uk/api/health";
 export const ISOLATED_QA_HEALTH_URL =
-  "https://lifespace-site-media-qa-20261028.lifespace-assets-isolated-lab.workers.dev/api/health";
+  process.env.NEXT_PUBLIC_LIFESPACE_BUILD_SCOPE === "production"
+    ? ""
+    : "https://lifespace-site-media-qa-20261028.lifespace-assets-isolated-lab.workers.dev/api/health";
 
 // The Android native health request must follow its bundled Supabase environment.
 // An unrecognized or absent project must NEVER fall back to production health.
@@ -40,7 +43,7 @@ export function resolveAndroidHealthUrl(supabaseUrl?: string | null): string | n
     if (parsed.hostname === `${PRODUCTION_SUPABASE_REF}.supabase.co`) {
       return PRODUCTION_HEALTH_URL;
     }
-    if (parsed.hostname === `${ISOLATED_QA_SUPABASE_REF}.supabase.co`) {
+    if (ISOLATED_QA_SUPABASE_REF && parsed.hostname === `${ISOLATED_QA_SUPABASE_REF}.supabase.co`) {
       return ISOLATED_QA_HEALTH_URL;
     }
   } catch {

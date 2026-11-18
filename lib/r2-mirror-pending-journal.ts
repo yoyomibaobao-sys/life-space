@@ -1,6 +1,11 @@
-// QA-only bookkeeping for completed Supabase uploads awaiting R2 shadow mirroring.
-// The key and value contain only Owner/media UUIDs and a variant; never tokens or paths.
-const PREFIX = "lifespace:r2-qa-mirror:v1:";
+// Environment-scoped bookkeeping for completed Supabase uploads awaiting R2 mirroring.
+// Keys and values contain only Owner/media UUIDs and a variant; never tokens or paths.
+const PREFIX = "lifespace:r2-";
+const VERSIONED_SUFFIX = "-mirror:v1:";
+export type R2MirrorJournalScope = "qa" | "production";
+function validScope(scope: string): scope is R2MirrorJournalScope {
+  return scope === "qa" || scope === "production";
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type PendingR2Mirror = {
@@ -15,8 +20,8 @@ function storage(): Storage | null {
   catch { return null; }
 }
 
-function key(ownerId: string, mediaId: string): string {
-  return PREFIX + ownerId.toLowerCase() + ":" + mediaId.toLowerCase();
+function key(ownerId: string, mediaId: string, scope: R2MirrorJournalScope): string {
+  return PREFIX + scope + VERSIONED_SUFFIX + ownerId.toLowerCase() + ":" + mediaId.toLowerCase();
 }
 
 function valid(entry: PendingR2Mirror): boolean {
@@ -37,20 +42,20 @@ function decode(value: string | null, ownerId: string, mediaId: string): Pending
 }
 
 // null = no entry, undefined = storage unavailable or invalid: fail closed.
-export function readPendingR2Mirror(ownerId: string, mediaId: string): PendingR2Mirror | null | undefined {
-  if (!UUID.test(ownerId) || !UUID.test(mediaId)) return undefined;
+export function readPendingR2Mirror(ownerId: string, mediaId: string, scope: R2MirrorJournalScope): PendingR2Mirror | null | undefined {
+  if (!UUID.test(ownerId) || !UUID.test(mediaId) || !validScope(scope)) return undefined;
   const store = storage();
   if (!store) return undefined;
-  try { return decode(store.getItem(key(ownerId, mediaId)), ownerId, mediaId); }
+  try { return decode(store.getItem(key(ownerId, mediaId, scope)), ownerId, mediaId); }
   catch { return undefined; }
 }
 
-export function writePendingR2Mirror(entry: PendingR2Mirror): boolean {
-  if (!valid(entry)) return false;
+export function writePendingR2Mirror(entry: PendingR2Mirror, scope: R2MirrorJournalScope): boolean {
+  if (!valid(entry) || !validScope(scope)) return false;
   const store = storage();
   if (!store) return false;
   try {
-    store.setItem(key(entry.ownerId, entry.mediaId), JSON.stringify({
+    store.setItem(key(entry.ownerId, entry.mediaId, scope), JSON.stringify({
       ownerId: entry.ownerId.toLowerCase(),
       mediaId: entry.mediaId.toLowerCase(),
       needsThumb: entry.needsThumb,
@@ -60,19 +65,19 @@ export function writePendingR2Mirror(entry: PendingR2Mirror): boolean {
   } catch { return false; }
 }
 
-export function clearPendingR2Mirror(ownerId: string, mediaId: string): boolean {
+export function clearPendingR2Mirror(ownerId: string, mediaId: string, scope: R2MirrorJournalScope): boolean {
   const store = storage();
-  if (!store || !UUID.test(ownerId) || !UUID.test(mediaId)) return false;
-  try { store.removeItem(key(ownerId, mediaId)); return true; }
+  if (!store || !UUID.test(ownerId) || !UUID.test(mediaId) || !validScope(scope)) return false;
+  try { store.removeItem(key(ownerId, mediaId, scope)); return true; }
   catch { return false; }
 }
 
 // null signals an unreadable/corrupt journal; do not silently discard entries.
-export function listPendingR2Mirrors(ownerId: string): PendingR2Mirror[] | null {
-  if (!UUID.test(ownerId)) return null;
+export function listPendingR2Mirrors(ownerId: string, scope: R2MirrorJournalScope): PendingR2Mirror[] | null {
+  if (!UUID.test(ownerId) || !validScope(scope)) return null;
   const store = storage();
   if (!store) return null;
-  const prefix = PREFIX + ownerId.toLowerCase() + ":";
+  const prefix = PREFIX + scope + VERSIONED_SUFFIX + ownerId.toLowerCase() + ":";
   const entries: PendingR2Mirror[] = [];
   try {
     for (let i = 0; i < store.length; i++) {

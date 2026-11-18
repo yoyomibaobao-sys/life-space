@@ -2,13 +2,20 @@ import { build } from "esbuild";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  FORMAL_SITE_ORIGIN,
+  FORMAL_SUPABASE_URL,
+  QA_SUPABASE_URL,
+  resolveAndroidR2MediaMirrorBuildConfig,
+  resolveLifeSpaceBuildScope,
+} from "./r2-media-mirror-build-config.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourceRoot = path.join(root, "mobile-offline-src");
 const outputRoot = process.env.ANDROID_SHELL_OUTPUT
   ? path.resolve(process.env.ANDROID_SHELL_OUTPUT)
   : path.join(root, "mobile-shell");
-const defaultServerUrl = "https://life-space.uk";
+const defaultServerUrl = FORMAL_SITE_ORIGIN;
 const singleRuntimeAcceptance = process.env.ANDROID_SINGLE_RUNTIME === "1";
 
 function resolveCloudOrigin() {
@@ -21,8 +28,7 @@ function resolveCloudOrigin() {
 
 const cloudOrigin = resolveCloudOrigin();
 const qaBuild = process.env.ANDROID_REQUIRE_QA_SUPABASE === "1";
-const isolatedQaSupabase = "https://mablwxlipcgbmbnfdbkc.supabase.co";
-const productionSupabase = "https://eidltoikfpnrzxruvawf.supabase.co";
+
 // A QA build reads only the explicit QA variables. A production value already
 // present in the process or .env.local must not replace them.
 const supabaseUrl = (qaBuild
@@ -30,9 +36,9 @@ const supabaseUrl = (qaBuild
   : process.env.NEXT_PUBLIC_SUPABASE_URL)?.trim();
 // QA must configure a matching export API; never send its token to production.
 const exportOrigin = process.env.ANDROID_CLOUD_EXPORT_ORIGIN?.trim() ||
-  (supabaseUrl?.replace(/\/$/, "") === productionSupabase ? defaultServerUrl : "");
+  (supabaseUrl?.replace(/\/$/, "") === FORMAL_SUPABASE_URL ? defaultServerUrl : "");
 if (qaBuild) {
-  if (supabaseUrl?.replace(/\/$/, "") !== isolatedQaSupabase) {
+  if (supabaseUrl?.replace(/\/$/, "") !== QA_SUPABASE_URL) {
     throw new Error("QA Android build requires the isolated Supabase project.");
   }
   if (exportOrigin === defaultServerUrl) {
@@ -70,6 +76,21 @@ if (!supabaseUrl || !supabasePublishableKey) {
   throw new Error("Android local shell requires public Supabase configuration.");
 }
 
+const lifeSpaceBuildScope = resolveLifeSpaceBuildScope({ supabaseUrl, cloudOrigin });
+process.env.NEXT_PUBLIC_LIFESPACE_BUILD_SCOPE = lifeSpaceBuildScope;
+console.log(`LifeSpace build scope: ${lifeSpaceBuildScope}.`);
+
+const r2MirrorBuild = resolveAndroidR2MediaMirrorBuildConfig({
+  env: process.env,
+  qaBuild,
+  supabaseUrl,
+  cloudOrigin,
+});
+process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED = r2MirrorBuild.enabled ? "true" : "false";
+process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_CONFIG_VALIDATED = r2MirrorBuild.validated ? "true" : "false";
+process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN = r2MirrorBuild.origin;
+process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE = r2MirrorBuild.scope;
+
 const buildResult = await build({
   entryPoints: [path.join(sourceRoot, "main.tsx")],
   bundle: true,
@@ -87,6 +108,7 @@ const buildResult = await build({
     "process.env.NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN": JSON.stringify(authRedirectOrigin),
     "process.env.NODE_ENV": JSON.stringify("production"),
     "process.env.NEXT_PUBLIC_SUPABASE_URL": JSON.stringify(supabaseUrl),
+    "process.env.NEXT_PUBLIC_LIFESPACE_BUILD_SCOPE": JSON.stringify(lifeSpaceBuildScope),
     "process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY":
       JSON.stringify(supabasePublishableKey),
     "process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY": "undefined",
@@ -97,16 +119,16 @@ const buildResult = await build({
     // Do not switch bundled Android images to relative /api URLs: the APK's
     // local origin has no API server. Native cloud transport needs separate QA.
     "process.env.NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED": JSON.stringify("false"),
-    // A native R2 mirror is a separate opt-in QA build, never auto-enabled.
-    // Production bundles and standard QA bundles preserve Storage reads.
+    // Mirror routing is selected only by the validated build environment.
+    // QA and formal journals remain isolated; missing or mismatched config fails closed.
     "process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED": JSON.stringify(
-      qaBuild && process.env.ANDROID_QA_R2_MIRROR_ENABLED === "1" ? "true" : "false"
+      r2MirrorBuild.enabled ? "true" : "false"
     ),
-    "process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN": JSON.stringify(
-      qaBuild && process.env.ANDROID_QA_R2_MIRROR_ENABLED === "1"
-        ? "https://lifespace-site-media-qa-20261028.lifespace-assets-isolated-lab.workers.dev"
-        : ""
+    "process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_CONFIG_VALIDATED": JSON.stringify(
+      r2MirrorBuild.validated ? "true" : "false"
     ),
+    "process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN": JSON.stringify(r2MirrorBuild.origin),
+    "process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE": JSON.stringify(r2MirrorBuild.scope),
     // A few shared UI components pull in Next client helpers. In the normal
     // Next build these flags are replaced by the compiler. The standalone
     // Android shell is bundled by esbuild, so leaving them behind causes

@@ -658,7 +658,7 @@ export async function uploadLocalImageToCloud(params: {
       const mirror = await mirrorCommittedRecordMedia({
         mediaId, ownerId: params.userId, thumbPath: uploadedThumbPath,
       });
-      if (mirror.endsWith("_pending")) console.warn("R2 QA local-sync mirror pending:", mirror);
+      if (mirror.endsWith("_pending")) console.warn("R2 local-sync mirror pending:", mirror);
     }
 
     await updateLocalImageSyncMeta(params.image.id, {

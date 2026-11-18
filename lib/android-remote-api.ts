@@ -3,15 +3,16 @@ import { supabase } from "@/lib/supabase";
 
 const PRODUCTION_ORIGIN = "https://life-space.uk";
 const PRODUCTION_SUPABASE = "https://eidltoikfpnrzxruvawf.supabase.co";
-const ISOLATED_QA_SUPABASE = "https://mablwxlipcgbmbnfdbkc.supabase.co";
+const ISOLATED_QA_SUPABASE = process.env.NEXT_PUBLIC_LIFESPACE_BUILD_SCOPE === "production" ? "" : "https://mablwxlipcgbmbnfdbkc.supabase.co";
 
 function resolveApiEnvironment() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, "");
   const configuredOrigin = process.env.NEXT_PUBLIC_CLOUD_EXPORT_ORIGIN?.trim() || "";
-  if (supabaseUrl !== PRODUCTION_SUPABASE && supabaseUrl !== ISOLATED_QA_SUPABASE) {
+  const isQaEnvironment = Boolean(ISOLATED_QA_SUPABASE) && supabaseUrl === ISOLATED_QA_SUPABASE;
+  if (supabaseUrl !== PRODUCTION_SUPABASE && !isQaEnvironment) {
     throw new Error("unsupported_android_api_environment");
   }
-  if (supabaseUrl === ISOLATED_QA_SUPABASE && (!configuredOrigin || configuredOrigin === PRODUCTION_ORIGIN)) {
+  if (isQaEnvironment && (!configuredOrigin || configuredOrigin === PRODUCTION_ORIGIN)) {
     throw new Error("qa_export_to_production_rejected");
   }
   if (supabaseUrl === PRODUCTION_SUPABASE && configuredOrigin && configuredOrigin !== PRODUCTION_ORIGIN) {

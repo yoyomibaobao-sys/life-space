@@ -27,6 +27,7 @@ const clientSource = fs.readFileSync(clientPath, "utf8");
 const pageSource = fs.readFileSync(path.join(ROOT, "cloudflare", "m4-qa-controlled-page.mjs"), "utf8");
 const buildScriptSource = fs.readFileSync(path.join(ROOT, "cloudflare", "m4-qa-ui-build.mjs"), "utf8");
 const baseWorkerSource = fs.readFileSync(path.join(ROOT, "cloudflare", "worker-entry.mjs"), "utf8");
+const viteConfigSource = fs.readFileSync(path.join(ROOT, "vite.config.ts"), "utf8");
 const productionConfig = JSON.parse(fs.readFileSync(path.join(ROOT, "wrangler.jsonc"), "utf8"));
 const qaConfig = JSON.parse(fs.readFileSync(path.join(ROOT, "wrangler.m4-qa.jsonc"), "utf8"));
 
@@ -222,7 +223,9 @@ test("QA UI is exact-origin, isolated-mode, explicit-flag and GET-only; producti
   assert.equal(handleM4QaControlledUi(new Request(QA_ORIGIN + M4_QA_CLIENT), enabled), null,
     "the JS client is served from the separate QA-only static assets directory");
 
+  assert.match(baseWorkerSource, /process\.env\.NEXT_PUBLIC_LIFESPACE_BUILD_SCOPE !== "production"/);
   assert.match(baseWorkerSource, /handleM4QaControlledUi\(request, env\)/);
+  assert.match(viteConfigSource, /process\.env\.NEXT_PUBLIC_LIFESPACE_BUILD_SCOPE/);
   assert.doesNotMatch(baseWorkerSource, /m4-qa-controlled-client\.generated|m4-qa-controlled-client\.ts/);
   assert.doesNotMatch(pageSource, /QA_CLIENT_BUNDLE|m4-qa-controlled-client\.generated/);
   assert.equal(productionConfig.main, "./cloudflare/worker-entry.mjs");
@@ -237,8 +240,47 @@ test("QA UI is exact-origin, isolated-mode, explicit-flag and GET-only; producti
   assert.match(buildScriptSource, /dist\/qa-client/);
   assert.match(buildScriptSource, /dist\/client/);
   assert.match(buildScriptSource, /productionClientAsset/);
+  assert.match(buildScriptSource, /collectWorkerFiles/);
+  assert.match(buildScriptSource, /serverWorkerSource\.includes\("\/__qa\/m4-controlled-mirror"\)/);
   assert.doesNotMatch(buildScriptSource, /m4-qa-controlled-client\.generated\.mjs/);
 });
+
+test("formal Worker build tree-shakes the QA-only page and QA build retains it", async () => {
+  async function compileWorker(scope) {
+    const result = await build({
+      entryPoints: [path.join(ROOT, "cloudflare", "worker-entry.mjs")],
+      bundle: true,
+      write: false,
+      format: "esm",
+      platform: "neutral",
+      minify: true,
+      define: {
+        "process.env.NEXT_PUBLIC_LIFESPACE_BUILD_SCOPE": JSON.stringify(scope),
+      },
+      plugins: [{
+        name: "externalize-worker-runtime",
+        setup(builder) {
+          builder.onResolve({ filter: /.*/ }, (args) => {
+            if (args.kind === "entry-point" || args.path === "./m4-qa-controlled-page.mjs") return undefined;
+            return { path: args.path, external: true };
+          });
+        },
+      }],
+    });
+    return result.outputFiles[0].text;
+  }
+
+  const formalWorker = await compileWorker("production");
+  assert.equal(formalWorker.includes("mablwxlipcgbmbnfdbkc"), false);
+  assert.equal(formalWorker.includes("lifespace-site-media-qa-20261028"), false);
+  assert.equal(formalWorker.includes("/__qa/m4-controlled-mirror"), false);
+
+  const qaWorker = await compileWorker("qa");
+  assert.match(qaWorker, /mablwxlipcgbmbnfdbkc/);
+  assert.match(qaWorker, /lifespace-site-media-qa-20261028/);
+  assert.equal(qaWorker.includes("/__qa/m4-controlled-mirror"), true);
+});
+
 
 test("base Worker dispatches the media mirror route before existing canary/app routes", () => {
   assert.match(baseWorkerSource, /R2_BUSINESS_MIRROR_PATH/);

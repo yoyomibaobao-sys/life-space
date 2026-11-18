@@ -181,12 +181,20 @@ test("formal W4 staging workflow uses low-privilege public auth config and uploa
     /NEXT_PUBLIC_TURNSTILE_SITE_KEY: \$\{\{ vars\.NEXT_PUBLIC_TURNSTILE_SITE_KEY \}\}/
   );
   assert.doesNotMatch(workflow, /cloudflare-canary\.invalid|cloudflare-canary-placeholder/);
+  assert.match(workflow, /NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: "true"/);
+  assert.match(workflow, /NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE: production/);
+  assert.match(workflow, /NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN: https:\/\/life-space\.uk/);
   assert.match(read("package.json"), /"build:vinext": "node scripts\/build-vinext.mjs"/);
   assert.match(workflow, /npm run build:vinext:formal-candidate/);
+  assert.match(workflow, /R2_MIRROR_BUILD_CONFIG=PASS/);
+  assert.match(workflow, /r2_mirror_request_missing_from_client_bundle/);
+  assert.match(workflow, /R2_MEDIA_READ_ENABLED, "true"/);
+  assert.match(workflow, /R2_MEDIA_MIRROR_WRITE_ENABLED, "true"/);
   assert.match(workflow, /npm run test:w4-formal-config/);
   assert.match(workflow, /secrets\.CLOUDFLARE_API_TOKEN/);
   assert.match(workflow, /secrets\.CLOUDFLARE_ACCOUNT_ID/);
-  assert.match(workflow, /versions upload --config dist\/server\/wrangler\.json --keep-vars --strict/);
+  assert.match(workflow, /versions upload --config dist\/server\/wrangler\.json --keep-vars/);
+  assert.doesNotMatch(workflow, /versions upload --config dist\/server\/wrangler\.json --keep-vars --strict/);
   assert.match(workflow, /FORMAL_W4_VERSION_STAGED_NOT_DEPLOYED=PASS/);
   assert.doesNotMatch(workflow, /wrangler deploy|versions deploy|deploy --config dist\/server\/wrangler\.json/);
   assert.doesNotMatch(workflow, /^\s*schedule:/m);

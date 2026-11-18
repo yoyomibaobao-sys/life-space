@@ -8,7 +8,7 @@ type NativeSharePlugin = {
 const nativeShare = registerPlugin<NativeSharePlugin>("NativeShare");
 const MAX_MP4_BYTES = 32 * 1024 * 1024;
 const PRODUCTION_SHARE_ORIGIN = "https://life-space.uk";
-const ISOLATED_QA_SUPABASE = "mablwxlipcgbmbnfdbkc.supabase.co";
+const ISOLATED_QA_SUPABASE = process.env.NEXT_PUBLIC_LIFESPACE_BUILD_SCOPE === "production" ? "" : "mablwxlipcgbmbnfdbkc.supabase.co";
 
 export function qaShareOrigin() {
   let host = "";
@@ -17,7 +17,7 @@ export function qaShareOrigin() {
   } catch {
     host = "";
   }
-  if (host !== ISOLATED_QA_SUPABASE) return undefined;
+  if (!ISOLATED_QA_SUPABASE || host !== ISOLATED_QA_SUPABASE) return undefined;
   const configured = process.env.NEXT_PUBLIC_CLOUD_EXPORT_ORIGIN?.trim() || "";
   if (!configured || configured === PRODUCTION_SHARE_ORIGIN) {
     throw new Error("qa_share_origin_required");

@@ -291,7 +291,7 @@ async function uploadMissingPhotos(original: RecoveryEntry) {
     const mirror = await mirrorCommittedRecordMedia({
       mediaId: photo.mediaId, ownerId: entry.ownerId, thumbPath: photo.thumbPath,
     });
-    if (mirror.endsWith("_pending")) console.warn("R2 QA photo-recovery mirror pending:", mirror);
+    if (mirror.endsWith("_pending")) console.warn("R2 photo-recovery mirror pending:", mirror);
   }
   const complete: RecoveryEntry = { ...entry, phase: "media-confirmed" };
   await writeRecovery(complete);

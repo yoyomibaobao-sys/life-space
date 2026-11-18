@@ -7,6 +7,7 @@ import {
   loadPublicSupabaseEnv,
 } from "./vinext-public-env.mjs";
 import { assertVinextClientSupabaseBundle } from "./verify-vinext-client-supabase-bundle.mjs";
+import { resolveLifeSpaceBuildScope, resolveVinextR2MediaMirrorBuildConfig } from "./r2-media-mirror-build-config.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const extraEnvFiles = [];
@@ -17,6 +18,22 @@ if (parentEnvLocal !== path.join(root, ".env.local")) {
 
 loadPublicSupabaseEnv({ root, env: process.env, extraEnvFiles });
 assertPublicSupabaseBuildEnv(process.env);
+
+const lifeSpaceBuildScope = resolveLifeSpaceBuildScope({
+  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+  cloudOrigin: process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN || "",
+});
+process.env.NEXT_PUBLIC_LIFESPACE_BUILD_SCOPE = lifeSpaceBuildScope;
+console.log(`LifeSpace build scope: ${lifeSpaceBuildScope}.`);
+
+const r2MirrorBuild = resolveVinextR2MediaMirrorBuildConfig(process.env);
+process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED = r2MirrorBuild.enabled ? "true" : "false";
+process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_CONFIG_VALIDATED = r2MirrorBuild.validated ? "true" : "false";
+process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN = r2MirrorBuild.origin;
+process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE = r2MirrorBuild.scope;
+console.log(
+  `vinext R2 media mirror: enabled=${r2MirrorBuild.enabled} scope=${r2MirrorBuild.scope || "none"}.`
+);
 
 const state = inspectPublicSupabaseEnv(process.env);
 console.log(

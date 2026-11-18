@@ -218,6 +218,13 @@ test("Android cloud login uses the shared Turnstile challenge", () => {
   assert.match(read("lib/android-auth-session.ts"), /options: \{ captchaToken: input\.captchaToken \}/);
   assert.match(buildScript, /NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
   assert.match(workflow, /vars\.NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
+  assert.match(buildScript, /resolveAndroidR2MediaMirrorBuildConfig/);
+  assert.match(workflow, /NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: "true"/);
+  assert.match(workflow, /NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE: production/);
+  assert.match(workflow, /NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN: https:\/\/life-space\.uk/);
+  assert.match(workflow, /grep -q '\/__internal\/r2\/business-media\/mirror' mobile-shell\/offline\.html/);
+  assert.match(workflow, /QA media origin leaked into the formal Android offline shell/);
+  assert.match(workflow, /QA media origin leaked into the formal Android single-runtime shell/);
   assert.match(authCaptcha, /TurnstileChallengeView/);
   assert.match(turnstileView, /challenges\.cloudflare\.com\/turnstile/);
 });

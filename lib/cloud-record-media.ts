@@ -101,7 +101,7 @@ export async function uploadCloudRecordImages({ recordId, files, userId }: {
       const mirror = await mirrorCommittedRecordMedia({
         mediaId: row.id, ownerId: userId, thumbPath: committedThumb,
       });
-      if (mirror.endsWith("_pending")) console.warn("R2 QA existing-record mirror pending:", mirror);
+      if (mirror.endsWith("_pending")) console.warn("R2 existing-record mirror pending:", mirror);
     }
     uploaded.push(row);
   }

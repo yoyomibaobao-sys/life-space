@@ -1,6 +1,6 @@
 /* QA-only client asset builder. Run after npm run build:vinext. Never writes into dist/client. */
 import { build } from "esbuild";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -41,10 +41,22 @@ if (!existsSync(serverWorkerPath) || !existsSync(productionAssets)) {
 if (existsSync(productionClientAsset)) {
   throw Error("M4 QA client asset already exists in production assets; refusing to continue");
 }
-const serverWorker = readFileSync(serverWorkerPath, "utf8");
-if (!serverWorker.includes("/__qa/m4-controlled-mirror") ||
-    !serverWorker.includes("/__internal/r2/business-media/mirror") ||
-    serverWorker.includes(OWNER) || serverWorker.includes(MEDIA)) {
+function collectWorkerFiles(directory) {
+  const files = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...collectWorkerFiles(fullPath));
+    else if (/\.(?:mjs|js|cjs)$/i.test(entry.name)) files.push(fullPath);
+  }
+  return files;
+}
+// Vite may emit the dynamic QA route handler as a separate server chunk.
+// Validate the complete Worker module graph, not only its entry chunk.
+const serverWorkerFiles = collectWorkerFiles(path.dirname(serverWorkerPath));
+const serverWorkerSource = serverWorkerFiles.map((file) => readFileSync(file, "utf8")).join("\n");
+if (!serverWorkerSource.includes("/__qa/m4-controlled-mirror") ||
+    !serverWorkerSource.includes("/__internal/r2/business-media/mirror") ||
+    serverWorkerSource.includes(OWNER) || serverWorkerSource.includes(MEDIA)) {
   throw Error("Unified Worker route missing or QA client identifiers leaked into server Worker");
 }
 

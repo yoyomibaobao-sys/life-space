@@ -12,6 +12,7 @@ const localArchiveId="sr01-archive",localRecordId="sr01-record",localImageId="sr
 const prevFetch=globalThis.fetch;
 process.env.NEXT_PUBLIC_SUPABASE_URL="https://sr01.invalid";
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY="sr01-anon";
+process.env.NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED="false";
 globalThis.window={dispatchEvent(){}};
 globalThis.CustomEvent=class {constructor(type,data){this.type=type;this.detail=data?.detail;}};
 let state;

@@ -85,6 +85,11 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: https://eidltoikfpnrzxruvawf.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_2cw-3WJnyD6x_CnPiDEiqQ_04violBa
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+      NEXT_PUBLIC_SITE_URL: https://life-space.uk
+      NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN: https://life-space.uk
+      NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: "true"
+      NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN: https://life-space.uk
+      NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE: production
       ANDROID_VERSION_CODE: ${{ inputs.version_code || '28' }}
       ANDROID_VERSION_NAME: ${{ inputs.version_name || '1.0.4-rc21' }}
       ANDROID_SINGLE_RUNTIME: ${{ inputs.single_runtime_acceptance == true && '1' || '' }}
@@ -127,6 +132,12 @@ jobs:
       - name: Install web dependencies
         run: npm ci
 
+      - name: Verify formal R2 mirror build configuration
+        run: |
+          test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED}" = "true"
+          test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE}" = "production"
+          test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN}" = "https://life-space.uk"
+
       - name: Sync Capacitor Android project
         run: npm run android:sync
 
@@ -140,6 +151,11 @@ jobs:
           test -s mobile-shell/offline.html
           grep -q 'LifeSpace·自然' mobile-shell/index.html
           grep -q 'id="root"' mobile-shell/offline.html
+          grep -q '/__internal/r2/business-media/mirror' mobile-shell/offline.html
+          if grep -q 'lifespace-site-media-qa-20261028' mobile-shell/offline.html; then
+            echo "QA media origin leaked into the formal Android offline shell."
+            exit 1
+          fi
           if grep -q 'process\.env\.' mobile-shell/offline.html; then
             echo "Bundled Android shell still contains unresolved process.env references."
             exit 1
@@ -151,6 +167,11 @@ jobs:
           test -s mobile-shell/index.html
           grep -q 'id="root"' mobile-shell/index.html
           grep -q 'data-android-runtime="bundled"' mobile-shell/index.html
+          grep -q '/__internal/r2/business-media/mirror' mobile-shell/index.html
+          if grep -q 'lifespace-site-media-qa-20261028' mobile-shell/index.html; then
+            echo "QA media origin leaked into the formal Android single-runtime shell."
+            exit 1
+          fi
           if [ -f mobile-shell/offline.html ]; then
             echo "Acceptance APK must not ship a second-document offline.html."
             exit 1

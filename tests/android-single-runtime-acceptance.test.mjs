@@ -84,6 +84,7 @@ test("acceptance index.html is the React runtime and does not depend on offline.
       NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test",
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: "turnstile-test-key",
+      NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: "false",
     },
     outputRoot,
   );
@@ -106,6 +107,7 @@ test("default mobile-shell build still writes placeholder index and offline Reac
       NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test",
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: "",
+      NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: "false",
     },
     outputRoot,
   );
@@ -127,6 +129,7 @@ test("acceptance build fails fast without NEXT_PUBLIC_TURNSTILE_SITE_KEY", () =>
       NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test",
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: "",
+      NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: "false",
     },
     outputRoot,
   );
