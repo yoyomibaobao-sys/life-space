@@ -164,8 +164,13 @@ test("the canary checker reads credentials only from the process environment", (
 test("formal W4 staging workflow uses low-privilege public auth config and uploads an undeployed version", () => {
   const workflow = read(".github/workflows/cloudflare-canary.yml");
 
-  assert.match(workflow, /workflow_dispatch:/);
-  assert.doesNotMatch(workflow, /^\s*push:/m);
+  assert.match(workflow, /push:\s*\n\s*branches:\s*\n\s*-\s*release\/lifespace-r01-r2-client-20261118/);
+  assert.doesNotMatch(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#96'\)/);
+  assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#97'\)/);
+  assert.match(workflow, /EXPECTED_RELEASE_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(workflow, /git merge-base --is-ancestor/);
+  assert.match(workflow, /grep -E "#\(96\|97\)"/);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
   assert.doesNotMatch(workflow, /statuses:\s*write/);
   assert.match(
@@ -195,6 +200,12 @@ test("formal W4 staging workflow uses low-privilege public auth config and uploa
   assert.match(workflow, /secrets\.CLOUDFLARE_ACCOUNT_ID/);
   assert.match(workflow, /versions upload --config dist\/server\/wrangler\.json --keep-vars/);
   assert.doesNotMatch(workflow, /versions upload --config dist\/server\/wrangler\.json --keep-vars --strict/);
+  assert.match(workflow, /Snapshot active production deployment before candidate upload/);
+  assert.match(workflow, /Verify candidate is staged and active production traffic is unchanged/);
+  assert.match(workflow, /ACTIVE_DEPLOYMENT_UNCHANGED=PASS/);
+  assert.match(workflow, /CANDIDATE_VERSION_NOT_DEPLOYED=PASS/);
+  assert.match(workflow, /candidate_version_not_found_after_upload/);
+  assert.match(workflow, /unexpected_active_deployment_before_stage/);
   assert.match(workflow, /FORMAL_W4_VERSION_STAGED_NOT_DEPLOYED=PASS/);
   assert.doesNotMatch(workflow, /wrangler deploy|versions deploy|deploy --config dist\/server\/wrangler\.json/);
   assert.doesNotMatch(workflow, /^\s*schedule:/m);
