@@ -1,7 +1,17 @@
 name: LifeSpace Formal W4 R2 Mirror Candidate Stage
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - release/lifespace-r01-r2-client-20261118
+    paths:
+      - ".github/workflows/cloudflare-canary.yml"
+      - "app/api/auth/session/route.ts"
+      - "app/login/page.tsx"
+      - "lib/supabase-session-cookie.ts"
+      - "lib/supabase.ts"
+      - "cloudflare/r2-media-user-gateway.mjs"
+      - "tests/supabase-session-cookie-sync.test.mjs"
 
 permissions:
   contents: read
@@ -12,6 +22,7 @@ concurrency:
 
 jobs:
   stage-formal-w4:
+    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '#96') }}
     name: Build and upload an undeployed formal W4 version
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -29,13 +40,14 @@ jobs:
       NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED: "false"
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      EXPECTED_RELEASE_SHA: ${{ github.sha }}
 
     steps:
       - name: Check out the authorized Release source
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Verify exact Release source, production account, and build-time captcha
         shell: bash
@@ -43,11 +55,12 @@ jobs:
           set -euo pipefail
           test "${GITHUB_REF_NAME}" = "release/lifespace-r01-r2-client-20261118"
           test "${CLOUDFLARE_ACCOUNT_ID}" = "5765d2d135aa20de90c898ab93ad4c11"
-          test "$(git rev-parse HEAD^)" = "f109c020cfc66bdb40ff02c399cb1fcc9ca6bbf3"
-          mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
-          test "${#changed[@]}" -eq 1
-          test "${changed[0]}" = ".github/workflows/cloudflare-canary.yml"
+          test -n "${EXPECTED_RELEASE_SHA}"
+          test "$(git rev-parse HEAD)" = "${EXPECTED_RELEASE_SHA}"
+          git merge-base --is-ancestor "5084336e86170b1724c52bdd9b685215a5988075" "${GITHUB_SHA}"
+          git log -1 --format=%B | grep -F "#96" >/dev/null
           test -n "${NEXT_PUBLIC_TURNSTILE_SITE_KEY}"
+          test -n "${CLOUDFLARE_API_TOKEN}"
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED}" = "true"
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE}" = "production"
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN}" = "https://life-space.uk"
@@ -86,7 +99,8 @@ jobs:
             tests/lifespace-126-w4-r2-upload-wiring.test.mjs \
             tests/m4-qa-controlled-ui.test.mjs \
             tests/cloudflare-r2-canary.test.mjs \
-            tests/vinext-public-env-guard.test.mjs
+            tests/vinext-public-env-guard.test.mjs \
+            tests/supabase-session-cookie-sync.test.mjs
           npm run typecheck:vinext
 
       - name: Build formal W4 candidate
@@ -132,7 +146,49 @@ jobs:
           assert.ok(!containsKey(chunksDir, "lifespace-site-media-qa-20261028"), "qa_media_origin_leaked_to_formal_client_bundle");
           assert.ok(!containsKey("dist/server", "lifespace-site-media-qa-20261028"), "qa_media_origin_leaked_to_formal_worker_bundle");
           assert.ok(!containsKey("dist/server", "mablwxlipcgbmbnfdbkc"), "qa_supabase_ref_leaked_to_formal_worker_bundle");
+          assert.ok(containsKey("dist/server", "session_sync_unavailable"), "owner_session_cookie_route_missing_from_worker_bundle");
           console.log("FORMAL_W4_CONFIG_TURNSTILE_R2_MIRROR=PASS");
+          console.log("OWNER_SESSION_COOKIE_ROUTE_BUNDLED=PASS");
+          NODE
+
+      - name: Snapshot active production deployment before candidate upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import assert from "node:assert/strict";
+          const base = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/workers/scripts/life-space-canary`;
+          const headers = { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` };
+          async function read(path) {
+            const response = await fetch(base + path, { headers });
+            const body = await response.json();
+            assert.ok(response.ok && body.success === true, "cloudflare_read_failed");
+            return body.result;
+          }
+          const deployments = await read("/deployments?per_page=10");
+          const versions = await read("/versions?per_page=100");
+          assert.ok(Array.isArray(deployments.deployments) && deployments.deployments.length > 0, "active_deployment_missing");
+          assert.ok(Array.isArray(versions.items), "worker_versions_missing");
+          const latest = deployments.deployments[0];
+          assert.equal(latest.id, "b171ae4b-7b9f-4368-a3aa-8f36b6b1f82b", "unexpected_active_deployment_before_stage");
+          assert.deepEqual(latest.versions, [{
+            version_id: "5eed206e-5394-4f76-8926-b768fb204add",
+            percentage: 100,
+          }], "unexpected_active_worker_version_before_stage");
+          assert.equal(latest.versions.reduce((sum, item) => sum + item.percentage, 0), 100, "active_traffic_not_100_percent");
+          const snapshot = {
+            deployments: deployments.deployments.map(item => ({
+              id: item.id,
+              versions: item.versions.map(version => ({
+                version_id: version.version_id,
+                percentage: version.percentage,
+              })),
+            })),
+            versionIds: versions.items.map(item => item.id),
+          };
+          fs.writeFileSync(process.env.RUNNER_TEMP + "/lifespace-worker-before.json", JSON.stringify(snapshot));
+          console.log("ACTIVE_DEPLOYMENT_BEFORE=" + JSON.stringify(snapshot.deployments[0]));
           NODE
 
       - name: Upload candidate version only (NO production traffic switch)
@@ -143,3 +199,50 @@ jobs:
           # The generated config is already checked above for exact production bindings and gates.
           npx wrangler versions upload --config dist/server/wrangler.json --keep-vars
           echo "FORMAL_W4_VERSION_STAGED_NOT_DEPLOYED=PASS"
+      - name: Verify candidate is staged and active production traffic is unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import assert from "node:assert/strict";
+          const base = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/workers/scripts/life-space-canary`;
+          const headers = { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` };
+          async function read(path) {
+            const response = await fetch(base + path, { headers });
+            const body = await response.json();
+            assert.ok(response.ok && body.success === true, "cloudflare_read_failed");
+            return body.result;
+          }
+          const before = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/lifespace-worker-before.json", "utf8"));
+          const [deployments, versions] = await Promise.all([
+            read("/deployments?per_page=10"),
+            read("/versions?per_page=100"),
+          ]);
+          assert.ok(Array.isArray(deployments.deployments) && Array.isArray(versions.items), "cloudflare_state_unavailable");
+          const afterDeployments = deployments.deployments.map(item => ({
+            id: item.id,
+            versions: item.versions.map(version => ({
+              version_id: version.version_id,
+              percentage: version.percentage,
+            })),
+          }));
+          assert.deepEqual(afterDeployments, before.deployments, "production_deployment_changed_during_stage");
+          const newVersions = versions.items.filter(item => !before.versionIds.includes(item.id));
+          assert.ok(newVersions.length >= 1, "candidate_version_not_found_after_upload");
+          const activeIds = new Set(afterDeployments.flatMap(item => item.versions.map(version => version.version_id)));
+          const candidates = newVersions.filter(item => !activeIds.has(item.id));
+          assert.ok(candidates.length >= 1, "uploaded_version_is_in_active_deployment");
+          const candidate = candidates[0];
+          console.log("STAGED_VERSION_ID=" + candidate.id);
+          console.log("STAGED_VERSION_NUMBER=" + candidate.number);
+          console.log("ACTIVE_DEPLOYMENT_UNCHANGED=PASS");
+          console.log("CANDIDATE_VERSION_NOT_DEPLOYED=PASS");
+          NODE
+          {
+            echo "## LifeSpace formal Worker candidate"
+            echo "- Release SHA: ${GITHUB_SHA}"
+            echo "- Worker: life-space-canary"
+            echo "- Candidate version: uploaded; not deployed"
+            echo "- Active production deployment: unchanged"
+          } >> "$GITHUB_STEP_SUMMARY"

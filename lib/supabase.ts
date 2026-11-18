@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { installSupabaseSessionCookieSync } from "@/lib/supabase-session-cookie";
 import {
   createAndroidSafeStartupStorage, isNativeAndroidAuthStartup,
 } from "@/lib/android-safe-startup-storage";
@@ -53,3 +54,11 @@ export const supabase = createClient(
     },
   }
 );
+
+
+// Desktop browsers keep the existing localStorage auth client, while this
+// listener mirrors its verified session into same-origin SSR cookies for the
+// Cloudflare R2 image gateway. Native Android keeps its protected storage path.
+if (typeof window !== "undefined" && !androidStartupStorage) {
+  installSupabaseSessionCookieSync(supabase);
+}

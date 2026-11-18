@@ -1,0 +1,53 @@
+name: R2 Owner session cookie checks
+
+on:
+  pull_request:
+    branches:
+      - release/lifespace-r01-r2-client-20261118
+    paths:
+      - "app/api/auth/session/route.ts"
+      - "app/login/page.tsx"
+      - "lib/supabase-session-cookie.ts"
+      - "lib/supabase.ts"
+      - "cloudflare/r2-media-user-gateway.mjs"
+      - "tests/supabase-session-cookie-sync.test.mjs"
+      - ".github/workflows/r2-owner-session-cookie-checks.yml"
+      - ".github/workflows/cloudflare-canary.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r2-owner-session-cookie-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_test_cookie_sync
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Type-check the Vinext application
+        run: npm run typecheck:vinext
+      - name: Test session-cookie bridge and R2 Owner read gateway
+        run: >
+          node --test
+          tests/supabase-session-cookie-sync.test.mjs
+          tests/r2-media-user-gateway-read.test.mjs
+          tests/r2-media-user-gateway-security.test.mjs
+          tests/record-media-gate.test.mjs
+      - name: Lint changed TypeScript files
+        run: >
+          npx eslint
+          app/api/auth/session/route.ts
+          app/login/page.tsx
+          lib/supabase-session-cookie.ts
+          lib/supabase.ts
