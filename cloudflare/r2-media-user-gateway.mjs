@@ -97,6 +97,11 @@ function createRequestUserClient(request, env) {
 
   const cookieWrites = [];
   const supabase = createServerClient(config.url, config.anonKey, {
+    cookieOptions: {
+      path: "/",
+      sameSite: "lax",
+      secure: new URL(request.url).protocol === "https:",
+    },
     cookies: {
       getAll() { return parseCookies(request.headers.get("cookie") || ""); },
       setAll(values) { cookieWrites.push(...values); },
