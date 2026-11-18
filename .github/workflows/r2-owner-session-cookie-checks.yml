@@ -13,6 +13,7 @@ on:
       - "tests/supabase-session-cookie-sync.test.mjs"
       - ".github/workflows/r2-owner-session-cookie-checks.yml"
       - ".github/workflows/cloudflare-canary.yml"
+      - "tests/cloudflare-r2-canary.test.mjs"
 
 permissions:
   contents: read
@@ -44,6 +45,7 @@ jobs:
           tests/r2-media-user-gateway-read.test.mjs
           tests/r2-media-user-gateway-security.test.mjs
           tests/record-media-gate.test.mjs
+          tests/cloudflare-r2-canary.test.mjs
       - name: Lint changed TypeScript files
         run: >
           npx eslint
