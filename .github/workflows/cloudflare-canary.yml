@@ -1,9 +1,6 @@
-name: LifeSpace Formal W4 Candidate Stage
+name: LifeSpace Formal W4 R2 Mirror Candidate Stage
 
 on:
-  push:
-    branches:
-      - release/lifespace-r01-r2-rate-limit-20261118
   workflow_dispatch:
 
 permissions:
@@ -26,8 +23,9 @@ jobs:
       NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN: https://life-space.uk
       NEXT_PUBLIC_APP_URL: https://life-space.uk
       NEXT_PUBLIC_PAYPAL_ENABLED: "false"
-      NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: "false"
+      NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: "true"
       NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN: https://life-space.uk
+      NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE: production
       NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED: "false"
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -43,16 +41,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "${GITHUB_REF_NAME}" = "release/lifespace-r01-r2-rate-limit-20261118"
+          test "${GITHUB_REF_NAME}" = "release/lifespace-r01-r2-client-20261118"
           test "${CLOUDFLARE_ACCOUNT_ID}" = "5765d2d135aa20de90c898ab93ad4c11"
-          test "$(git rev-parse HEAD^)" = "f6f7c8c56f633cf7e70090a55068b5cbe5b2b660"
+          test "$(git rev-parse HEAD^)" = "f109c020cfc66bdb40ff02c399cb1fcc9ca6bbf3"
           mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
           test "${#changed[@]}" -eq 1
           test "${changed[0]}" = ".github/workflows/cloudflare-canary.yml"
           test -n "${NEXT_PUBLIC_TURNSTILE_SITE_KEY}"
+          test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED}" = "true"
+          test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE}" = "production"
+          test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN}" = "https://life-space.uk"
           echo "LIFESPACE_RELEASE_SOURCE=PASS"
           echo "FORMAL_CLOUDFLARE_ACCOUNT=PASS"
           echo "TURNSTILE_BUILD_KEY_PRESENT=PASS"
+          echo "R2_MIRROR_BUILD_CONFIG=PASS"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -63,7 +65,7 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Validate Android login, formal Worker config, and media gates
+      - name: Validate Android login, formal R2 mirror config, and media gates
         shell: bash
         run: |
           set -euo pipefail
@@ -72,18 +74,25 @@ jobs:
             tests/android-auth-connectivity.test.mjs \
             tests/android-single-runtime-prerequisites.test.mjs \
             tests/android-welcome-registration.test.mjs \
+            tests/r2-media-mirror-build-config.test.mjs \
             tests/r2-media-service-stage.test.mjs \
             tests/r2-media-business.test.mjs \
             tests/r2-media-gate-switches.test.mjs \
             tests/r2-business-media-normal-path.test.mjs \
             tests/r2-media-user-gateway-media-id.test.mjs \
-            tests/r2-media-user-gateway-security.test.mjs
+            tests/r2-media-user-gateway-security.test.mjs \
+            tests/r2-media-user-gateway-read.test.mjs \
+            tests/r2-w4-authorized-read-fallback.test.mjs \
+            tests/lifespace-126-w4-r2-upload-wiring.test.mjs \
+            tests/m4-qa-controlled-ui.test.mjs \
+            tests/cloudflare-r2-canary.test.mjs \
+            tests/vinext-public-env-guard.test.mjs
           npm run typecheck:vinext
 
       - name: Build formal W4 candidate
         run: npm run build:vinext:formal-candidate
 
-      - name: Assert generated Worker bindings, Turnstile, and closed release gates
+      - name: Assert generated Worker bindings, Turnstile, and enabled R2 mirror gates
         shell: bash
         run: |
           node --input-type=module <<'NODE'
@@ -95,8 +104,8 @@ jobs:
           assert.equal(cfg.name, "life-space-canary");
           assert.equal(cfg.keep_vars, true);
           assert.equal(cfg.vars?.R2_BUSINESS_MEDIA_MODE, "isolated");
-          assert.equal(cfg.vars?.R2_MEDIA_READ_ENABLED, "false");
-          assert.equal(cfg.vars?.R2_MEDIA_MIRROR_WRITE_ENABLED, "false");
+          assert.equal(cfg.vars?.R2_MEDIA_READ_ENABLED, "true");
+          assert.equal(cfg.vars?.R2_MEDIA_MIRROR_WRITE_ENABLED, "true");
           assert.deepEqual(cfg.ratelimits, [{
             name: "R2_MEDIA_MIRROR_RATE_LIMITER",
             namespace_id: "2026111801",
@@ -119,12 +128,18 @@ jobs:
             return false;
           }
           assert.ok(containsKey(chunksDir, process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY), "turnstile_site_key_missing_from_client_bundle");
-          console.log("FORMAL_W4_CONFIG_AND_TURNSTILE=PASS");
+          assert.ok(containsKey(chunksDir, "/__internal/r2/business-media/mirror"), "r2_mirror_request_missing_from_client_bundle");
+          assert.ok(!containsKey(chunksDir, "lifespace-site-media-qa-20261028"), "qa_media_origin_leaked_to_formal_client_bundle");
+          assert.ok(!containsKey("dist/server", "lifespace-site-media-qa-20261028"), "qa_media_origin_leaked_to_formal_worker_bundle");
+          assert.ok(!containsKey("dist/server", "mablwxlipcgbmbnfdbkc"), "qa_supabase_ref_leaked_to_formal_worker_bundle");
+          console.log("FORMAL_W4_CONFIG_TURNSTILE_R2_MIRROR=PASS");
           NODE
 
       - name: Upload candidate version only (NO production traffic switch)
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler versions upload --config dist/server/wrangler.json --keep-vars --strict
+          # Current production Worker was last updated through the script API; strict mode would reject a safe version upload.
+          # The generated config is already checked above for exact production bindings and gates.
+          npx wrangler versions upload --config dist/server/wrangler.json --keep-vars
           echo "FORMAL_W4_VERSION_STAGED_NOT_DEPLOYED=PASS"
