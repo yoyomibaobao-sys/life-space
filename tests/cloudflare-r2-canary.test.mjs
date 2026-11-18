@@ -167,9 +167,10 @@ test("formal W4 staging workflow uses low-privilege public auth config and uploa
   assert.match(workflow, /push:\s*\n\s*branches:\s*\n\s*-\s*release\/lifespace-r01-r2-client-20261118/);
   assert.doesNotMatch(workflow, /workflow_dispatch:/);
   assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#96'\)/);
+  assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#97'\)/);
   assert.match(workflow, /EXPECTED_RELEASE_SHA: \$\{\{ github\.sha \}\}/);
   assert.match(workflow, /git merge-base --is-ancestor/);
-  assert.match(workflow, /grep -F "#96"/);
+  assert.match(workflow, /grep -E "#\(96\|97\)"/);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
   assert.doesNotMatch(workflow, /statuses:\s*write/);
   assert.match(
