@@ -1,12 +1,17 @@
 name: LifeSpace Formal W4 R2 Mirror Candidate Stage
 
 on:
-  workflow_dispatch:
-    inputs:
-      expected_release_sha:
-        description: Exact merged Release commit SHA to build and stage
-        required: true
-        type: string
+  push:
+    branches:
+      - release/lifespace-r01-r2-client-20261118
+    paths:
+      - ".github/workflows/cloudflare-canary.yml"
+      - "app/api/auth/session/route.ts"
+      - "app/login/page.tsx"
+      - "lib/supabase-session-cookie.ts"
+      - "lib/supabase.ts"
+      - "cloudflare/r2-media-user-gateway.mjs"
+      - "tests/supabase-session-cookie-sync.test.mjs"
 
 permissions:
   contents: read
@@ -17,6 +22,7 @@ concurrency:
 
 jobs:
   stage-formal-w4:
+    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '#96') }}
     name: Build and upload an undeployed formal W4 version
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -34,14 +40,14 @@ jobs:
       NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED: "false"
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
+      EXPECTED_RELEASE_SHA: ${{ github.sha }}
 
     steps:
       - name: Check out the authorized Release source
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Verify exact Release source, production account, and build-time captcha
         shell: bash
@@ -51,6 +57,8 @@ jobs:
           test "${CLOUDFLARE_ACCOUNT_ID}" = "5765d2d135aa20de90c898ab93ad4c11"
           test -n "${EXPECTED_RELEASE_SHA}"
           test "$(git rev-parse HEAD)" = "${EXPECTED_RELEASE_SHA}"
+          git merge-base --is-ancestor "5084336e86170b1724c52bdd9b685215a5988075" "${GITHUB_SHA}"
+          git log -1 --format=%B | grep -F "#96" >/dev/null
           test -n "${NEXT_PUBLIC_TURNSTILE_SITE_KEY}"
           test -n "${CLOUDFLARE_API_TOKEN}"
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED}" = "true"
