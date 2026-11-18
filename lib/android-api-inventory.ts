@@ -2,6 +2,7 @@
 // classifying it before any bundled Android caller may use it.
 export const androidNextApiInventory = {
   "/api/health": "android-public-native",
+  "/api/auth/session": "web-only", // desktop-only HttpOnly SSR session mirror; Android retains protected startup storage
   "/api/archives/[id]": "android-native",
   "/api/records/[id]": "android-native",
   "/api/media/[id]": "android-native",

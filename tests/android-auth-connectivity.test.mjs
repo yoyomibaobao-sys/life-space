@@ -602,7 +602,8 @@ test("hosted login page connects native Android login to verified session persis
   assert.match(login, /import \{ beginAndroidAuthLogin, completeAndroidAuthLogin, failAndroidAuthLogin \} from "@\/lib\/android-auth-state"/);
   assert.match(login, /if \(isNativeApp\) \{\s*beginAndroidAuthLogin\(\)/);
   assert.match(login, /const \{ data, error \} = await supabase\.auth\.signInWithPassword/);
-  assert.match(login, /serverLoginSucceeded = true;\s*if \(isNativeApp\) \{\s*await completeAndroidAuthLogin\(data\.user, data\.session\)/);
+  assert.match(login, /serverLoginSucceeded = true;\s*if \(!isNativeApp && data\.session\) \{[\s\S]*?await syncSupabaseSessionCookie\(data\.session\);\s*\}\s*if \(isNativeApp\) \{\s*await completeAndroidAuthLogin\(data\.user, data\.session\)/);
+  assert.match(login, /import \{ syncSupabaseSessionCookie \} from "@\/lib\/supabase-session-cookie"/);
   assert.match(login, /if \(androidLoginStarted\) \{\s*failAndroidAuthLogin\(\)/);
   assert.match(login, /if \(androidLoginStarted && !serverLoginSucceeded\) \{\s*failAndroidAuthLogin\(\)/);
   assert.match(login, /const returnTo = getSafeReturnTo\([\s\S]*?router\.replace\(returnTo\)/);
