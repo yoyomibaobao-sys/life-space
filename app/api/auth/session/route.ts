@@ -119,7 +119,7 @@ export async function POST(request: Request) {
   if (Object.keys(input).some((key) => !["access_token", "refresh_token"].includes(key)) ||
       typeof input.access_token !== "string" || input.access_token.length < 20 ||
       input.access_token.length > 16_384 ||
-      typeof input.refresh_token !== "string" || input.refresh_token.length < 20 ||
+      typeof input.refresh_token !== "string" || input.refresh_token.length < 8 ||
       input.refresh_token.length > 8_192) {
     return json(400, { error: "invalid_session" });
   }
