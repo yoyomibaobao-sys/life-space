@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
+import { syncSupabaseSessionCookie } from "@/lib/supabase-session-cookie";
 import { buildAuthEmailRedirect } from "@/lib/auth-return";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
@@ -117,6 +118,10 @@ export default function LoginPage() {
       }
 
       serverLoginSucceeded = true;
+      if (!isNativeApp && data.session) {
+        // Wait for the server-readable cookie copy before the first protected image request.
+        await syncSupabaseSessionCookie(data.session);
+      }
       if (isNativeApp) {
         await completeAndroidAuthLogin(data.user, data.session);
       }
