@@ -39,8 +39,13 @@ export function createSupabaseSessionCookieSync(fetcher: CookieSyncFetch) {
         });
       }
 
-      const response = await fetcher("/api/auth/session", init);
-      return response.ok;
+      try {
+        const response = await fetcher("/api/auth/session", init);
+        return response.ok;
+      } catch {
+        // Auth must remain usable if the optional server-cookie mirror is offline.
+        return false;
+      }
     });
 
     queue = operation.catch(() => false);
