@@ -8,7 +8,7 @@ const helperSource = readFileSync(
   "utf8",
 );
 const helperCode = transformSync(helperSource, { loader: "ts", format: "esm" }).code;
-const { createSupabaseSessionCookieSync } = await import(
+const { createSupabaseSessionCookieSync, installSupabaseSessionCookieSync } = await import(
   "data:text/javascript;base64," + Buffer.from(helperCode).toString("base64")
 );
 
@@ -103,6 +103,71 @@ test("session bridge verifies tokens, restricts origin, sets SSR cookies and cle
   assert.match(gateway, /httpOnly: true/);
   assert.match(route, /export async function DELETE/);
   assert.match(route, /sb-\$\{projectRef\}-auth-token/);
+});
+
+test("persisted desktop session is mirrored even if INITIAL_SESSION is missed", async () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = {};
+  const calls = [];
+  let listener;
+  const client = {
+    auth: {
+      onAuthStateChange(callback) {
+        listener = callback;
+        return { data: { subscription: { unsubscribe() {} } } };
+      },
+      async getSession() {
+        return { data: { session } };
+      },
+    },
+  };
+
+  try {
+    const cleanup = installSupabaseSessionCookieSync(client, {
+      async sync(value) { calls.push({ action: "sync", value }); return true; },
+      async clear() { calls.push({ action: "clear" }); return true; },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(calls, [{ action: "sync", value: session }]);
+    cleanup();
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test("a later auth event takes precedence over a stale getSession result", async () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = {};
+  const calls = [];
+  let listener;
+  let resolveSession;
+  const client = {
+    auth: {
+      onAuthStateChange(callback) {
+        listener = callback;
+        return { data: { subscription: { unsubscribe() {} } } };
+      },
+      getSession() {
+        return new Promise((resolve) => { resolveSession = resolve; });
+      },
+    },
+  };
+
+  try {
+    const cleanup = installSupabaseSessionCookieSync(client, {
+      async sync(value) { calls.push({ action: "sync", value }); return true; },
+      async clear() { calls.push({ action: "clear" }); return true; },
+    });
+    listener("SIGNED_OUT", null);
+    resolveSession({ data: { session } });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(calls, [{ action: "clear" }]);
+    cleanup();
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
 });
 
 test("desktop sync is installed without changing Android protected auth storage", () => {
