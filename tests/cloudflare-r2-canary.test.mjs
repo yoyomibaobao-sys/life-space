@@ -170,9 +170,10 @@ test("formal W4 staging workflow uses low-privilege public auth config and uploa
   assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#97'\)/);
   assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#98'\)/);
   assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#99'\)/);
+  assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#100'\)/);
   assert.match(workflow, /EXPECTED_RELEASE_SHA: \$\{\{ github\.sha \}\}/);
   assert.match(workflow, /git merge-base --is-ancestor/);
-  assert.match(workflow, /grep -E "#\(96\|97\|98\|99\)"/);
+  assert.match(workflow, /grep -E "#\(96\|97\|98\|99\|100\)"/);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
   assert.doesNotMatch(workflow, /statuses:\s*write/);
   assert.match(

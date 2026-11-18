@@ -105,6 +105,18 @@ test("session bridge verifies tokens, restricts origin, sets SSR cookies and cle
   assert.match(route, /sb-\$\{projectRef\}-auth-token/);
 });
 
+test("SSR session bridge accepts Supabase 12-character refresh tokens", () => {
+  const route = readFileSync(new URL("../app/api/auth/session/route.ts", import.meta.url), "utf8");
+  const match = route.match(/input\.refresh_token\.length\s*<\s*(\d+)/);
+  assert.ok(match, "Refresh token minimum length guard should exist");
+  const minLength = Number(match[1]);
+  assert.ok(minLength <= 12, "The 12-character GoTrue refresh token must not be rejected");
+  assert.ok(minLength >= 1, "Malformed empty refresh tokens must still be rejected");
+  assert.match(route, /input\.refresh_token\.length\s*>\s*8_192/);
+  assert.match(route, /verifier\.auth\.getUser/);
+  assert.match(route, /cookieClient\.auth\.setSession/);
+});
+
 test("persisted desktop session is mirrored even if INITIAL_SESSION is missed", async () => {
   const previousWindow = globalThis.window;
   globalThis.window = {};
