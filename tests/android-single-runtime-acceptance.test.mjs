@@ -146,6 +146,11 @@ test("workflow can dispatch single-runtime acceptance without publishing website
   assert.match(workflow, /single_runtime_acceptance:/);
   assert.match(workflow, /type: boolean/);
   assert.match(workflow, /ANDROID_SINGLE_RUNTIME:/);
+  assert.match(
+    workflow,
+    /publish_to_website:\s+description: Publish this signed stable release to the official website \(R2\)\s+required: false\s+type: boolean\s+default: false/,
+  );
+  assert.equal((workflow.match(/inputs\.publish_to_website == true/g) ?? []).length, 2);
   assert.match(workflow, /inputs\.single_runtime_acceptance == true && '1'/);
   assert.match(workflow, /Require Turnstile for single-runtime acceptance/);
   assert.match(workflow, /Verify single-runtime acceptance document/);
@@ -153,7 +158,7 @@ test("workflow can dispatch single-runtime acceptance without publishing website
   assert.match(workflow, /Acceptance APK must not ship a second-document offline\.html/);
   assert.match(
     workflow,
-    /github\.ref == 'refs\/heads\/main' && env\.ANDROID_KEYSTORE_BASE64 != '' && inputs\.single_runtime_acceptance != true/,
+    /github\.ref == 'refs\/heads\/main' \|\| \(github\.ref == 'refs\/heads\/release\/android-1\.0\.5-v32-publish-20261119' && inputs\.publish_to_website == true\) && env\.ANDROID_KEYSTORE_BASE64 != '' && inputs\.single_runtime_acceptance != true/,
   );
   assert.match(
     workflow,
