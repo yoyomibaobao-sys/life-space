@@ -113,7 +113,7 @@ test("formal site overlay refuses a conflicting service target or disabled gate"
   }), overlay), /existing_media_gate_mismatch/);
 });
 
-test("media Worker candidate is private and starts with both gates closed", () => {
+test("media Worker candidate is private and preserves live production R2 gates", () => {
   assert.equal(mediaConfig.name, "life-space-business-media");
   assert.equal(mediaConfig.main, "./cloudflare/r2-media-worker-entry.mjs");
   assert.equal(mediaConfig.workers_dev, false);
@@ -124,7 +124,7 @@ test("media Worker candidate is private and starts with both gates closed", () =
   }]);
   assert.deepEqual(mediaConfig.vars, {
     R2_BUSINESS_MEDIA_MODE: "isolated",
-    R2_MEDIA_READ_ENABLED: "false",
-    R2_MEDIA_MIRROR_WRITE_ENABLED: "false",
+    R2_MEDIA_READ_ENABLED: "true",
+    R2_MEDIA_MIRROR_WRITE_ENABLED: "true",
   });
 });

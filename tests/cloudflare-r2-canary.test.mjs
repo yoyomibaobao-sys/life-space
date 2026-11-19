@@ -171,9 +171,10 @@ test("formal W4 staging workflow uses low-privilege public auth config and uploa
   assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#98'\)/);
   assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#99'\)/);
   assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#100'\)/);
+  assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#103'\)/);
   assert.match(workflow, /EXPECTED_RELEASE_SHA: \$\{\{ github\.sha \}\}/);
   assert.match(workflow, /git merge-base --is-ancestor/);
-  assert.match(workflow, /grep -E "#\(96\|97\|98\|99\|100\)"/);
+  assert.match(workflow, /grep -E "#\(96\|97\|98\|99\|100\|103\)"/);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
   assert.doesNotMatch(workflow, /statuses:\s*write/);
   assert.match(
@@ -209,6 +210,9 @@ test("formal W4 staging workflow uses low-privilege public auth config and uploa
   assert.match(workflow, /CANDIDATE_VERSION_NOT_DEPLOYED=PASS/);
   assert.match(workflow, /candidate_version_not_found_after_upload/);
   assert.match(workflow, /unexpected_active_deployment_before_stage/);
+  assert.match(workflow, /3b3a56d5-6bb9-43ab-97e1-50fa14972dd8/);
+  assert.match(workflow, /9eb02418-86b1-4117-8ac3-f0e92dace046/);
+  assert.doesNotMatch(workflow, /b171ae4b-7b9f-4368-a3aa-8f36b6b1f82b/);
   assert.match(workflow, /FORMAL_W4_VERSION_STAGED_NOT_DEPLOYED=PASS/);
   assert.doesNotMatch(workflow, /wrangler deploy|versions deploy|deploy --config dist\/server\/wrangler\.json/);
   assert.doesNotMatch(workflow, /^\s*schedule:/m);
