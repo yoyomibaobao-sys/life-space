@@ -1,5 +1,14 @@
 # LifeSpace 当前开发进程（跨聊天交接）
 
+## 最新专项检查点｜W4 R2 读取来源标识（2026-11-20）
+
+- **正式请求证据继承：**Chrome A 已核实 Owner UID 匹配；正式 W4 v105 的原图与缩略图请求均 HTTP 200，字节数分别为 25,483／14,250，尺寸分别为 800×600／600×450；两份 SHA-256 均匹配此前独立读回的 R2 对象。响应未提供来源标识，因此只能签收 Owner 身份与双图 HTTP，不签收本次请求的 R2 来源。
+- **候选基线：**以 Release 分支 `release/lifespace-r01-r2-client-20261118` 的父提交 `44b8ae5900be4d82b7a799fe8b2eaba5293ab2ec` 建立独立分支 `candidate/lifespace-w4-r2-source-header-20261120-r01`；没有基于或改写 PR #103 的候选提交。实现提交 `648965add1ae994386807e4d243279ffe4eebf6f`。
+- **最小源码改动：**`cloudflare/r2-media-user-gateway.mjs` 仅在完成读取及二次授权后的 HTTP 200 响应增加 `X-LS-Media-Source`：R2 成功为 `r2`，Storage 回退成功为 `storage-fallback`。所有 `image_unavailable` 错误响应不带该头；不改变图片字节、状态码、授权、HMAC、缓存策略、回退顺序或数据库／R2 内容。
+- **回归测试：**`tests/r2-media-user-gateway-read.test.mjs` 增加 R2 命中、R2 不可用／缺失后的 Storage 回退、R2 关闭时 Storage 路径及错误响应不带来源头的断言。定向四文件 Node 测试 **28/28 PASS**；涉及两个 JS 文件 ESLint PASS；保留 CRLF 的 `git -c core.whitespace=cr-at-eol diff --check` PASS。
+- **保护边界：**本轮未部署、未切换流量、未修改 Cloudflare 配置／Secret、Supabase 正式库、R2 对象、前端代理开关或 APP。正式 W4 v105、媒体 Worker v3 保持原状；PR #103 仍 Draft。
+- **下一步：**完成状态文档提交并推送本独立候选分支，远端核对 SHA 与文件内容；之后等待批准在正式环境部署诊断版本并重新发起 Owner 双图请求。未完成该真实请求前，不得把历史 HTTP 200／SHA 一致改写为 R2 来源 PASS。
+
 ## 最新专项检查点｜123 R02 媒体源对象字节校验（2026-11-12）
 
 - 统一源码 `development/lifespace-unified-r01`，本轮起点 HEAD `54de3c136aff611ee5dd0781403a1595d42b785d`；原有 Android Gradle、`mobile-shell/index.html`、`.wp10-delivery/` 未提交成果保持原状。
