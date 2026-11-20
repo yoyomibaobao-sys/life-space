@@ -149,6 +149,7 @@ test("site Worker keeps same-origin Owner proxy on Storage while R2 read switch 
       request(variant), f.env, f.dependencies,
     );
     assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-ls-media-source"), "storage-fallback");
     assert.equal(response.headers.get("cache-control"), "private, no-store, max-age=0");
     assert.equal(response.headers.get("cross-origin-resource-policy"), "same-origin");
     assert.deepEqual(new Uint8Array(await response.arrayBuffer()), JPEG);
@@ -165,6 +166,7 @@ test("R2 hit serves verified image bytes without a Storage download", async () =
     request("full"), f.env, f.dependencies,
   );
   assert.equal(response.status, 200);
+  assert.equal(response.headers.get("x-ls-media-source"), "r2");
   assert.deepEqual(new Uint8Array(await response.arrayBuffer()), JPEG);
   assert.equal(f.internalRequests.length, 1);
   assert.equal(f.storagePaths.length, 0);
@@ -182,6 +184,7 @@ test("R2 404, 502, 503 and transport failure fall back to Storage", async () => 
       request("thumb"), f.env, f.dependencies,
     );
     assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-ls-media-source"), "storage-fallback");
     assert.deepEqual(new Uint8Array(await response.arrayBuffer()), JPEG);
     assert.equal(f.storagePaths[0], THUMB_PATH);
     assert.equal(f.internalRequests.length, 1);
@@ -194,6 +197,7 @@ test("R2 integrity or authorization response fails closed without Storage fallba
     request("full"), f.env, f.dependencies,
   );
   assert.equal(response.status, 503);
+  assert.equal(response.headers.get("x-ls-media-source"), null);
   assert.equal(f.storagePaths.length, 0);
   assert.equal(f.internalRequests.length, 1);
 });
@@ -205,6 +209,7 @@ test("another Owner cannot read private full or thumbnail through the proxy", as
       request(variant, OTHER), f.env, f.dependencies,
     );
     assert.equal(response.status, 404);
+    assert.equal(response.headers.get("x-ls-media-source"), null);
     assert.equal(f.internalRequests.length, 0);
     assert.equal(f.storagePaths.length, 0);
   }

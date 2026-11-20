@@ -342,6 +342,7 @@ export async function handleR2BusinessUserReadRequest(request, env, dependencies
     if (!await recordReadableForViewer(auth.supabase, source.recordId)) return reply(imageError(403));
 
     let blob;
+    let mediaSource;
     if (r2ReadEnabled) {
       const headers = await createR2InternalReadHeaders({
         secret: env.R2_MEDIA_SERVICE_AUTH_SECRET, ownerId: source.ownerId, path: source.path,
@@ -365,6 +366,7 @@ export async function handleR2BusinessUserReadRequest(request, env, dependencies
         if (!buffer.byteLength || buffer.byteLength > MAX_MEDIA_BYTES ||
             (size > 0 && size !== buffer.byteLength)) return reply(imageError(503));
         blob = new Blob([buffer], { type });
+        mediaSource = "r2";
       }
     }
     if (!blob) {
@@ -373,6 +375,7 @@ export async function handleR2BusinessUserReadRequest(request, env, dependencies
           !/^image\/(?:jpeg|png|webp|gif|avif|heic|heif)$/.test((legacy.data.type || "").toLowerCase()) ||
           !legacy.data.size || legacy.data.size > MAX_MEDIA_BYTES) return reply(imageError(404));
       blob = legacy.data;
+      mediaSource = "storage-fallback";
     }
     // Recheck session and business permission after any slow R2/Storage transfer.
     const freshAuth = await auth.supabase.auth.getUser(auth.accessToken || undefined);
@@ -384,7 +387,11 @@ export async function handleR2BusinessUserReadRequest(request, env, dependencies
     }
     if (!await recordReadableForViewer(auth.supabase, current.recordId)) return reply(imageError(403));
     return reply(new Response(blob, { status: 200,
-      headers: { ...R2_READ_HEADERS, "Content-Type": blob.type } }));
+      headers: {
+        ...R2_READ_HEADERS,
+        "Content-Type": blob.type,
+        "X-LS-Media-Source": mediaSource,
+      } }));
   } catch {
     return reply(imageError(503));
   }
