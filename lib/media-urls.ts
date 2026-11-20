@@ -50,8 +50,9 @@ export type MediaDisplayUrls = {
   display_thumb_url: string | null;
 };
 
-// Opt-in migration path only; production keeps all existing signers until
-// the server route, owner chain, cache behaviour and Android are QA-proven.
+// Web-only opt-in: Cloudflare W4 intercepts this same-origin path and checks
+// Owner/public access before R2 reads or Storage fallback. Android's standalone
+// build explicitly forces this flag off.
 function guardedRecordImageUrl(source: MediaUrlSource, variant: "full" | "thumb") {
   if (process.env.NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED !== "true") return null;
   if (source.type !== "image" || !source.record_id || !source.user_id || !source.id) return null;
