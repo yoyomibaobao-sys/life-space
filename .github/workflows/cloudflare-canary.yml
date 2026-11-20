@@ -11,6 +11,13 @@ on:
       - "lib/supabase-session-cookie.ts"
       - "lib/supabase.ts"
       - "cloudflare/r2-media-user-gateway.mjs"
+      - "app/api/media/record-image/route.ts"
+      - "lib/media-urls.ts"
+      - "lib/guarded-record-image.mjs"
+      - "lib/use-guarded-record-image.ts"
+      - "tests/guarded-media-signing.test.mjs"
+      - "tests/w4-guarded-record-image-session.test.mjs"
+      - "tests/record-media-gate.test.mjs"
       - "tests/supabase-session-cookie-sync.test.mjs"
       - "tests/cloudflare-r2-canary.test.mjs"
       - "tests/android-auth-connectivity.test.mjs"
@@ -26,7 +33,7 @@ concurrency:
 
 jobs:
   stage-formal-w4:
-    if: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '#96') || contains(github.event.head_commit.message, '#97') || contains(github.event.head_commit.message, '#98') || contains(github.event.head_commit.message, '#99') || contains(github.event.head_commit.message, '#100')) }}
+    if: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '#96') || contains(github.event.head_commit.message, '#97') || contains(github.event.head_commit.message, '#98') || contains(github.event.head_commit.message, '#99') || contains(github.event.head_commit.message, '#100') || contains(github.event.head_commit.message, '#W4-PROXY')) }}
     name: Build and upload an undeployed formal W4 version
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -41,7 +48,7 @@ jobs:
       NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: "true"
       NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN: https://life-space.uk
       NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE: production
-      NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED: "false"
+      NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED: "true"
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       EXPECTED_RELEASE_SHA: ${{ github.sha }}
@@ -62,16 +69,18 @@ jobs:
           test -n "${EXPECTED_RELEASE_SHA}"
           test "$(git rev-parse HEAD)" = "${EXPECTED_RELEASE_SHA}"
           git merge-base --is-ancestor "5084336e86170b1724c52bdd9b685215a5988075" "${GITHUB_SHA}"
-          git log -1 --format=%B | grep -E "#(96|97|98|99|100)" >/dev/null
+          git log -1 --format=%B | grep -E "#(96|97|98|99|100)|#W4-PROXY" >/dev/null
           test -n "${NEXT_PUBLIC_TURNSTILE_SITE_KEY}"
           test -n "${CLOUDFLARE_API_TOKEN}"
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED}" = "true"
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE}" = "production"
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN}" = "https://life-space.uk"
+          test "${NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED}" = "true"
           echo "LIFESPACE_RELEASE_SOURCE=PASS"
           echo "FORMAL_CLOUDFLARE_ACCOUNT=PASS"
           echo "TURNSTILE_BUILD_KEY_PRESENT=PASS"
           echo "R2_MIRROR_BUILD_CONFIG=PASS"
+          echo "GUARDED_RECORD_IMAGE_PROXY=PASS"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -100,6 +109,9 @@ jobs:
             tests/r2-media-user-gateway-security.test.mjs \
             tests/r2-media-user-gateway-read.test.mjs \
             tests/r2-w4-authorized-read-fallback.test.mjs \
+            tests/guarded-media-signing.test.mjs \
+            tests/w4-guarded-record-image-session.test.mjs \
+            tests/record-media-gate.test.mjs \
             tests/lifespace-126-w4-r2-upload-wiring.test.mjs \
             tests/m4-qa-controlled-ui.test.mjs \
             tests/cloudflare-r2-canary.test.mjs \
@@ -110,7 +122,7 @@ jobs:
       - name: Build formal W4 candidate
         run: npm run build:vinext:formal-candidate
 
-      - name: Assert generated Worker bindings, Turnstile, and enabled R2 mirror gates
+      - name: Assert generated Worker bindings, Turnstile, R2 gates, and record-image proxy
         shell: bash
         run: |
           node --input-type=module <<'NODE'
@@ -147,11 +159,13 @@ jobs:
           }
           assert.ok(containsKey(chunksDir, process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY), "turnstile_site_key_missing_from_client_bundle");
           assert.ok(containsKey(chunksDir, "/__internal/r2/business-media/mirror"), "r2_mirror_request_missing_from_client_bundle");
+          assert.ok(containsKey(chunksDir, "/api/media/record-image"), "guarded_record_image_route_missing_from_client_bundle");
           assert.ok(!containsKey(chunksDir, "lifespace-site-media-qa-20261028"), "qa_media_origin_leaked_to_formal_client_bundle");
           assert.ok(!containsKey("dist/server", "lifespace-site-media-qa-20261028"), "qa_media_origin_leaked_to_formal_worker_bundle");
           assert.ok(!containsKey("dist/server", "mablwxlipcgbmbnfdbkc"), "qa_supabase_ref_leaked_to_formal_worker_bundle");
           assert.ok(containsKey("dist/server", "session_sync_unavailable"), "owner_session_cookie_route_missing_from_worker_bundle");
           console.log("FORMAL_W4_CONFIG_TURNSTILE_R2_MIRROR=PASS");
+          console.log("GUARDED_RECORD_IMAGE_PROXY_BUNDLED=PASS");
           console.log("OWNER_SESSION_COOKIE_ROUTE_BUNDLED=PASS");
           NODE
 
@@ -175,9 +189,9 @@ jobs:
           assert.ok(Array.isArray(deployments.deployments) && deployments.deployments.length > 0, "active_deployment_missing");
           assert.ok(Array.isArray(versions.items), "worker_versions_missing");
           const latest = deployments.deployments[0];
-          assert.equal(latest.id, "3b3a56d5-6bb9-43ab-97e1-50fa14972dd8", "unexpected_active_deployment_before_stage");
+          assert.equal(latest.id, "1ff54ddb-3402-41cb-a447-a8622f1391e4", "unexpected_active_deployment_before_stage");
           assert.deepEqual(latest.versions, [{
-            version_id: "9eb02418-86b1-4117-8ac3-f0e92dace046",
+            version_id: "9b8acc22-390e-4d62-a44b-77f39a97de5d",
             percentage: 100,
           }], "unexpected_active_worker_version_before_stage");
           assert.equal(latest.versions.reduce((sum, item) => sum + item.percentage, 0), 100, "active_traffic_not_100_percent");
