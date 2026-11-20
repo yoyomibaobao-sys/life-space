@@ -1,5 +1,17 @@
 # LifeSpace 当前开发进程（跨聊天交接）
 
+## 最新专项检查点｜W4 正式记录图片代理候选（2026-11-20）
+
+- **浏览器实测：**Chrome A 米妈目标记录的原图和缩略图均 HTTP 200，但两条 Request URL 都直接指向 Supabase Storage 的 `/storage/v1/object/sign/media/...`，不是 `life-space.uk/api/media/record-image`；此前双图请求没有经过 W4，也没有触发 R2。
+- **原因：**正式 W4 staging workflow 将 `NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED` 固定为 `false`，`lib/media-urls.ts` 因此继续生成 Storage 签名 URL。
+- **路由链复核：**符合条件的记录图片启用代理后会生成同源 `/api/media/record-image?id=...&variant=...`。正式 Cloudflare `worker-entry.mjs` 在 `R2_BUSINESS_MEDIA_MODE=isolated` 时先拦截该路径，再调用 `handleR2BusinessUserReadRequest`，不会落入 Next API fallback。网关逐次验证用户会话、`can_access_record`、media/record/archive 归属；优先经 Service Binding + HMAC 读取 R2，R2 临时故障时回退 Storage，成功响应分别带 `X-LS-Media-Source: r2` 或 `storage-fallback`。
+- **候选改动：**正式 W4 构建环境启用 `NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED=true`；增加客户端路由 bundle 检查、Worker 拦截顺序检查及前端签名、Bearer session、权限、Storage fallback 测试。Android standalone build 仍显式强制此开关为 `false`。
+- **本地验证：**定向 Node 测试 **37/37 PASS**；`npm run test:w4-formal-config` **7/7 PASS**；`npm run typecheck:vinext` PASS；ESLint PASS；`git -c core.whitespace=cr-at-eol diff --check` PASS。隔离工作树没有 `.env.local`，未在本地执行正式构建；正式构建交由 Release Actions 使用受控生产凭据执行。
+- **候选分支：**`candidate/lifespace-w4-r2-proxy-20261120-r01`，从 Release `c1da8ac908da1ab03815f347984502a5720a0684` 建立；包含正式 staging workflow、代理路由回归测试和注释更新。尚未合入 Release，CI stage-only 尚未触发。
+- **发布闸门：**合入 Release 的提交信息必须包含 `#W4-PROXY`，触发正式 W4 stage-only workflow；上传前快照固定为 v106 deployment `1ff54ddb-3402-41cb-a447-a8622f1391e4` / version `9b8acc22-390e-4d62-a44b-77f39a97de5d`。上传后必须证明生产部署完全不变；该工作流不切换生产流量。
+- **保护边界：**当前正式 W4 v106、媒体 Worker v3、R2 读写开关、正式数据库、R2 对象和 APP 均未修改；PR #103 仍 Draft。此候选未部署。
+
+
 ## 最新专项检查点｜W4 R2 读取来源标识（2026-11-20）
 
 - **正式请求证据继承：**Chrome A 已核实 Owner UID 匹配；正式 W4 v105 的原图与缩略图请求均 HTTP 200，字节数分别为 25,483／14,250，尺寸分别为 800×600／600×450；两份 SHA-256 均匹配此前独立读回的 R2 对象。响应未提供来源标识，因此只能签收 Owner 身份与双图 HTTP，不签收本次请求的 R2 来源。

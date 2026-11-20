@@ -171,9 +171,10 @@ test("formal W4 staging workflow uses low-privilege public auth config and uploa
   assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#98'\)/);
   assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#99'\)/);
   assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#100'\)/);
+  assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#W4-PROXY'\)/);
   assert.match(workflow, /EXPECTED_RELEASE_SHA: \$\{\{ github\.sha \}\}/);
   assert.match(workflow, /git merge-base --is-ancestor/);
-  assert.match(workflow, /grep -E "#\(96\|97\|98\|99\|100\)"/);
+  assert.match(workflow, /grep -E "#\(96\|97\|98\|99\|100\)\|#W4-PROXY"/);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
   assert.doesNotMatch(workflow, /statuses:\s*write/);
   assert.match(
@@ -192,10 +193,16 @@ test("formal W4 staging workflow uses low-privilege public auth config and uploa
   assert.match(workflow, /NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: "true"/);
   assert.match(workflow, /NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE: production/);
   assert.match(workflow, /NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN: https:\/\/life-space\.uk/);
+  assert.match(workflow, /NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED: "true"/);
+  assert.match(workflow, /test "\$\{NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED\}" = "true"/);
   assert.match(read("package.json"), /"build:vinext": "node scripts\/build-vinext.mjs"/);
   assert.match(workflow, /npm run build:vinext:formal-candidate/);
   assert.match(workflow, /R2_MIRROR_BUILD_CONFIG=PASS/);
   assert.match(workflow, /r2_mirror_request_missing_from_client_bundle/);
+  assert.match(workflow, /guarded_record_image_route_missing_from_client_bundle/);
+  assert.match(workflow, /tests\/guarded-media-signing\.test\.mjs/);
+  assert.match(workflow, /tests\/w4-guarded-record-image-session\.test\.mjs/);
+  assert.match(workflow, /tests\/record-media-gate\.test\.mjs/);
   assert.match(workflow, /R2_MEDIA_READ_ENABLED, "true"/);
   assert.match(workflow, /R2_MEDIA_MIRROR_WRITE_ENABLED, "true"/);
   assert.match(workflow, /npm run test:w4-formal-config/);
@@ -209,11 +216,33 @@ test("formal W4 staging workflow uses low-privilege public auth config and uploa
   assert.match(workflow, /CANDIDATE_VERSION_NOT_DEPLOYED=PASS/);
   assert.match(workflow, /candidate_version_not_found_after_upload/);
   assert.match(workflow, /unexpected_active_deployment_before_stage/);
+  assert.match(workflow, /assert\.equal\(latest\.id, "1ff54ddb-3402-41cb-a447-a8622f1391e4"/);
+  assert.match(workflow, /version_id: "9b8acc22-390e-4d62-a44b-77f39a97de5d"/);
   assert.match(workflow, /FORMAL_W4_VERSION_STAGED_NOT_DEPLOYED=PASS/);
   assert.doesNotMatch(workflow, /wrangler deploy|versions deploy|deploy --config dist\/server\/wrangler\.json/);
   assert.doesNotMatch(workflow, /^\s*schedule:/m);
   assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY|sb_secret_/);
 });
+
+test("formal W4 intercepts guarded record images through the R2 gateway before Vinext", () => {
+  const worker = read("cloudflare/worker-entry.mjs");
+  const mediaUrls = read("lib/media-urls.ts");
+  assert.match(mediaUrls, /NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED !== "true"/);
+  assert.match(mediaUrls, /\/api\/media\/record-image\?id=/);
+  assert.match(worker, /R2_BUSINESS_VIEW_PATH/);
+  assert.match(worker, /handleR2BusinessUserReadRequest/);
+  assert.match(worker, /url\.pathname === R2_BUSINESS_VIEW_PATH && env\?\.R2_BUSINESS_MEDIA_MODE === "isolated"/);
+  const dispatch = worker.indexOf("if (url.pathname === R2_BUSINESS_VIEW_PATH");
+  const fallback = worker.indexOf("return app.fetch(request, env, ctx)");
+  assert.ok(dispatch >= 0 && fallback > dispatch, "R2 image dispatch must run before Vinext fallback");
+  assert.match(worker, /return handleR2BusinessUserReadRequest\(request, env\)/);
+});
+
+test("standalone Android build keeps the guarded record image proxy disabled", () => {
+  const mobile = read("scripts/build-mobile-offline.mjs");
+  assert.match(mobile, /"process\.env\.NEXT_PUBLIC_TRIAL_MEDIA_PROXY_ENABLED": JSON\.stringify\("false"\)/);
+});
+
 
 test("browser Supabase clients prefer the modern publishable key", () => {
   for (const path of ["lib/supabase.ts", "lib/media-storage-upload.ts"]) {
