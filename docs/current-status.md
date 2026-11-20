@@ -7,7 +7,7 @@
 - **最小源码改动：**`cloudflare/r2-media-user-gateway.mjs` 仅在完成读取及二次授权后的 HTTP 200 响应增加 `X-LS-Media-Source`：R2 成功为 `r2`，Storage 回退成功为 `storage-fallback`。所有 `image_unavailable` 错误响应不带该头；不改变图片字节、状态码、授权、HMAC、缓存策略、回退顺序或数据库／R2 内容。
 - **回归测试：**`tests/r2-media-user-gateway-read.test.mjs` 增加 R2 命中、R2 不可用／缺失后的 Storage 回退、R2 关闭时 Storage 路径及错误响应不带来源头的断言。定向四文件 Node 测试 **28/28 PASS**；涉及两个 JS 文件 ESLint PASS；保留 CRLF 的 `git -c core.whitespace=cr-at-eol diff --check` PASS。
 - **保护边界：**本轮未部署、未切换流量、未修改 Cloudflare 配置／Secret、Supabase 正式库、R2 对象、前端代理开关或 APP。正式 W4 v105、媒体 Worker v3 保持原状；PR #103 仍 Draft。
-- **下一步：**完成状态文档提交并推送本独立候选分支，远端核对 SHA 与文件内容；之后等待批准在正式环境部署诊断版本并重新发起 Owner 双图请求。未完成该真实请求前，不得把历史 HTTP 200／SHA 一致改写为 R2 来源 PASS。
+- **提交与远端核对：**源码／测试提交 `648965add1ae994386807e4d243279ffe4eebf6f`；状态文档提交 `0095e1babde24e4ced91ce07644f336bc8309393`。独立分支已推送，`HEAD` 与 `origin/candidate/lifespace-w4-r2-source-header-20261120-r01` 均为 `0095e1babde24e4ced91ce07644f336bc8309393`；GitHub 远端源码、测试与状态文档已读回核对。
 
 ## 最新专项检查点｜123 R02 媒体源对象字节校验（2026-11-12）
 
