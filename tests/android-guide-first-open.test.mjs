@@ -30,3 +30,14 @@ test("offline basic plant catalog never demands a verified membership to list it
   assert.match(effect, /if \(offline\)/);
   assert.doesNotMatch(effect, /setHasCloudAccess\(true\)/);
 });
+
+test("connected-but-cloud-unreachable notice offers owner-safe recovery rather than auto-upload", () => {
+  const shell = readFileSync("mobile-offline-src/main.tsx", "utf8");
+  assert.match(shell, /data-w5-connected-cloud-check-failed="true"/);
+  assert.match(shell, /serviceConnectivity\.transportStatus === "connected"/);
+  assert.match(shell, /serviceConnectivity\.serviceStatus === "unreachable"/);
+  assert.match(shell, /const nextOnline = await recheckAndroidConnectivity\(\)/);
+  assert.match(shell, /if \(nextOnline\) \{[\s\S]*await revalidateAndroidAuthSession\(\)/);
+  const reconnectBlock = shell.slice(shell.indexOf("async function reconnect()"), shell.indexOf("function openDetail(", shell.indexOf("async function reconnect()")));
+  assert.doesNotMatch(reconnectBlock, /syncAndroidPendingCloudArchive|preparePendingCloudSyncQueue|deleteLocal/);
+});
