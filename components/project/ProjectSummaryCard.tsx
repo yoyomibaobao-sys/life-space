@@ -110,6 +110,23 @@ export default function ProjectSummaryCard(props: Props) {
     </span>
   );
 
+  const visibilityNode = props.visibilityLabel ? (
+    taxonomyAction?.onTogglePublic ? (
+      <button type="button" className={styles.visibility} data-no-card-nav="true"
+        aria-label={taxonomyAction.isPublic ? t.archive_workspace.set_private : t.archive_workspace.set_public}
+        onClick={(event) => { event.preventDefault(); event.stopPropagation(); taxonomyAction.onTogglePublic?.(); }}>
+        {props.visibilityLabel}
+      </button>
+    ) : <span className={styles.visibility}>{props.visibilityLabel}</span>
+  ) : null;
+  const storageNode = props.storageLabel ? <span className={styles.storage}>{props.storageLabel}</span> : null;
+  const actionNode = displayActionSlot ? (
+    <span className={styles.actionSlot} data-no-card-nav="true"
+      onClick={(event) => { event.preventDefault(); event.stopPropagation(); }}>
+      {displayActionSlot}
+    </span>
+  ) : null;
+
   const content = (
     <>
       <span className={styles.media}>
@@ -135,47 +152,33 @@ export default function ProjectSummaryCard(props: Props) {
       </span>
 
       <span className={styles.body}>
-        <span className={styles.titleRow}>
-          <span className={styles.identity}>
+        {props.compactOwnerHeader ? (
+          <span className={styles.compactTitleGrid} data-project-owner-compact-header="true">
             <strong className={styles.title} title={props.title}>{props.title}</strong>
-            {props.visibilityLabel ? (
-              taxonomyAction?.onTogglePublic ? (
-                <button
-                  type="button"
-                  className={styles.visibility}
-                  data-no-card-nav="true"
-                  aria-label={taxonomyAction.isPublic ? t.archive_workspace.set_private : t.archive_workspace.set_public}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    taxonomyAction.onTogglePublic?.();
-                  }}
-                >
-                  {props.visibilityLabel}
-                </button>
-              ) : <span className={styles.visibility}>{props.visibilityLabel}</span>
-            ) : null}
-            {props.storageLabel ? (
-              <span className={styles.storage}>{props.storageLabel}</span>
-            ) : null}
+            {actionNode}
+            <span className={styles.compactVisibilityRow}>
+              {visibilityNode}
+              {storageNode}
+            </span>
+            <span className={styles.compactHelpRow}>
+              {props.helpLabel ? <span className={styles.help}>{props.helpLabel}</span> : null}
+              {props.unread ? <span className={styles.unread} aria-hidden="true" /> : null}
+            </span>
           </span>
-          <span className={styles.titleActions}>
-            {props.helpLabel ? <span className={styles.help}>{props.helpLabel}</span> : null}
-            {props.unread ? <span className={styles.unread} aria-hidden="true" /> : null}
-            {displayActionSlot ? (
-              <span
-                className={styles.actionSlot}
-                data-no-card-nav="true"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-              >
-                {displayActionSlot}
-              </span>
-            ) : null}
+        ) : (
+          <span className={styles.titleRow}>
+            <span className={styles.identity}>
+              <strong className={styles.title} title={props.title}>{props.title}</strong>
+              {visibilityNode}
+              {storageNode}
+            </span>
+            <span className={styles.titleActions}>
+              {props.helpLabel ? <span className={styles.help}>{props.helpLabel}</span> : null}
+              {props.unread ? <span className={styles.unread} aria-hidden="true" /> : null}
+              {actionNode}
+            </span>
           </span>
-        </span>
+        )}
 
         <InlineRecordSummary text={props.latestText} time={props.latestTime} className={styles.update} />
 
