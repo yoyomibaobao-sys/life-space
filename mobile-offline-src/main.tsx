@@ -2299,6 +2299,7 @@ function App() {
         key={archive.id}
         project={cloudProjectView(archive)}
         mobileMode
+        compactOwnerHeader
         mobileShowCategoryBadge={false}
         actionSlot={renderProjectActions(archive, "cloud")}
         onClick={() => {
@@ -2319,6 +2320,7 @@ function App() {
       }}
       onClick={() => openDetail(archive.id)}
       mobileMode
+      compactOwnerHeader
       mobileShowCategoryBadge={false}
       actionSlot={renderProjectActions(archive, "cache")}
     />;
@@ -2332,6 +2334,7 @@ function App() {
       }}
       onClick={() => openDetail(archive.id)}
       mobileMode
+      compactOwnerHeader
       mobileShowCategoryBadge={false}
       actionSlot={renderProjectActions(archive, "local")}
     />;
@@ -2378,7 +2381,7 @@ function App() {
       key={item.key}
       project={{ ...base, href: undefined, visibilityLabel: badge, visibilityTone: "neutral", latestText: counts }}
       onClick={() => { if (sourceFilter === "pending" || item.creating) { setSourceFilter("pending"); setFocusedPendingKey(item.key); } else if (local) openDetail(local.id); else if (item.cloud) setScreen({ kind: "cloud-detail", archiveId: item.cloud.id }); }}
-      mobileMode mobileShowCategoryBadge={false}
+      mobileMode compactOwnerHeader mobileShowCategoryBadge={false}
       actionSlot={authenticatedOwnerContext ? <div className="action-row">
         {online ? <button type="button" className="secondary-button compact-card-action"
           disabled={Boolean(syncingArchiveId)} onClick={() => void uploadPendingProject(item)}>
