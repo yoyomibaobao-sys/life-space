@@ -219,7 +219,9 @@ test("Android cloud login uses the shared Turnstile challenge", () => {
   assert.match(buildScript, /NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
   assert.match(workflow, /vars\.NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
   assert.match(buildScript, /resolveAndroidR2MediaMirrorBuildConfig/);
-  assert.match(workflow, /NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: "true"/);
+  assert.ok(workflow.includes("NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code != '' && inputs.version_name != '' && secrets.ANDROID_KEYSTORE_BASE64 != '' && 'true' || 'false' }}"));
+  assert.ok(workflow.includes("Verify R2 mirror stays disabled for automatic and PR builds"));
+  assert.ok(workflow.includes('test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED}" = "false"'));
   assert.match(workflow, /NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE: production/);
   assert.match(workflow, /NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN: https:\/\/life-space\.uk/);
   assert.match(workflow, /grep -q '\/__internal\/r2\/business-media\/mirror' mobile-shell\/offline\.html/);

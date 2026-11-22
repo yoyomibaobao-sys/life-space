@@ -159,8 +159,8 @@ test("workflow can dispatch single-runtime acceptance without publishing website
     workflow,
     /EXPECTED_SIGNER_SHA256: ccc03e33fed7ce95dd4d203aa3451a08cdc175874e4a6ae159b81c367164635d/,
   );
-  assert.match(read("android/app/build.gradle"), /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc21'/);
-  assert.match(read("android/app/build.gradle"), /ANDROID_VERSION_CODE'\) \?: '28'/);
+  assert.match(read("android/app/build.gradle"), /ANDROID_VERSION_NAME'\) \?: '1\.0\.6'/);
+  assert.match(read("android/app/build.gradle"), /ANDROID_VERSION_CODE'\) \?: '33'/);
 });
 
 test("CloudArchiveDetailController, DeviceOwnedProjectDetail, and MobileProfileView stay shared", () => {

@@ -228,7 +228,7 @@ test("website exposes one download page before and after login", () => {
   assert.match(experience, /<AndroidAppDownloadPrompt \/>/);
 });
 
-test("main-branch signed builds publish and verify the R2 release", () => {
+test("signed release publication requires explicit opt-in and verifies the R2 release", () => {
   const workflow = read(".github/workflows/android-apk.yml");
   const worker = read("cloudflare/worker-entry.mjs");
   const updatePage = read("app/app-update/page.tsx");
@@ -238,6 +238,12 @@ test("main-branch signed builds publish and verify the R2 release", () => {
   assert.match(updatePage, /openAndroidOfficialDownload\(\)/);
   assert.match(updatePage, /OFFICIAL_DOWNLOAD_PAGE = "https:\/\/life-space\.uk\/download\/android"/);
   assert.match(workflow, /Verify permanent release signature/);
+  assert.match(workflow, /publish_release:/);
+  assert.match(workflow, /default: false/);
+  assert.match(workflow, /inputs\.publish_release == true/);
+  assert.match(workflow, /Require a newer signed APK version/);
+  assert.match(workflow, /downloads\/android\/release\.json/);
+  assert.match(workflow, /nextCode <= currentCode/);
   assert.match(workflow, /ccc03e33fed7ce95dd4d203aa3451a08cdc175874e4a6ae159b81c367164635d/);
   assert.match(workflow, /write-android-release-manifest\.mjs/);
   assert.match(workflow, /github\.ref == 'refs\/heads\/main'/);

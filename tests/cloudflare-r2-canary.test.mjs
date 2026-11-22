@@ -171,10 +171,11 @@ test("formal W4 staging workflow uses low-privilege public auth config and uploa
   assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#98'\)/);
   assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#99'\)/);
   assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#100'\)/);
+  assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#103'\)/);
   assert.match(workflow, /contains\(github\.event\.head_commit\.message, '#W4-PROXY'\)/);
   assert.match(workflow, /EXPECTED_RELEASE_SHA: \$\{\{ github\.sha \}\}/);
   assert.match(workflow, /git merge-base --is-ancestor/);
-  assert.match(workflow, /grep -E "#\(96\|97\|98\|99\|100\)\|#W4-PROXY"/);
+  assert.match(workflow, /grep -E "#\(96\|97\|98\|99\|100\|103\)\|#W4-PROXY"/);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
   assert.doesNotMatch(workflow, /statuses:\s*write/);
   assert.match(
@@ -216,8 +217,8 @@ test("formal W4 staging workflow uses low-privilege public auth config and uploa
   assert.match(workflow, /CANDIDATE_VERSION_NOT_DEPLOYED=PASS/);
   assert.match(workflow, /candidate_version_not_found_after_upload/);
   assert.match(workflow, /unexpected_active_deployment_before_stage/);
-  assert.match(workflow, /assert\.equal\(latest\.id, "1ff54ddb-3402-41cb-a447-a8622f1391e4"/);
-  assert.match(workflow, /version_id: "9b8acc22-390e-4d62-a44b-77f39a97de5d"/);
+  assert.match(workflow, /assert\.equal\(latest\.id, "f43c05be-af86-403b-9359-ff9a6f6ec79c"/);
+  assert.match(workflow, /version_id: "d35f531f-6b90-4e4e-9fd7-131f94815bec"/);
   assert.match(workflow, /FORMAL_W4_VERSION_STAGED_NOT_DEPLOYED=PASS/);
   assert.doesNotMatch(workflow, /wrangler deploy|versions deploy|deploy --config dist\/server\/wrangler\.json/);
   assert.doesNotMatch(workflow, /^\s*schedule:/m);

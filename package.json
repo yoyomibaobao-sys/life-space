@@ -19,7 +19,7 @@
     "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json",
     "test:r2-canary": "node scripts/check-cloudflare-r2-canary.mjs",
     "test:w4-formal-config": "node --test tests/w4-formal-wrangler-config.test.mjs",
-    "test:android:acceptance": "node --test tests/*.test.mjs"
+    "test:android:acceptance": "node --test --test-concurrency=1 tests/*.test.mjs"
   },
   "dependencies": {
     "@capacitor/app": "8.1.1",

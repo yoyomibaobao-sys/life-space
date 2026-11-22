@@ -65,6 +65,8 @@ ANDROID_VERSION_NAME
 
 `ANDROID_VERSION_CODE` 每次发布必须递增；`ANDROID_VERSION_NAME` 使用面向用户的版本号，例如 `1.0.1`。
 
+GitHub Actions 正式签名构建必须显式提供 `version_code` 和 `version_name`。工作流会读取当前正式 `/downloads/android/release.json`，拒绝不高于当前版本的 versionCode。默认不发布到正式 R2；只有手动设置 `publish_release=true` 才会写入 APK 和 release manifest。 PR 和自动 push 构建的正式 R2 镜像开关保持关闭；只有手动签名构建且明确提供版本号时才启用正式 R2 镜像。
+
 ```bash
 npm run android:release
 ```

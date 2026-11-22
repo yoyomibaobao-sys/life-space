@@ -9,12 +9,15 @@ on:
         default: https://life-space.uk
       version_code:
         description: Monotonically increasing Android version code
-        required: false
-        default: "28"
+        required: true
       version_name:
         description: User-facing Android version
+        required: true
+      publish_release:
+        description: Explicitly publish the signed APK and manifest to official R2
         required: false
-        default: 1.0.4-rc21
+        type: boolean
+        default: false
       single_runtime_acceptance:
         description: Build a bundled single-runtime APK for device overlay (artifact only, not website)
         required: false
@@ -87,11 +90,11 @@ jobs:
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
       NEXT_PUBLIC_SITE_URL: https://life-space.uk
       NEXT_PUBLIC_AUTH_REDIRECT_ORIGIN: https://life-space.uk
-      NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: "true"
+      NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code != '' && inputs.version_name != '' && secrets.ANDROID_KEYSTORE_BASE64 != '' && 'true' || 'false' }}
       NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN: https://life-space.uk
       NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE: production
-      ANDROID_VERSION_CODE: ${{ inputs.version_code || '28' }}
-      ANDROID_VERSION_NAME: ${{ inputs.version_name || '1.0.4-rc21' }}
+      ANDROID_VERSION_CODE: ${{ inputs.version_code || '' }}
+      ANDROID_VERSION_NAME: ${{ inputs.version_name || '' }}
       ANDROID_SINGLE_RUNTIME: ${{ inputs.single_runtime_acceptance == true && '1' || '' }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -116,6 +119,22 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Require a newer signed APK version
+        if: ${{ github.event_name != 'pull_request' && env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_VERSION_CODE != '' && env.ANDROID_VERSION_NAME != '' }}
+        run: |
+          node --input-type=module <<'NODE'
+          const response = await fetch("https://life-space.uk/downloads/android/release.json", { cache: "no-store" });
+          if (!response.ok) throw new Error(`Unable to read current official Android release manifest: HTTP ${response.status}`);
+          const current = await response.json();
+          const currentCode = Number(current.version_code);
+          const nextCode = Number(process.env.ANDROID_VERSION_CODE);
+          const nextName = String(process.env.ANDROID_VERSION_NAME || "").trim();
+          if (!Number.isSafeInteger(currentCode) || !Number.isSafeInteger(nextCode)) throw new Error("Android versionCode must be a safe integer.");
+          if (nextCode <= currentCode) throw new Error(`Refusing non-increasing Android versionCode ${nextCode}; current official versionCode is ${currentCode}.`);
+          if (!nextName || nextName === current.version_name) throw new Error("Android versionName must be set and differ from the current official release.");
+          console.log(`Android release version accepted: ${nextName} (${nextCode}) > ${current.version_name} (${currentCode}).`);
+          NODE
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -133,10 +152,16 @@ jobs:
         run: npm ci
 
       - name: Verify formal R2 mirror build configuration
+        if: ${{ github.event_name == 'workflow_dispatch' && env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_VERSION_CODE != '' && env.ANDROID_VERSION_NAME != '' }}
         run: |
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED}" = "true"
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_SCOPE}" = "production"
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ORIGIN}" = "https://life-space.uk"
+
+      - name: Verify R2 mirror stays disabled for automatic and PR builds
+        if: ${{ github.event_name != 'workflow_dispatch' || env.ANDROID_KEYSTORE_BASE64 == '' || env.ANDROID_VERSION_CODE == '' || env.ANDROID_VERSION_NAME == '' }}
+        run: |
+          test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED}" = "false"
 
       - name: Sync Capacitor Android project
         run: npm run android:sync
@@ -193,18 +218,18 @@ jobs:
           if-no-files-found: error
 
       - name: Prepare release signing
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        if: env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_VERSION_CODE != '' && env.ANDROID_VERSION_NAME != ''
         run: |
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/youshi-release.jks"
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/youshi-release.jks" >> "$GITHUB_ENV"
 
       - name: Build signed release APK
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        if: env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_VERSION_CODE != '' && env.ANDROID_VERSION_NAME != ''
         working-directory: android
         run: ./gradlew assembleRelease
 
       - name: Verify permanent release signature
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        if: env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_VERSION_CODE != '' && env.ANDROID_VERSION_NAME != ''
         env:
           EXPECTED_SIGNER_SHA256: ccc03e33fed7ce95dd4d203aa3451a08cdc175874e4a6ae159b81c367164635d
         run: |
@@ -213,7 +238,7 @@ jobs:
 
       - name: Prepare signed release metadata
         id: release_metadata
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        if: env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_VERSION_CODE != '' && env.ANDROID_VERSION_NAME != ''
         env:
           ANDROID_RELEASE_APK_PATH: android/app/build/outputs/apk/release/app-release.apk
           ANDROID_RELEASE_MANIFEST_PATH: ${{ runner.temp }}/android-release.json
@@ -221,7 +246,7 @@ jobs:
         run: node scripts/write-android-release-manifest.mjs
 
       - name: Upload signed release APK
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        if: env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_VERSION_CODE != '' && env.ANDROID_VERSION_NAME != ''
         uses: actions/upload-artifact@v4
         with:
           name: youshi-cultivation-android-release
@@ -231,7 +256,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish signed release to website storage
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.ANDROID_KEYSTORE_BASE64 != '' && inputs.single_runtime_acceptance != true
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.ANDROID_KEYSTORE_BASE64 != '' && inputs.single_runtime_acceptance != true && inputs.publish_release == true
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -240,7 +265,7 @@ jobs:
           npx wrangler r2 object put "life-space-media-canary/releases/android/release.json" --file "${{ runner.temp }}/android-release.json" --remote --content-type application/json --cache-control no-store
 
       - name: Verify published release bytes
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.ANDROID_KEYSTORE_BASE64 != '' && inputs.single_runtime_acceptance != true
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.ANDROID_KEYSTORE_BASE64 != '' && inputs.single_runtime_acceptance != true && inputs.publish_release == true
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

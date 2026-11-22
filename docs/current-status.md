@@ -1,5 +1,18 @@
 # LifeSpace 当前开发进程（跨聊天交接）
 
+## 最新总控检查点｜正式 W4 v107 / R2 / APP 发布线（2026-11-22）
+
+- **正式部署实况：**Cloudflare 正式 W4 `life-space-canary` 为 v107，Deployment `f43c05be-af86-403b-9359-ff9a6f6ec79c`，Version `d35f531f-6b90-4e4e-9fd7-131f94815bec`，100% 流量；媒体 Worker `life-space-business-media` 为 v3，Deployment `6b3b793b-07a0-4f3e-88fb-042d87507710`，Version `4efee71b-1463-40be-b0f2-127a420f37a5`，100% 流量。W4 Service Binding 指向媒体 Worker；两端 R2 mode=`isolated`，READ/MIRROR_WRITE 均为 `true`。本轮只读核对，未修改生产配置。
+- **R03 权限验收：**A 米妈原图、缩略图真实 R2 HTTP 200 / `X-LS-Media-Source: r2` PASS；B 新米姐真实同源 Cookie fetch 的原图、缩略图均 404 JSON `image_unavailable`，未返回图片，PASS。实际 v107 bundle 的控制流确认 W4 在 Service Binding 前执行 Owner/Public 检查，失败由 W4 返回 404。既有 Observability 未留存可关联的 B 请求事件，运行时拒绝归属仍 PARTIAL；不重复浏览器测试。
+- **唯一 Release 基线：**GitHub Release 分支 `release/lifespace-r01-r2-client-20261118` 当前合并节点 `065b5c4b4a3509d667753fbf804d4debe1d10af1`（PR #104 已合并）。该节点相对旧统一候选 `6d85989` 前进 85 个提交；新建独立干净 worktree，不使用旧工作树整体合并。
+- **本地发布候选：**独立分支 `candidate/lifespace-r2-config-v107-android-guard-20261122`，基于 `065b5c4`，当前 15 个文件改动：媒体 Worker 候选配置 READ/MIRROR_WRITE 对齐生产真实值 true/true；W4 stage-only workflow 锁定 v107 并允许 #103 候选触发；Android workflow 要求显式 versionCode/versionName、仅手动签名构建开启 R2 镜像、默认不发布到 R2，发布需显式设置 `publish_release=true`；Gradle 默认下一版为 1.0.6 / code 33；同步更新测试与维护文档。未改生产配置。
+- **候选验证：**`npm ci --no-audit --no-fund` PASS；完整 Android acceptance 1,144 项：1,142 PASS / 2 SKIP / 0 FAIL（SKIP 为历史 500MB 迁移及旧 R26 函数签名预像复核，均未冒充 PASS）；定向 62 项：60 PASS / 2 SKIP / 0 FAIL；正式配置 Android offline shell 临时构建 PASS（2,894,090 字节，R2 镜像路由存在、QA 域名与未替换 `process.env` 均不存在）；`git diff --check` PASS。
+- **旧工作树保护：**development `6d85989` 的 52 项未提交内容、旧 R2 Release 工作树 `710be1f` 的 7 项未提交内容全部保留，未 reset、覆盖或清理。`710be1f` 还删除了同源 Session Cookie 桥及 `X-LS-Media-Source` 来源头，会造成 W4/R2 授权与来源审计回归，因此不作为合并基线；只选择性吸收经过核实的差异。
+- **Android 正式版：**ADB 已重新连接并确认设备 HUAWEI HMA-AL00 / Android 10 / API 29；当前正式 APP `1.0.5` / versionCode 32，已从设备 APK 提取并核验签名证书 SHA-256 与永久发布证书一致。下一候选版本为 `1.0.6` / versionCode 33；正式 APK 尚未构建或安装。Android workflow 已要求手动提供递增版本号，正式 R2 镜像仅在手动签名构建时启用，发布到 R2 需单独设置 `publish_release=true`。
+- **发布边界：**本轮未执行 SQL、数据恢复、R2 对象写入、Worker 部署、生产流量切换、APK 构建／分发、Git commit／push／merge；APP 离线同步队列未触碰。数据恢复继续由独立对话处理。
+
+
+
 ## 最新专项检查点｜W4 正式记录图片代理候选（2026-11-20）
 
 - **浏览器实测：**Chrome A 米妈目标记录的原图和缩略图均 HTTP 200，但两条 Request URL 都直接指向 Supabase Storage 的 `/storage/v1/object/sign/media/...`，不是 `life-space.uk/api/media/record-image`；此前双图请求没有经过 W4，也没有触发 R2。

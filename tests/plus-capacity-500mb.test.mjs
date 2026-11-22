@@ -61,12 +61,12 @@ async function webhook(db,id) {
       p.onLoad({filter:/.*/,namespace:"mock"},a=>({contents:mocks[a.path],loader:"js"}));
     }}]});
   const r26Admin={from:()=>({select(){return this;},eq(){return this;},async maybeSingle(){return {data:(await db.query("select * from membership_payments where id=$1",[id])).rows[0],error:null};}})};
-  const module={exports:{}};
-  new Function("module","exports","globalThis","Response","console",bundle.outputFiles[0].text)(module,module.exports,{r26Admin},Response,console);
-  return module.exports.POST;
+  const testModule={exports:{}};
+  new Function("module","exports","globalThis","Response","console",bundle.outputFiles[0].text)(testModule,testModule.exports,{r26Admin},Response,console);
+  return testModule.exports.POST;
 }
 
-test("Historical R26 intermediate 500 MB migration, superseded by the 1 GB forward correction (PGlite only)",async(t)=>{
+test("Historical R26 intermediate 500 MB migration, superseded by the 1 GB forward correction (PGlite only)", { skip: "The 500 MB entitlement is obsolete; current Plus is 1 GB. Preserve this historical test without running it against the current baseline." }, async(t)=>{
   const db=new PGlite();t.after(()=>db.close());
   await db.exec(setup);await db.exec(baseline);
   await db.exec("revoke all on function "+signature+" from public,anon,authenticated;grant execute on function "+signature+" to service_role;");

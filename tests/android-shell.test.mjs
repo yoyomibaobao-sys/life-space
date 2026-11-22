@@ -172,10 +172,12 @@ test("release signing is environment-only and local records are excluded from An
   assert.doesNotMatch(gradle, /storePassword\s+["'][^"']+["']/);
   assert.match(ignore, /\*\.jks/);
   assert.match(ignore, /\*\.keystore/);
-  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '28'/);
-  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc21'/);
-  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '28' \}\}/);
-  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc21' \}\}/);
+  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '33'/);
+  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.6'/);
+  assert.match(workflow, /version_code:\s+description: Monotonically increasing Android version code\s+required: true/);
+  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '' \}\}/);
+  assert.match(workflow, /version_name:\s+description: User-facing Android version\s+required: true/);
+  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '' \}\}/);
   assert.match(manifest, /android:allowBackup="false"/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
   assert.match(manifest, /android:enableOnBackInvokedCallback="true"/);

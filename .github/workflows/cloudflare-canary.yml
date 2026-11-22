@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   stage-formal-w4:
-    if: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '#96') || contains(github.event.head_commit.message, '#97') || contains(github.event.head_commit.message, '#98') || contains(github.event.head_commit.message, '#99') || contains(github.event.head_commit.message, '#100') || contains(github.event.head_commit.message, '#W4-PROXY')) }}
+    if: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '#96') || contains(github.event.head_commit.message, '#97') || contains(github.event.head_commit.message, '#98') || contains(github.event.head_commit.message, '#99') || contains(github.event.head_commit.message, '#100') || contains(github.event.head_commit.message, '#103') || contains(github.event.head_commit.message, '#W4-PROXY')) }}
     name: Build and upload an undeployed formal W4 version
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -69,7 +69,7 @@ jobs:
           test -n "${EXPECTED_RELEASE_SHA}"
           test "$(git rev-parse HEAD)" = "${EXPECTED_RELEASE_SHA}"
           git merge-base --is-ancestor "5084336e86170b1724c52bdd9b685215a5988075" "${GITHUB_SHA}"
-          git log -1 --format=%B | grep -E "#(96|97|98|99|100)|#W4-PROXY" >/dev/null
+          git log -1 --format=%B | grep -E "#(96|97|98|99|100|103)|#W4-PROXY" >/dev/null
           test -n "${NEXT_PUBLIC_TURNSTILE_SITE_KEY}"
           test -n "${CLOUDFLARE_API_TOKEN}"
           test "${NEXT_PUBLIC_R2_MEDIA_MIRROR_ENABLED}" = "true"
@@ -189,9 +189,9 @@ jobs:
           assert.ok(Array.isArray(deployments.deployments) && deployments.deployments.length > 0, "active_deployment_missing");
           assert.ok(Array.isArray(versions.items), "worker_versions_missing");
           const latest = deployments.deployments[0];
-          assert.equal(latest.id, "1ff54ddb-3402-41cb-a447-a8622f1391e4", "unexpected_active_deployment_before_stage");
+          assert.equal(latest.id, "f43c05be-af86-403b-9359-ff9a6f6ec79c", "unexpected_active_deployment_before_stage");
           assert.deepEqual(latest.versions, [{
-            version_id: "9b8acc22-390e-4d62-a44b-77f39a97de5d",
+            version_id: "d35f531f-6b90-4e4e-9fd7-131f94815bec",
             percentage: 100,
           }], "unexpected_active_worker_version_before_stage");
           assert.equal(latest.versions.reduce((sum, item) => sum + item.percentage, 0), 100, "active_traffic_not_100_percent");
