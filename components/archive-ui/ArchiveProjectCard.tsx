@@ -114,6 +114,7 @@ export default function ArchiveProjectCard({
         categoryLabel={project.categoryLabel}
         showCategoryBadge={mobileShowCategoryBadge}
         title={project.title}
+        compactOwnerHeader
         systemName={project.systemName}
         helpLabel={project.helpLabel}
         ended={Boolean(project.ended)}
