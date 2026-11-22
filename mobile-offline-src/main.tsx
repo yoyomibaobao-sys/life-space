@@ -732,7 +732,6 @@ function App() {
     }
   }
   function skipQuickAddPhotos() {
-    // Text-only record creation is the primary path; media is optional.
     setQuickAddDraft({ files: [], capturedAt: [], source: "camera", note: "" });
     setScreen({ kind: "choose-project" });
   }
@@ -3538,14 +3537,6 @@ function App() {
         return <div data-android-shell-page="choose-project">
           <MobilePageHeaderView title={copy.chooseProject} titleText={copy.chooseProject} showBack ariaLabel={copy.back} onBack={() => { setQuickAddDraft(null); goList(); }} />
           <section className="panel choose-project-panel">
-            <div className="action-row" data-android-record-media-optional="true">
-              <button type="button" className="secondary-button" onClick={() => setScreen({ kind: "quick-add" })}>
-                {language === "zh" ? "拍照（可选）" : "Take photo (optional)"}
-              </button>
-              <button type="button" className="secondary-button" onClick={() => void openQuickAddAlbum()}>
-                {language === "zh" ? "从相册添加（可选）" : "Add from album (optional)"}
-              </button>
-            </div>
             {localSpaceClosed ? <p role="status">{copy.localSpaceOff}</p> : chooseSources.length ? (
             <div className={chooseSources.length === 1 ? "choose-project-columns single" : "choose-project-columns"}>
               {chooseSources.includes("cloud") ? <section className="choose-project-column" aria-label={copy.cloud}>
@@ -3620,7 +3611,7 @@ function App() {
                 className="quick-add"
                 aria-label={copy.addRecord}
                 title={copy.addRecord}
-                onClick={skipQuickAddPhotos}
+                onClick={() => setScreen({ kind: "quick-add" })}
               >
                 <UiIcon name="plus" size={25} strokeWidth={2.2} />
               </button>
