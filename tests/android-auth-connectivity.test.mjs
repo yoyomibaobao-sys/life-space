@@ -565,8 +565,8 @@ test("native health probe uses the production endpoint and validates its contrac
   });
   assert.equal(reachable, true);
   assert.equal(requestOptions.url, "https://life-space.uk/api/health");
-  assert.equal(requestOptions.connectTimeout, 2500);
-  assert.equal(requestOptions.readTimeout, 2500);
+  assert.equal(requestOptions.connectTimeout, 7500);
+  assert.equal(requestOptions.readTimeout, 7500);
 });
 
 test("health endpoint is public, side-effect free and non-cacheable", async () => {
