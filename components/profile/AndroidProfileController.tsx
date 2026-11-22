@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import MobileProfileView from "@/components/profile/MobileProfileView";
 import AndroidCloudTrialEntry from "@/components/profile/AndroidCloudTrialEntry";
 import {
@@ -51,7 +51,8 @@ export default function AndroidProfileController({ snapshot, online, signedIn, o
   const [module, setModule] = useState<MobileProfileModule | null>(initialModule || null);
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
-  const [editingProfile, setEditingProfile] = useState<"username" | "location" | null>(null);
+  const [editingProfile, setEditingProfile] = useState<"username" | "country" | "region" | "city" | null>(null);
+  const cancelBlurSaveRef = useRef(false);
   const [name, setName] = useState("");
   const [countryCode, setCountryCode] = useState("");
   const [countryName, setCountryName] = useState("");
@@ -108,8 +109,9 @@ export default function AndroidProfileController({ snapshot, online, signedIn, o
     cityName: profile?.city_name || snapshot.cityName,
     location: profile?.location || snapshot.location,
   };
-  function startEditing(field: "username" | "location") {
+  function startEditing(field: "username" | "country" | "region" | "city") {
     if (!online || !live) return;
+    cancelBlurSaveRef.current = false;
     setName(profile?.username || "");
     setCountryCode(locationParts.countryCode || "");
     setCountryName(locationParts.countryName || "");
@@ -117,29 +119,47 @@ export default function AndroidProfileController({ snapshot, online, signedIn, o
     setCityName(locationParts.cityName || "");
     setEditingProfile(field);
   }
+  function cancelInlineEdit() {
+    cancelBlurSaveRef.current = true;
+    setEditingProfile(null);
+  }
+  function finishInlineEdit(event: React.FocusEvent<HTMLElement>) {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+    if (cancelBlurSaveRef.current) { cancelBlurSaveRef.current = false; return; }
+    void saveProfile();
+  }
+  function fieldKeys(event: React.KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") { event.preventDefault(); cancelInlineEdit(); }
+    else if (event.key === "Enter" && !(event.target instanceof HTMLSelectElement)) { event.currentTarget.blur(); }
+  }
   async function saveProfile() {
-    if (!online || !snapshot.userId || !live || savingProfile) return;
-    const value = name.trim();
-    if (value.length < 2) { setError(t.profile.username_too_short); return; }
-    if (countryCode === "OTHER" && !countryName.trim()) { setError(t.profile.custom_country_required); return; }
-    const editingMode = editingProfile;
+    if (!online || !snapshot.userId || !live || savingProfile || !editingProfile) return;
+    const mode = editingProfile;
+    const nextName = name.trim();
+    if (mode === "username" && nextName.length < 2) { setError(t.profile.username_too_short); return; }
+    if (mode === "country" && countryCode === "OTHER" && !countryName.trim()) { setError(t.profile.custom_country_required); return; }
     setSavingProfile(true);
     setError("");
     try {
       const safeCountry = countryCode === "OTHER" ? countryName.trim() : getCountryName(countryCode, countryName, language);
       const fields = { countryCode, countryName: safeCountry, regionName: regionName.trim(), cityName: cityName.trim() };
-      const result = await supabase.from("profiles").update({
-        username: value, country_code: countryCode || null, country_name: safeCountry || null,
-        region_name: fields.regionName || null, city_name: fields.cityName || null,
-        location: buildLocationTextFromFields(fields, language) || null,
-      }).eq("id", snapshot.userId).select("id").single();
+      // Save the edited field only; independent address levels must not overwrite each other.
+      const patch = mode === "username"
+        ? { username: nextName }
+        : mode === "country"
+          ? { country_code: countryCode || null, country_name: safeCountry || null, location: buildLocationTextFromFields(fields, language) || null }
+          : mode === "region"
+            ? { region_name: fields.regionName || null, location: buildLocationTextFromFields(fields, language) || null }
+            : { city_name: fields.cityName || null, location: buildLocationTextFromFields(fields, language) || null };
+      const result = await supabase.from("profiles").update(patch).eq("id", snapshot.userId).select("id").single();
       if (result.error) throw result.error;
       setLive(await loadAndroidProfileLive(snapshot.userId));
       onProfileSaved?.();
-      setEditingProfile((current) => current === editingMode ? null : current);
+      setEditingProfile((current) => current === mode ? null : current);
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setSavingProfile(false); }
   }
+
   async function uploadAvatar(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file || !online || !snapshot.userId || !live) return;
@@ -246,7 +266,7 @@ export default function AndroidProfileController({ snapshot, online, signedIn, o
             onBlur={() => void saveProfile()}
             onKeyDown={(event) => {
               if (event.key === "Enter") event.currentTarget.blur();
-              if (event.key === "Escape") setEditingProfile(null);
+              if (event.key === "Escape") { event.preventDefault(); cancelInlineEdit(); }
             }}
             style={{ ...profileIdentityInlineControlStyle, width: "100%", maxWidth: "100%", height: 30, minHeight: 30, flex: "none", fontSize: 16, fontWeight: 800 }}
           />
@@ -264,78 +284,59 @@ export default function AndroidProfileController({ snapshot, online, signedIn, o
         <div style={profileIdentityMembershipStyle}>{membershipLine}</div>
       </div>
     </>}
-    identityAfterStats={editingProfile === "location" ? (
-      <div
-        style={profileIdentityLocationRowStyle}
-        onBlur={(event) => {
-          if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
-          void saveProfile();
-        }}
-      >
-        <select
-          aria-label={t.profile.country_region}
-          value={countryCode}
-          autoFocus
-          disabled={savingProfile}
-          onChange={(event) => { setCountryCode(event.target.value); setRegionName(""); }}
-          style={profileIdentityInlineControlStyle}
-        >
-          <option value="">{t.profile.select}</option>
-          {getLocalizedCountryOptions(language).map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
-        </select>
-        {countryCode === "OTHER" ? (
-          <input
-            aria-label={t.profile.custom_country_region}
-            value={countryName}
-            disabled={savingProfile}
-            onChange={(event) => setCountryName(event.target.value)}
-            style={profileIdentityInlineControlStyle}
-          />
-        ) : null}
-        <span>·</span>
-        {hasPresetRegions(countryCode) ? (
-          <select
-            aria-label={t.profile.region}
-            value={regionName}
-            disabled={savingProfile}
-            onChange={(event) => setRegionName(event.target.value)}
-            style={profileIdentityInlineControlStyle}
-          >
-            <option value="">{t.profile.select}</option>
-            {getRegionOptions(countryCode, language).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-          </select>
-        ) : (
-          <input
-            aria-label={t.profile.region}
-            value={regionName}
-            disabled={savingProfile}
-            onChange={(event) => setRegionName(event.target.value)}
-            style={profileIdentityInlineControlStyle}
-          />
-        )}
-        <span>·</span>
-        <input
-          aria-label={t.profile.city}
-          value={cityName}
-          disabled={savingProfile}
-          onChange={(event) => setCityName(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
-          style={profileIdentityInlineControlStyle}
-        />
-      </div>
-    ) : (
-      <div style={profileIdentityLocationRowStyle}>
-        <button
-          type="button"
-          disabled={!online || !live}
-          onClick={() => startEditing("location")}
-          style={{ ...profileIdentityLocationButtonStyle, cursor: online && live ? "text" : "default" }}
-        >
-          {locationDisplay || t.profile.not_assigned}
-        </button>
+    identityAfterStats={(
+      <div style={{ ...profileIdentityLocationRowStyle, flexWrap: "wrap", gap: 4 }} data-android-profile-inline-location="true">
+        <span onBlur={finishInlineEdit} style={{ display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
+          {editingProfile === "country" ? (
+            <>
+              <select aria-label={t.profile.country_region} autoFocus value={countryCode} disabled={savingProfile}
+                onChange={(event) => setCountryCode(event.target.value)}
+                onKeyDown={fieldKeys} style={profileIdentityInlineControlStyle}>
+                <option value="">{t.profile.select}</option>
+                {getLocalizedCountryOptions(language).map((option) => <option key={option.code} value={option.code}>{option.name}</option>)}
+              </select>
+              {countryCode === "OTHER" ? <input aria-label={t.profile.custom_country_region}
+                value={countryName} disabled={savingProfile} onChange={(event) => setCountryName(event.target.value)}
+                onKeyDown={fieldKeys} style={profileIdentityInlineControlStyle} /> : null}
+            </>
+          ) : <button type="button" disabled={!online || !live} onClick={() => startEditing("country")}
+            aria-label={t.profile.country_region} style={{ ...profileIdentityLocationButtonStyle, cursor: online && live ? "text" : "default" }}>
+              {countryDisplay || t.profile.country_region}
+            </button>}
+        </span>
+        <span aria-hidden="true">·</span>
+        <span onBlur={finishInlineEdit} style={{ display: "inline-flex", alignItems: "center" }}>
+          {editingProfile === "region" ? (hasPresetRegions(countryCode) ? (
+            <select aria-label={t.profile.region} autoFocus value={regionName} disabled={savingProfile}
+              onChange={(event) => setRegionName(event.target.value)} onKeyDown={fieldKeys}
+              style={profileIdentityInlineControlStyle}>
+              <option value="">{t.profile.select}</option>
+              {regionName && !getRegionOptions(countryCode, language).some((option) => option.value === regionName)
+                ? <option value={regionName}>{regionName}</option> : null}
+              {getRegionOptions(countryCode, language).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          ) : <input aria-label={t.profile.region} autoFocus value={regionName} disabled={savingProfile}
+              onChange={(event) => setRegionName(event.target.value)} onKeyDown={fieldKeys}
+              style={profileIdentityInlineControlStyle} />) :
+            <button type="button" disabled={!online || !live} onClick={() => startEditing("region")}
+              aria-label={t.profile.region} style={{ ...profileIdentityLocationButtonStyle, cursor: online && live ? "text" : "default" }}>
+              {locationParts.regionName || t.profile.region}
+            </button>}
+        </span>
+        <span aria-hidden="true">·</span>
+        <span onBlur={finishInlineEdit} style={{ display: "inline-flex", alignItems: "center" }}>
+          {editingProfile === "city" ? <input aria-label={t.profile.city} autoFocus value={cityName}
+              disabled={savingProfile} onChange={(event) => setCityName(event.target.value)}
+              onKeyDown={fieldKeys} style={profileIdentityInlineControlStyle} /> :
+            <button type="button" disabled={!online || !live} onClick={() => startEditing("city")}
+              aria-label={t.profile.city} style={{ ...profileIdentityLocationButtonStyle, cursor: online && live ? "text" : "default" }}>
+              {locationParts.cityName || t.profile.city}
+            </button>}
+        </span>
         {!online && snapshot.userId ? <span>{language === "zh" ? "联网后编辑资料" : "Connect to edit your profile"}</span> : null}
       </div>
     )}
+
     error={error ? <p role="alert">{error}</p> : null}
     preferencesExtra={onLocalSpaceVisibilityChange ? (
       <div style={localSpacePreferenceRowStyle}>
