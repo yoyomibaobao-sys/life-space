@@ -3,7 +3,7 @@
     position: sticky;
     top: calc(50px + var(--app-safe-area-top, 0px));
     z-index: 85;
-    padding: 5px 0;
+    padding: 3px 0;
     background: #f7faf5;
   }
 }
@@ -46,5 +46,6 @@
 }
 
 @media (max-width: 759px) {
+  .tabs { padding: 3px 0; margin-bottom: 6px; }
   .tabs button { font-size: 14px; }
 }
