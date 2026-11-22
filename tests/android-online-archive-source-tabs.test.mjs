@@ -62,7 +62,7 @@ test("remote Android temporary-space copy, status, and actions use bilingual tra
   const zh = fs.readFileSync(new URL("../lib/i18n/zh.ts", import.meta.url), "utf8");
   const keys = [
     "temporary_space", "pending_retry", "pending_create_cloud_project", "pending_upload",
-    "pending_upload_action", "pending_retry_action", "pending_cancel_action", "pending_view_edit",
+    "pending_upload_action", "pending_retry_action", "pending_cancel_action", "pending_view",
     "pending_login_required", "pending_loading", "pending_empty", "pending_account_changed",
     "pending_cancel_account_changed", "pending_cancel_blocked", "pending_cancel_create_confirm",
     "pending_cancel_edit_confirm", "pending_cancel_failed", "pending_cancel_safety_hint",
@@ -73,4 +73,6 @@ test("remote Android temporary-space copy, status, and actions use bilingual tra
     assert.ok(zh.includes(key + ": \""), key + " has a Chinese translation");
   }
   assert.doesNotMatch(page, /待重试|待创建云项目|取消待上传|临时空间|查看／编辑|请登录后查看待上传内容|正在读取待上传内容/);
+  assert.doesNotMatch(page, /t\.archive_workspace\.pending_view_edit/);
+  assert.match(page, /data-w5-pending-only-detail="true"/);
 });
