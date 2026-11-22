@@ -48,6 +48,21 @@ export default function AndroidPendingRecordReview({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [imageUrls, setImageUrls] = useState<Map<string, string>>(() => new Map());
+
+  useEffect(() => {
+    const urls = new Map<string, string>();
+    for (const record of detail?.records || []) {
+      if (!pendingRecord(record)) continue;
+      for (const image of record.images) {
+        if (isPendingCloudSyncStatus(image.sync.status) && image.blob instanceof Blob) {
+          urls.set(image.id, URL.createObjectURL(image.blob));
+        }
+      }
+    }
+    setImageUrls(urls);
+    return () => { for (const url of urls.values()) URL.revokeObjectURL(url); };
+  }, [detail]);
 
   useEffect(() => {
     if (!expanded || !owner.userId) return;
@@ -137,6 +152,15 @@ export default function AndroidPendingRecordReview({
                 {record.note || (language === "zh" ? "（仅照片记录）" : "(Photo-only record)")}
               </p>
               <p>{language === "zh" ? "记录时间：" : "Record time: "}{record.record_time}</p>
+              {outstandingPhotos > 0 ? <div data-w5-pending-photo-preview="true"
+                style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {record.images.filter((image) => isPendingCloudSyncStatus(image.sync.status)).map((image) => (
+                  imageUrls.has(image.id) ? <img key={image.id} src={imageUrls.get(image.id)!}
+                    alt={language === "zh" ? "待上传照片" : "Pending photo"}
+                    style={{ maxWidth: 120, maxHeight: 120, objectFit: "contain" }} />
+                    : <span key={image.id}>{language === "zh" ? "照片暂不可预览" : "Photo preview unavailable"}</span>
+                ))}
+              </div> : null}
               {onUploadRecord ? (
                 <button type="button" disabled={Boolean(busyId)} onClick={() => void upload(record)}>
                   {language === "zh" ? "上传" : "Upload"}
