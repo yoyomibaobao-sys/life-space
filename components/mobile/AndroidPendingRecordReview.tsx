@@ -32,15 +32,17 @@ function safelyCancelable(record: LocalRecordWithImages) {
 }
 
 export default function AndroidPendingRecordReview({
-  archiveId, owner, language, onChanged, defaultExpanded = false,
+  archiveId, owner, language, onChanged, defaultExpanded = false, focused = false, onUploadRecord,
 }: {
   archiveId: string;
   owner: LocalArchiveOwnerContext;
   language: "zh" | "en";
   onChanged?: () => void | Promise<void>;
   defaultExpanded?: boolean;
+  focused?: boolean;
+  onUploadRecord?: (recordId: string) => Promise<void>;
 }) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [expanded, setExpanded] = useState(defaultExpanded || focused);
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -63,6 +65,20 @@ export default function AndroidPendingRecordReview({
   }, [expanded, archiveId, owner.userId]);
 
   const pending = (detail?.records || []).filter(pendingRecord);
+  async function upload(record: LocalRecordWithImages) {
+    if (!onUploadRecord || busyId) return;
+    setBusyId(record.id);
+    setError("");
+    try {
+      await onUploadRecord(record.id);
+      const next = await getLocalArchiveDetail(archiveId, owner);
+      setDetail(next?.archive.local_owner_user_id === owner.userId ? next : null);
+      await onChanged?.();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "无法核实上传结果，本机记录已保留。");
+    } finally { setBusyId(null); }
+  }
+
   async function cancel(record: LocalRecordWithImages) {
     if (!owner.userId || busyId || !safelyCancelable(record)) return;
     if (!window.confirm(language === "zh"
@@ -90,12 +106,12 @@ export default function AndroidPendingRecordReview({
   }
 
   return <section data-w5-pending-record-review="true">
-    <button type="button" aria-expanded={expanded}
+    {!focused ? <button type="button" aria-expanded={expanded}
       onClick={() => { setExpanded((open) => !open); setSelectedId(null); }}>
       {language === "zh"
         ? (expanded ? "收起待上传记录" : "查看待上传记录（仅显示未完成同步的内容）")
         : (expanded ? "Hide pending records" : "View pending records only")}
-    </button>
+    </button> : null}
     {expanded ? (
       <div style={{ padding: "8px 0" }}>
         {loading ? <p role="status">{language === "zh" ? "正在核对待上传记录…" : "Checking pending records..."}</p> : null}
@@ -121,10 +137,15 @@ export default function AndroidPendingRecordReview({
                 {record.note || (language === "zh" ? "（仅照片记录）" : "(Photo-only record)")}
               </p>
               <p>{language === "zh" ? "记录时间：" : "Record time: "}{record.record_time}</p>
+              {onUploadRecord ? (
+                <button type="button" disabled={Boolean(busyId)} onClick={() => void upload(record)}>
+                  {language === "zh" ? "上传" : "Upload"}
+                </button>
+              ) : null}
               {safelyCancelable(record) ? (
                 <button type="button" disabled={Boolean(busyId)}
                   onClick={() => void cancel(record)}>
-                  {language === "zh" ? "删除这条从未上传的记录" : "Cancel never-uploaded record"}
+                  {language === "zh" ? "删除" : "Delete"}
                 </button>
               ) : (
                 <p role="status">{language === "zh"
