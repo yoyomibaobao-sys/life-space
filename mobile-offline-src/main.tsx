@@ -2377,7 +2377,7 @@ function App() {
           title={!item.creating ? (language === "zh" ? "远端或修改状态未知，不能安全取消" : "Cannot safely cancel remote edits") : undefined}
           onClick={() => void cancelPendingCreatedProject(item)}>{language === "zh" ? "取消待上传" : "Cancel pending"}</button>
       </div> : null}
-    />)}
+    />}
     </div>;
   }
   function renderProjectActions(archive: CloudArchiveSummary | LocalArchiveSummary, source: "cloud" | "local" | "cache") {
