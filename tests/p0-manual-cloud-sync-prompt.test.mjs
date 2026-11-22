@@ -29,11 +29,12 @@ test("F02: initial mount, reconnect and auth scan only prepare and list pending;
   } } };
   const source = js("const scan = " + scanExpression + ";")
     .replace('import("@/lib/supabase")', "fakeImport()");
-  const factory = new Function("useCallback", "scanningRef", "navigator", "fakeImport",
+  const factory = new Function("useCallback", "scanningRef", "navigator", "Capacitor", "fakeImport",
     "setOwnerContext", "setSummary", "setError", "setProgress",
     "preparePendingCloudSyncQueue", "listPendingCloudSyncSummaries", "selectPendingCloudSyncPrompt", source + "\nreturn scan;");
   const scanningRef = { current: false };
   const scan = factory((f) => f, scanningRef, { onLine: true },
+    { isNativePlatform: () => false },
     async () => ({ supabase: mockSupabase }),
     () => calls.push("owner"), () => calls.push("summary"),
     () => calls.push("error"), () => calls.push("progress"),
