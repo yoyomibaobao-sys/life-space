@@ -897,6 +897,7 @@ function App() {
   const [archives, setArchives] = useState<LocalArchiveSummary[]>([]);
   const [cloudCaches, setCloudCaches] = useState<LocalArchiveSummary[]>([]);
   const [sourceFilter, setSourceFilter] = useState<ShellSourceFilter>("all");
+  const [focusedPendingKey, setFocusedPendingKey] = useState<string | null>(null);
   const [unownedCount, setUnownedCount] = useState(0);
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [cloudPendingDetail, setCloudPendingDetail] = useState<LocalArchiveDetail | null>(null);
@@ -2349,10 +2350,22 @@ function App() {
     const counts = language === "zh"
       ? `${item.recordCount} 条记录 · ${item.imageCount} 张照片待上传`
       : `${item.recordCount} records · ${item.imageCount} photos to upload`;
-    return <div key={item.key}><ArchiveProjectCard
+    const focused = sourceFilter === "pending" && focusedPendingKey === item.key;
+    return <div key={item.key}>{focused ? (
+      <section data-android-pending-only-detail="true" className="panel">
+        <button type="button" onClick={() => setFocusedPendingKey(null)}>{language === "zh" ? "返回临时空间" : "Back to temporary space"}</button>
+        <h2>{base.title}</h2>
+        {readOwnerContext ? item.summaries.map((row) => (
+          <AndroidPendingRecordReview key={row.local_archive_id} archiveId={row.local_archive_id}
+            owner={readOwnerContext} language={language} focused
+            onChanged={() => loadList(readOwnerContext)}
+            onUploadRecord={online && authenticatedOwnerContext ? (recordId) => uploadPendingRecord(recordId, row.local_archive_id) : undefined} />
+        )) : null}
+      </section>
+    ) : <ArchiveProjectCard
       key={item.key}
       project={{ ...base, href: undefined, visibilityLabel: badge, visibilityTone: "neutral", latestText: counts }}
-      onClick={() => local ? openDetail(local.id) : item.cloud && setScreen({ kind: "cloud-detail", archiveId: item.cloud.id })}
+      onClick={() => sourceFilter === "pending" ? setFocusedPendingKey(item.key) : local ? openDetail(local.id) : item.cloud && setScreen({ kind: "cloud-detail", archiveId: item.cloud.id })}
       mobileMode mobileShowCategoryBadge={false}
       actionSlot={authenticatedOwnerContext ? <div className="action-row">
         {online ? <button type="button" className="secondary-button compact-card-action"
@@ -2364,12 +2377,7 @@ function App() {
           title={!item.creating ? (language === "zh" ? "远端或修改状态未知，不能安全取消" : "Cannot safely cancel remote edits") : undefined}
           onClick={() => void cancelPendingCreatedProject(item)}>{language === "zh" ? "取消待上传" : "Cancel pending"}</button>
       </div> : null}
-    />
-      {readOwnerContext ? item.summaries.filter((row) => row.record_count > 0 || row.image_count > 0).map((row) => (
-        <AndroidPendingRecordReview key={row.local_archive_id} archiveId={row.local_archive_id}
-          owner={readOwnerContext} language={language} defaultExpanded={sourceFilter === "pending"}
-          onChanged={() => loadList(readOwnerContext)} />
-      )) : null}
+    />)}
     </div>;
   }
   function renderProjectActions(archive: CloudArchiveSummary | LocalArchiveSummary, source: "cloud" | "local" | "cache") {
@@ -2656,6 +2664,7 @@ function App() {
           packVisibleSources
           onSelectSource={(source) => {
             setSourceFilter(source);
+            setFocusedPendingKey(null);
             setSubcategoryFilter(null);
             setGroupFilter(null);
             setScreen({ kind: "list" });
@@ -2762,7 +2771,7 @@ function App() {
                   </button>
                 </div>
               ) : null}
-              <div className="project-list">{filteredPending.map(renderPendingProjectCard)}</div>
+              <div className="project-list">{filteredPending.filter((item) => !focusedPendingKey || item.key === focusedPendingKey).map(renderPendingProjectCard)}</div>
             </section>
           ) : null}
           {sourceFilter === "cloud" && !offlineOwnerRead && auth.status !== "checking" && (auth.status !== "signed-in" || !canCreateMembershipContent(membership)) ? renderCloudAccessOptions() : null}
