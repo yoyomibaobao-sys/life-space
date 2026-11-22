@@ -2365,7 +2365,7 @@ function App() {
     ) : <ArchiveProjectCard
       key={item.key}
       project={{ ...base, href: undefined, visibilityLabel: badge, visibilityTone: "neutral", latestText: counts }}
-      onClick={() => sourceFilter === "pending" ? setFocusedPendingKey(item.key) : local ? openDetail(local.id) : item.cloud && setScreen({ kind: "cloud-detail", archiveId: item.cloud.id })}
+      onClick={() => { if (sourceFilter === "pending" || item.creating) { setSourceFilter("pending"); setFocusedPendingKey(item.key); } else if (local) openDetail(local.id); else if (item.cloud) setScreen({ kind: "cloud-detail", archiveId: item.cloud.id }); }}
       mobileMode mobileShowCategoryBadge={false}
       actionSlot={authenticatedOwnerContext ? <div className="action-row">
         {online ? <button type="button" className="secondary-button compact-card-action"
