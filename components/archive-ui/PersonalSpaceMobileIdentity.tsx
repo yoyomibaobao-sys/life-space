@@ -154,11 +154,11 @@ const identityStyle: CSSProperties = {
   alignItems: "center",
   justifyContent: "space-between",
   gap: 8,
-  marginBottom: 8,
+  marginBottom: 5,
   marginTop: 0,
   marginLeft: 0,
   marginRight: 0,
-  padding: "7px 2px",
+  padding: "5px 2px",
   borderBottom: "1px solid #edf1ea",
   background: "transparent",
 };
