@@ -470,6 +470,9 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
 
     if (offline) {
       setIsSignedIn(offlineSignedIn);
+      // An offline view may keep the public basics but never inherit
+      // an earlier online membership entitlement after connectivity changes.
+      setHasCloudAccess(false);
       return;
     }
     let cancelled = false;
