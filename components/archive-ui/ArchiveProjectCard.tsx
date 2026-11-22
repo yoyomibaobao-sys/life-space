@@ -17,6 +17,7 @@ type Props = {
   actionSlot?: ReactNode;
   actionRailSlot?: ReactNode;
   mobileMode?: boolean;
+  compactOwnerHeader?: boolean;
   mobileClassificationSlot?: ReactNode;
   mobileShowCategoryBadge?: boolean;
   onEditTitle?: (project: ArchiveProjectView) => void;
@@ -32,6 +33,7 @@ export default function ArchiveProjectCard({
   actionSlot,
   actionRailSlot,
   mobileMode = true,
+  compactOwnerHeader = false,
   mobileClassificationSlot,
   mobileShowCategoryBadge = true,
   onEditTitle,
@@ -114,7 +116,7 @@ export default function ArchiveProjectCard({
         categoryLabel={project.categoryLabel}
         showCategoryBadge={mobileShowCategoryBadge}
         title={project.title}
-        compactOwnerHeader
+        compactOwnerHeader={compactOwnerHeader}
         systemName={project.systemName}
         helpLabel={project.helpLabel}
         ended={Boolean(project.ended)}
