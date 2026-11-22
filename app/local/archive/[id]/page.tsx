@@ -147,7 +147,6 @@ export default function LocalArchiveDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const quickCaptureId = searchParams.get("quickCapture") || "";
-  const textOnlyRequested = searchParams.get("textOnly") === "1";
   const transferRequested = searchParams.get("transfer") === "1";
   const syncRequested = searchParams.get("sync") === "1";
 
@@ -166,7 +165,6 @@ export default function LocalArchiveDetailPage() {
   const [selectedCycleId, setSelectedCycleId] = useState<string | undefined>(undefined);
   const [endSelectedCycleAfterSave, setEndSelectedCycleAfterSave] = useState(false);
   const [addRecordOpen, setAddRecordOpen] = useState(false);
-  const textOnlyAutoOpenedRef = useRef(false);
   const [recordToDelete, setRecordToDelete] = useState<LocalRecordWithImages | null>(null);
   const [localRecordItems, setLocalRecordItems] = useState<RecordItem[]>([]);
   const [localLightboxImages, setLocalLightboxImages] = useState<LightboxImage[]>([]);
@@ -327,12 +325,6 @@ export default function LocalArchiveDetailPage() {
       cancelled = true;
     };
   }, [quickCaptureId]);
-
-  useEffect(() => {
-    if (!textOnlyRequested || textOnlyAutoOpenedRef.current) return;
-    textOnlyAutoOpenedRef.current = true;
-    setAddRecordOpen(true);
-  }, [textOnlyRequested]);
 
   useEffect(() => {
     function updateViewportMode() {
