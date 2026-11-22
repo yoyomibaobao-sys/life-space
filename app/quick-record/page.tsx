@@ -297,13 +297,7 @@ function QuickRecordContent() {
                 href={`/archive/new?quickCapture=${encodeURIComponent(capture.id)}`}
                 style={secondaryLinkStyle}
               >
-                {t.quick_record.create_cloud_project}
-              </Link>
-              <Link
-                href={`/local/archive/new?quickCapture=${encodeURIComponent(capture.id)}`}
-                style={secondaryLinkStyle}
-              >
-                {t.quick_record.create_local_project}
+                {t.archive.new_project}
               </Link>
             </div>
           </>
@@ -314,13 +308,7 @@ function QuickRecordContent() {
               href={`/archive/new?quickCapture=${capture.id}`}
               style={primaryLinkStyle}
             >
-              {t.quick_record.create_cloud_project}
-            </Link>
-            <Link
-              href={`/local/archive/new?quickCapture=${capture.id}`}
-              style={secondaryLinkStyle}
-            >
-              {t.quick_record.create_local_project}
+              {t.archive.new_project}
             </Link>
           </div>
         )}
@@ -398,7 +386,7 @@ const primaryButtonStyle: CSSProperties = {
 const emptyStyle: CSSProperties = { display: "grid", gap: 10 };
 const newProjectActionsStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gridTemplateColumns: "minmax(0, 1fr)",
   gap: 8,
   marginTop: 9,
 };
