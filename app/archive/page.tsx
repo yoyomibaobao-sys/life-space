@@ -340,15 +340,13 @@ export default function ArchivePage() {
       setLocalCategoryDepths(getLocalArchiveCategoryDepths(user.id));
       setVerifiedOwnerId(user.id);
 
-      try {
-        const depths = await getCloudArchiveCategoryDepths(user.id);
-        if (!stillCurrent(user.id)) return;
-        setCloudCategoryDepths(depths);
-      } catch (settingsError) {
-        if (!stillCurrent(user.id)) return;
-        console.error("load archive category settings error:", settingsError);
-        setCloudCategoryDepths({ ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS });
-      }
+      // Category depth is independent of the archive/species queries. Start it
+      // concurrently so My Space does not pay one extra network round-trip
+      // before it can start loading projects; keep identity checks unchanged.
+      const cloudDepthsPromise = getCloudArchiveCategoryDepths(user.id).then(
+        (depths) => ({ depths, error: null as unknown }),
+        (error: unknown) => ({ depths: { ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS }, error }),
+      );
 
       const [
         archivesResult,
@@ -387,6 +385,10 @@ export default function ArchivePage() {
       ]);
 
       if (!stillCurrent(user.id)) return;
+      const cloudDepthsResult = await cloudDepthsPromise;
+      if (!stillCurrent(user.id)) return;
+      if (cloudDepthsResult.error) console.error("load archive category settings error:", cloudDepthsResult.error);
+      setCloudCategoryDepths(cloudDepthsResult.depths);
       const archivesData = archivesResult.error ? null : archivesResult.data;
       if (archivesResult.error) {
         console.error("load archives error:", archivesResult.error);
