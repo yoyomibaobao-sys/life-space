@@ -52,7 +52,7 @@ export default function ArchiveSourceSwitcher<T extends string>({
     : trailingSlot;
 
   return (
-    <section style={sourceSwitchStyle(Boolean(trailingSlot))}>
+    <section style={sourceSwitchStyle(Boolean(trailingSlot), packVisibleSources)}>
       {options.map((item, index) => (
         <button
           key={item.value}
@@ -72,9 +72,9 @@ export default function ArchiveSourceSwitcher<T extends string>({
   );
 }
 
-function sourceSwitchStyle(singleLine: boolean): CSSProperties {
+function sourceSwitchStyle(singleLine: boolean, packedMobile = false): CSSProperties {
   return {
-    margin: "0 0 12px",
+    margin: packedMobile ? "0 0 7px" : "0 0 12px",
     display: singleLine ? "grid" : "flex",
     gridTemplateColumns: singleLine
       ? "repeat(3, minmax(0, 1fr)) auto"
