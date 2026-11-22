@@ -62,7 +62,7 @@ test("remote Android temporary-space copy, status, and actions use bilingual tra
   const zh = fs.readFileSync(new URL("../lib/i18n/zh.ts", import.meta.url), "utf8");
   const keys = [
     "temporary_space", "pending_retry", "pending_create_cloud_project", "pending_upload",
-    "pending_upload_action", "pending_retry_action", "pending_cancel_action", "pending_view",
+    "pending_upload_action", "pending_retry_action", "pending_cancel_action", "pending_view", "pending_back",
     "pending_login_required", "pending_loading", "pending_empty", "pending_account_changed",
     "pending_cancel_account_changed", "pending_cancel_blocked", "pending_cancel_create_confirm",
     "pending_cancel_edit_confirm", "pending_cancel_failed", "pending_cancel_safety_hint",
