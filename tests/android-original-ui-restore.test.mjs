@@ -16,7 +16,7 @@ test("user information edits country, province and city independently in the sam
     assert.match(android, new RegExp('startEditing\\("' + field + '"\\)'));
     assert.match(web, new RegExp('beginMobileInlineEdit\\("' + field + '"\\)'));
   }
-  assert.doesNotMatch(android, /setRegionName\("+"?"?\);/);
+  assert.doesNotMatch(android, /setRegionName\(""/);
   assert.match(android, /mode === "country"[\s\S]*country_code/);
   assert.match(android, /mode === "region"[\s\S]*region_name/);
   assert.match(web, /field === "country"[\s\S]*country_code/);
