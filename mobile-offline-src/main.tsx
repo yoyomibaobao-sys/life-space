@@ -3201,7 +3201,7 @@ function App() {
             setScreen({ kind: "activity" });
           }}
         />
-        <section className={`${filterStyles.row} ${filterStyles.experience}`} lang={language} aria-label={language === "en" ? "Category" : "分类"}>
+        <section className={`${filterStyles.row} ${filterStyles.experience} ${filterStyles.sticky}`} lang={language} aria-label={language === "en" ? "Category" : "分类"}>
           <button
             type="button"
             onClick={() => setExperienceCategoryFilter("all")}
