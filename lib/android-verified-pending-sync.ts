@@ -1,4 +1,4 @@
-import { isAndroidOnline } from "@/lib/android-connectivity";
+import { getAndroidConnectivitySnapshot, isAndroidOnline, recheckAndroidConnectivity } from "@/lib/android-connectivity";
 import {
   getLocalArchiveDetail,
   isPendingCloudCreateArchive,
@@ -30,8 +30,13 @@ function failure(message: string): PendingCloudSyncResult {
 
 async function confirmVerifiedOwner(context: LocalArchiveOwnerContext) {
   const owner = context.userId?.trim();
-  if (!owner || !isAndroidOnline()) {
-    throw Error("当前身份或网络尚未确认，待上传资料保持不变。");
+  if (!owner) throw Error("当前身份未确认，待上传资料保持不变。");
+  // A stale/short health probe must not permanently block an explicit user retry.
+  // Still require the service to become reachable before any queue mutation.
+  if (!isAndroidOnline() && !(await recheckAndroidConnectivity())) {
+    throw Error(getAndroidConnectivitySnapshot().transportStatus === "connected"
+      ? "手机已联网，但云端服务检查失败；待上传资料保持不变。"
+      : "当前手机未联网，待上传资料保持不变。");
   }
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError || !sessionData.session ||
