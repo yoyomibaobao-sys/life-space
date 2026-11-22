@@ -9,7 +9,11 @@ test("My Space owner cards have a single-line ellipsis title with privacy and he
   const css = read("components/project/ProjectSummaryCard.module.css");
   const wrapper = read("components/archive-ui/ArchiveProjectCard.tsx");
 
-  assert.match(wrapper, /<ProjectSummaryCard[\s\S]*compactOwnerHeader/);
+  assert.match(wrapper, /<ProjectSummaryCard[\s\S]*compactOwnerHeader=\{compactOwnerHeader\}/);
+  assert.match(wrapper, /compactOwnerHeader = false/);
+  assert.match(read("components/archive/ArchiveCard.tsx"), /<ArchiveProjectCard[\s\S]*compactOwnerHeader/);
+  assert.match(read("mobile-offline-src/main.tsx"), /mobileMode compactOwnerHeader/);
+  assert.doesNotMatch(read("components/user-space/UserSpaceArchiveList.tsx"), /compactOwnerHeader/);
   assert.match(component, /data-compact-owner-header=\{props\.compactOwnerHeader \? "true" : undefined\}/);
   const start = component.indexOf("props.compactOwnerHeader ? (");
   const end = component.indexOf(") : (", start);
