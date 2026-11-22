@@ -1563,7 +1563,7 @@ export default function ArchivePage() {
   function renderW5PendingItem(item: PendingCloudProject<LocalArchiveSummary, ArchiveItem>) {
     if (activeSource === "pending" && w5FocusedPendingKey === item.key && currentOwnerContext) {
       return <section key={item.key} data-w5-pending-only-detail="true">
-        <button type="button" onClick={() => setW5FocusedPendingKey(null)}>{language === "zh" ? "返回临时空间" : "Back to temporary space"}</button>
+        <button type="button" onClick={() => setW5FocusedPendingKey(null)}>{t.archive_workspace.pending_back}</button>
         <h2>{item.local?.title || item.cache?.title || item.cloud?.title || item.summaries[0]?.title}</h2>
         {item.summaries.map((row) => <AndroidPendingRecordReview key={row.local_archive_id}
           archiveId={row.local_archive_id} owner={currentOwnerContext} language={language} focused
