@@ -56,7 +56,6 @@ function QuickRecordContent() {
   const searchParams = useSearchParams();
   const { language, t } = useLanguage();
   const captureId = searchParams.get("capture") || "";
-  const textOnly = searchParams.get("textOnly") === "1";
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const [capture, setCapture] = useState<QuickCapture | null>(null);
@@ -73,13 +72,13 @@ function QuickRecordContent() {
 
     async function load() {
       const pending = captureId ? await getQuickCapture(captureId) : null;
-      if ((!pending && !textOnly) || cancelled) {
+      if (!pending || cancelled) {
         setCaptureLoading(false);
         setProjectsLoading(false);
         return;
       }
 
-      if (pending) setCapture(pending);
+      setCapture(pending);
       setCaptureLoading(false);
 
       const {
@@ -104,7 +103,7 @@ function QuickRecordContent() {
       if (cancelled) return;
       if (!user && localResult.archives.length === 0) {
         router.replace(
-          buildLoginHref(textOnly ? "/quick-record?textOnly=1" : `/quick-record?capture=${encodeURIComponent(captureId)}`)
+          buildLoginHref(`/quick-record?capture=${encodeURIComponent(captureId)}`)
         );
         return;
       }
@@ -117,7 +116,7 @@ function QuickRecordContent() {
     return () => {
       cancelled = true;
     };
-  }, [captureId, router, textOnly]);
+  }, [captureId, router]);
 
   useEffect(() => {
     if (!capture) {
@@ -182,20 +181,18 @@ function QuickRecordContent() {
   }
 
   function continueToRecord() {
-    if ((!capture && !textOnly) || !effectiveSelectedKey) return;
+    if (!capture || !effectiveSelectedKey) return;
     const selected = choices.find((choice) => choice.key === effectiveSelectedKey);
     if (!selected) return;
     const base = selected.type === "cloud" ? "/archive" : "/local/archive";
-    router.push(textOnly
-      ? `${base}/${selected.id}${selected.type === "local" ? "?textOnly=1" : ""}#add-record`
-      : `${base}/${selected.id}?quickCapture=${capture!.id}#add-record`);
+    router.push(`${base}/${selected.id}?quickCapture=${capture.id}#add-record`);
   }
 
   if (captureLoading) {
     return <main style={pageStyle}>{t.quick_record.processing_photo}</main>;
   }
 
-  if (!capture && !textOnly) {
+  if (!capture) {
     return (
       <main style={pageStyle}>
         <section style={panelStyle}>
@@ -215,7 +212,7 @@ function QuickRecordContent() {
         <div style={headingStyle}>
           <div>
             <div style={eyebrowStyle}>{t.quick_record.eyebrow}</div>
-            <h1 style={titleStyle}>{textOnly ? (language === "zh" ? "选择项目，直接写文字记录" : "Choose a project for a text record") : t.quick_record.title}</h1>
+            <h1 style={titleStyle}>{t.quick_record.title}</h1>
           </div>
           <div style={photoCountStyle}>
             {language === "en"
@@ -237,7 +234,7 @@ function QuickRecordContent() {
           </div>
         ) : null}
 
-        {!textOnly ? <div style={photoActionsStyle}>
+        <div style={photoActionsStyle}>
           <button
             type="button"
             onClick={() => cameraInputRef.current?.click()}
@@ -254,7 +251,7 @@ function QuickRecordContent() {
           >
             {t.quick_record.add_from_album}
           </button>
-        </div> : null}
+        </div>
         <input
           ref={cameraInputRef}
           type="file"
@@ -297,13 +294,13 @@ function QuickRecordContent() {
             </button>
             <div style={newProjectActionsStyle}>
               <Link
-                href={textOnly ? "/archive/new" : `/archive/new?quickCapture=${encodeURIComponent(capture!.id)}`}
+                href={`/archive/new?quickCapture=${encodeURIComponent(capture.id)}`}
                 style={secondaryLinkStyle}
               >
                 {t.quick_record.create_cloud_project}
               </Link>
               <Link
-                href={textOnly ? "/local/archive/new" : `/local/archive/new?quickCapture=${encodeURIComponent(capture!.id)}`}
+                href={`/local/archive/new?quickCapture=${encodeURIComponent(capture.id)}`}
                 style={secondaryLinkStyle}
               >
                 {t.quick_record.create_local_project}
@@ -314,13 +311,13 @@ function QuickRecordContent() {
           <div style={emptyStyle}>
             <p style={mutedStyle}>{t.quick_record.no_project}</p>
             <Link
-              href={textOnly ? "/archive/new" : `/archive/new?quickCapture=${capture!.id}`}
+              href={`/archive/new?quickCapture=${capture.id}`}
               style={primaryLinkStyle}
             >
               {t.quick_record.create_cloud_project}
             </Link>
             <Link
-              href={textOnly ? "/local/archive/new" : `/local/archive/new?quickCapture=${capture!.id}`}
+              href={`/local/archive/new?quickCapture=${capture.id}`}
               style={secondaryLinkStyle}
             >
               {t.quick_record.create_local_project}
