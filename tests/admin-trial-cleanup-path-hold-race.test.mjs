@@ -174,7 +174,7 @@ function schemaSql() {
   `;
 }
 
-test("two PostgreSQL sessions and isolated Storage serialize authorize against a concurrent writer, and a version-blind delete stays closed", async () => {
+test("two PostgreSQL sessions and isolated Storage serialize authorize against a concurrent writer, and a version-blind delete stays closed", { skip: process.env.CI === "true" ? "Requires the Docker-backed PostgreSQL race harness; run this integration test locally." : false }, async () => {
   let container = null;
   let workDir = null;
   try {
