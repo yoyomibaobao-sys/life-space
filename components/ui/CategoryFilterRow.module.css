@@ -1,3 +1,12 @@
+/* Only the main category row sticks below the already-sticky mobile top bar. */
+.sticky {
+  position: sticky;
+  top: calc(50px + var(--app-safe-area-top, 0px));
+  z-index: 85;
+  padding: 5px 0;
+  background: #f7faf5;
+}
+
 .row {
   display: grid;
   gap: 3px;
