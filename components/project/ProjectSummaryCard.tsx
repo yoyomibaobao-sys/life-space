@@ -65,6 +65,8 @@ type Props = {
   durationDays?: number | null;
   ownerLine?: ReactNode;
   actionSlot?: ReactNode;
+  /** My Space owner cards use a compact one-line title and status beneath the menu. */
+  compactOwnerHeader?: boolean;
 };
 
 export default function ProjectSummaryCard(props: Props) {
@@ -135,7 +137,7 @@ export default function ProjectSummaryCard(props: Props) {
       <span className={styles.body}>
         <span className={styles.titleRow}>
           <span className={styles.identity}>
-            <strong className={styles.title}>{props.title}</strong>
+            <strong className={styles.title} title={props.title}>{props.title}</strong>
             {props.visibilityLabel ? (
               taxonomyAction?.onTogglePublic ? (
                 <button
@@ -218,6 +220,7 @@ export default function ProjectSummaryCard(props: Props) {
         href={props.href}
         aria-label={props.ariaLabel}
         className={styles.card}
+        data-compact-owner-header={props.compactOwnerHeader ? "true" : undefined}
         data-ended={props.ended ? "true" : "false"}
         onClick={props.onOpen}
       >
@@ -239,6 +242,7 @@ export default function ProjectSummaryCard(props: Props) {
       tabIndex={props.onOpen ? 0 : undefined}
       aria-label={props.ariaLabel}
       className={styles.card}
+      data-compact-owner-header={props.compactOwnerHeader ? "true" : undefined}
       data-ended={props.ended ? "true" : "false"}
       onClick={props.onOpen}
       onKeyDown={handleKeyDown}
