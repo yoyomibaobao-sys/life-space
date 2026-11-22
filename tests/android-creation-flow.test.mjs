@@ -89,9 +89,11 @@ test("local space preference controls workspace sources and creation without a l
   assert.deepEqual(capabilities.quickAddExistingSources(false, false, false), []);
 });
 
-test("center action opens the in-app camera, supports album or skip, then preserves draft through project choice", () => {
+test("center action opens text-first project choice with optional camera, preserving the draft", () => {
   const shell = read("mobile-offline-src/main.tsx");
   const camera = read("components/mobile/AndroidQuickCamera.tsx");
+  assert.match(shell, /onClick=\{skipQuickAddPhotos\}/);
+  assert.match(shell, /data-android-record-media-optional="true"/);
   assert.match(shell, /onClick=\{\(\) => setScreen\(\{ kind: "quick-add" \}\)\}/);
   assert.match(shell, /screen\.kind === "quick-add"[\s\S]*<AndroidQuickCamera/);
   assert.match(camera, /getUserMedia/);
