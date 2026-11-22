@@ -44,3 +44,13 @@ test("my space source and category bars stay together above the project list in 
     assert.match(css, /\.ls-sticky-workspace-controls\s*\{[\s\S]*position:\s*sticky;/);
   }
 });
+
+test("my-space overlaps category settings read with project fetch without bypassing identity verification", () => {
+  const source = read("app/archive/page.tsx");
+  const depthStart = source.indexOf("const cloudDepthsPromise = getCloudArchiveCategoryDepths(user.id)");
+  const projectsStart = source.indexOf("const [", depthStart);
+  const depthAwait = source.indexOf("await cloudDepthsPromise", projectsStart);
+  assert.ok(depthStart > source.indexOf("await supabase.auth.getUser()"));
+  assert.ok(projectsStart > depthStart && depthAwait > projectsStart);
+  assert.match(source, /const cloudDepthsResult = await cloudDepthsPromise;[\s\S]*if \(!stillCurrent\(user.id\)\) return;/);
+});
