@@ -71,6 +71,7 @@ import {
 } from "@/lib/local-offline-db";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobileNotificationLink from "@/components/mobile/MobileNotificationLink";
+import AndroidPendingRecordReview from "@/components/mobile/AndroidPendingRecordReview";
 import {
   DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
   getArchiveCategoryDepth,
@@ -1581,6 +1582,11 @@ export default function ArchivePage() {
         {!canCancel ? <div style={{ fontSize: 12, marginTop: 5 }}>
           {t.archive_workspace.pending_cancel_safety_hint}
         </div> : null}
+        {currentOwnerContext ? item.summaries.filter((row) => row.record_count > 0 || row.image_count > 0).map((row) => (
+          <AndroidPendingRecordReview key={row.local_archive_id} archiveId={row.local_archive_id}
+            owner={currentOwnerContext} language={language}
+            onChanged={() => loadLocalArchives(currentOwnerContext)} />
+        )) : null}
       </section>
     );
   }
