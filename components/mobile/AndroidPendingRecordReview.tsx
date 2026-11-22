@@ -32,14 +32,15 @@ function safelyCancelable(record: LocalRecordWithImages) {
 }
 
 export default function AndroidPendingRecordReview({
-  archiveId, owner, language, onChanged,
+  archiveId, owner, language, onChanged, defaultExpanded = false,
 }: {
   archiveId: string;
   owner: LocalArchiveOwnerContext;
   language: "zh" | "en";
   onChanged?: () => void | Promise<void>;
+  defaultExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
