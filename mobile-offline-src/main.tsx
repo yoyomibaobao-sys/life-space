@@ -102,6 +102,7 @@ import MobileBottomNavigationView, {
   type MobileBottomNavigationItem,
 } from "@/components/mobile/MobileBottomNavigationView";
 import AndroidQuickCamera from "@/components/mobile/AndroidQuickCamera";
+import AndroidPendingRecordReview from "@/components/mobile/AndroidPendingRecordReview";
 import AppConfirmDialog from "@/components/mobile/AppConfirmDialog";
 import { getMobilePrimaryNavigationDescriptors } from "@/components/mobile/mobilePrimaryNavigation";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
@@ -2349,7 +2350,7 @@ function App() {
     const counts = language === "zh"
       ? `${item.recordCount} 条记录 · ${item.imageCount} 张照片待上传`
       : `${item.recordCount} records · ${item.imageCount} photos to upload`;
-    return <ArchiveProjectCard
+    return <div key={item.key}><ArchiveProjectCard
       key={item.key}
       project={{ ...base, href: undefined, visibilityLabel: badge, visibilityTone: "neutral", latestText: counts }}
       onClick={() => local ? openDetail(local.id) : item.cloud && setScreen({ kind: "cloud-detail", archiveId: item.cloud.id })}
@@ -2364,7 +2365,13 @@ function App() {
           title={!item.creating ? (language === "zh" ? "远端或修改状态未知，不能安全取消" : "Cannot safely cancel remote edits") : undefined}
           onClick={() => void cancelPendingCreatedProject(item)}>{language === "zh" ? "取消待上传" : "Cancel pending"}</button>
       </div> : null}
-    />;
+    />
+      {readOwnerContext ? item.summaries.filter((row) => row.record_count > 0 || row.image_count > 0).map((row) => (
+        <AndroidPendingRecordReview key={row.local_archive_id} archiveId={row.local_archive_id}
+          owner={readOwnerContext} language={language} defaultExpanded={sourceFilter === "pending"}
+          onChanged={() => loadList(readOwnerContext)} />
+      )) : null}
+    </div>;
   }
   function renderProjectActions(archive: CloudArchiveSummary | LocalArchiveSummary, source: "cloud" | "local" | "cache") {
     const category = archive.category as ArchiveCategory;
