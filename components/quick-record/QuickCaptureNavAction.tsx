@@ -24,6 +24,7 @@ export default function QuickCaptureNavAction({
   const isNativeApp = useIsNativeApp();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
+  const [entryMenuOpen, setEntryMenuOpen] = useState(false);
   const isMarketPath = pathname === "/market" || pathname.startsWith("/market/");
 
   if (isMarketPath) {
@@ -71,6 +72,17 @@ export default function QuickCaptureNavAction({
     );
   }
 
+  function startTextOnlyRecord() {
+    setEntryMenuOpen(false);
+    if (cloudArchiveId) {
+      router.push(`/archive/${cloudArchiveId}#add-record`);
+    } else if (localArchiveId) {
+      router.push(`/local/archive/${localArchiveId}?textOnly=1#add-record`);
+    } else {
+      router.push("/quick-record?textOnly=1");
+    }
+  }
+
   async function handleCapture(event: ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(event.target.files || []).slice(
       0,
@@ -113,10 +125,11 @@ export default function QuickCaptureNavAction({
     <div style={{ position: "relative", display: "grid", placeItems: "center" }}>
       <button
         type="button"
-        onClick={() => inputRef.current?.click()}
+        onClick={() => setEntryMenuOpen((open) => !open)}
         disabled={busy}
-        aria-label={t.quick_record.take_photo}
-        title={t.quick_record.take_photo}
+        aria-label={language === "zh" ? "新建记录" : "New record"}
+        aria-expanded={entryMenuOpen}
+        title={language === "zh" ? "新建记录" : "New record"}
         style={{
           width: 48,
           height: 48,
@@ -133,6 +146,25 @@ export default function QuickCaptureNavAction({
       >
         <UiIcon name="plus" size={25} strokeWidth={2.2} />
       </button>
+      {entryMenuOpen ? (
+        <div data-w5-record-entry-menu="true" role="group"
+          aria-label={language === "zh" ? "选择记录方式" : "Record entry"}
+          style={{ position: "absolute", bottom: 54, left: "50%", transform: "translateX(-50%)",
+            minWidth: 172, background: "#fff", padding: 10, borderRadius: 12, zIndex: 1200,
+            border: "1px solid #dbe3d6", boxShadow: "0 8px 28px rgba(20,36,20,0.18)",
+            display: "grid", gap: 8 }}>
+          <button type="button" onClick={startTextOnlyRecord} style={{ padding: "10px 8px" }}>
+            {language === "zh" ? "文字记录（不拍照）" : "Text record (no photo)"}
+          </button>
+          <button type="button" onClick={() => { setEntryMenuOpen(false); inputRef.current?.click(); }}
+            style={{ padding: "10px 8px" }}>
+            {language === "zh" ? "拍照／选择图片" : "Camera / Photos"}
+          </button>
+          <button type="button" onClick={() => setEntryMenuOpen(false)} style={{ padding: "8px" }}>
+            {language === "zh" ? "取消" : "Cancel"}
+          </button>
+        </div>
+      ) : null}
       {busy ? (
         <div
           role="status"
