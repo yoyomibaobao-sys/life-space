@@ -1590,7 +1590,7 @@ export default function ArchivePage() {
           {item.failed ? t.archive_workspace.pending_retry : item.creating ? t.archive_workspace.pending_create_cloud_project : t.archive_workspace.pending_upload} · {item.recordCount} {t.archive.pending_sync_record_unit} · {item.imageCount} {t.archive.pending_sync_photo_unit}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button type="button" onClick={() => setW5FocusedPendingKey(item.key)}>{t.archive_workspace.pending_view}</button>
+          <button type="button" onClick={() => { setActiveSource("pending"); setW5FocusedPendingKey(item.key); }}>{t.archive_workspace.pending_view}</button>
           <button type="button" disabled={Boolean(w5UploadingKey)} onClick={() => void w5UploadPending(item)}>
             {item.failed ? t.archive_workspace.pending_retry_action : t.archive_workspace.pending_upload_action}
           </button>
