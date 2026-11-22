@@ -1584,7 +1584,7 @@ export default function ArchivePage() {
         </div> : null}
         {currentOwnerContext ? item.summaries.filter((row) => row.record_count > 0 || row.image_count > 0).map((row) => (
           <AndroidPendingRecordReview key={row.local_archive_id} archiveId={row.local_archive_id}
-            owner={currentOwnerContext} language={language}
+            owner={currentOwnerContext} language={language} defaultExpanded
             onChanged={() => loadLocalArchives(currentOwnerContext)} />
         )) : null}
       </section>
