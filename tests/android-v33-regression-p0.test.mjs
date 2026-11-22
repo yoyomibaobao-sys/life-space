@@ -33,17 +33,34 @@ test("P0 temporary space projects expose only pending record rows", () => {
   assert.doesNotMatch(view, /deleteLocalRecord\(/);
 });
 
-test("P1 record creation defaults to text and media is optional in both runtime modes", () => {
+test("P0 native APP never automatically opens the global pending-upload dialog", () => {
+  const source = read("components/PendingCloudSyncPrompt.tsx");
+  assert.match(source, /Capacitor\.isNativePlatform\(\)/);
+  assert.match(source, /if \(Capacitor\.isNativePlatform\(\)\) return null/);
+  assert.match(source, /scanningRef\.current/);
+});
+
+test("P1 preserves the October 18 camera-first, album-left, next-right photo-skip contract", () => {
   const shell = read("mobile-offline-src/main.tsx");
-  const nav = read("components/quick-record/QuickCaptureNavAction.tsx");
-  const select = read("app/quick-record/page.tsx");
-  const local = read("app/local/archive/[id]/page.tsx");
-  assert.match(shell, /onClick=\{skipQuickAddPhotos\}/);
-  assert.match(shell, /data-android-record-media-optional="true"/);
-  assert.match(nav, /data-w5-record-entry-menu="true"/);
-  assert.match(nav, /文字记录（不拍照）/);
-  assert.match(nav, /router\.push\("\/quick-record\?textOnly=1"\)/);
-  assert.match(select, /const textOnly = searchParams\.get\("textOnly"\) === "1"/);
-  assert.match(select, /if \(!capture && !textOnly\)/);
-  assert.match(local, /setAddRecordOpen\(true\)/);
+  const camera = read("components/mobile/AndroidQuickCamera.tsx");
+  assert.match(shell, /onClick=\{\(\) => setScreen\(\{ kind: "quick-add" \}\)\}/);
+  assert.match(shell, /screen\.kind === "quick-add"[\s\S]*<AndroidQuickCamera/);
+  assert.match(shell, /onSkip=\{skipQuickAddPhotos\}/);
+  assert.match(camera, /onAlbum/);
+  assert.match(camera, /onSkip/);
+  assert.match(camera, /下一步/);
+  assert.match(shell, /setQuickAddDraft\(\{ files: \[\], capturedAt: \[\], source: "camera", note: "" \}\)/);
+  assert.doesNotMatch(shell, /data-android-record-media-optional/);
+});
+
+test("P1 temporary-space project opens pending-only read view, never editable cloud history", () => {
+  const shell = read("mobile-offline-src/main.tsx");
+  const web = read("app/archive/page.tsx");
+  assert.match(shell, /data-android-pending-only-detail="true"/);
+  assert.match(shell, /setFocusedPendingKey\(item\.key\)/);
+  assert.match(web, /data-w5-pending-only-detail="true"/);
+  assert.match(web, /setW5FocusedPendingKey\(item\.key\)/);
+  assert.match(shell, /focusedPendingKey === item\.key/);
+  assert.match(web, /w5FocusedPendingKey === item\.key/);
+  assert.match(read("components/mobile/AndroidPendingRecordReview.tsx"), /\(detail\?\.records \|\| \[\]\)\.filter\(pendingRecord\)/);
 });
