@@ -151,10 +151,10 @@ test("the center plus accumulates photos and carries all of them into one new re
   assert.match(chooser, /add_from_album/);
   assert.match(chooser, /multiple/);
   assert.match(chooser, /appendQuickCaptureFiles/);
-  assert.ok(
-    chooser.indexOf("t.quick_record.create_cloud_project") <
-      chooser.indexOf("t.quick_record.create_local_project")
-  );
+  // The post-camera page now has exactly one cloud New Project action.
+  // The previously accepted captured-photo pipeline remains unchanged.
+  assert.match(chooser, /t\.archive\.new_project/);
+  assert.doesNotMatch(chooser, /t\.quick_record\.create_local_project|t\.quick_record\.create_cloud_project/);
   assert.match(cloudRecord, /quickCaptureToFiles/);
   assert.match(localRecord, /quickCaptureToFiles/);
   assert.match(cloudRecord, /deleteQuickCapture/);
