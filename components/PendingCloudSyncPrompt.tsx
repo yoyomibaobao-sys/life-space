@@ -12,6 +12,7 @@ import {
 } from "@/lib/local-offline-db";
 import type { PendingCloudSyncProgress } from "@/lib/pending-cloud-sync";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { Capacitor } from "@capacitor/core";
 import { selectPendingCloudSyncPrompt } from "@/lib/pending-cloud-sync-prompt-selection";
 
 export default function PendingCloudSyncPrompt() {
@@ -26,7 +27,10 @@ export default function PendingCloudSyncPrompt() {
   const [error, setError] = useState("");
 
   const scan = useCallback(async () => {
+    // Native APP uses only the explicit 临时空间 upload controls.
+    // Do not prepare queues or open the global automatic upload dialog.
     if (
+      Capacitor.isNativePlatform() ||
       scanningRef.current ||
       (typeof navigator !== "undefined" && !navigator.onLine)
     ) {
@@ -153,6 +157,8 @@ export default function PendingCloudSyncPrompt() {
   const progressText = progress
     ? `${copy.pending_sync_progress} ${progress.completed}/${progress.total}`
     : "";
+
+  if (Capacitor.isNativePlatform()) return null;
 
   return (
     <ConfirmDialog
