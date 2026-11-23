@@ -126,7 +126,7 @@ import {
   findOfflineGuideEntry,
   type OfflineGuideDirectoryEntry,
 } from "@/lib/offline-guide-directory";
-import type { SystemNameCandidate } from "@/lib/system-name-candidates";
+import { inferProjectGuide, resolveExactSystemNameCandidate, type SystemNameCandidate } from "@/lib/system-name-candidates";
 import { setStoredLanguage } from "@/lib/i18n";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
@@ -449,7 +449,7 @@ const text = {
     saving: "保存中…",
     loading: "正在读取本地资料…",
     requiredProject: "请填写项目名称和对象名称。",
-    requiredRecord: "请填写记录内容，或至少选择一张照片。",
+    requiredRecord: "请填写记录内容或添加照片。",
     createSuccess: "项目已创建",
     createPendingCloudSuccess: "待同步云端项目已保存在本机",
     destinationPendingCloud: "待同步云端项目",
@@ -528,7 +528,7 @@ const text = {
     saving: "Saving…",
     loading: "Reading local data…",
     requiredProject: "Enter a project name and subject name.",
-    requiredRecord: "Enter notes or select at least one photo.",
+    requiredRecord: "Enter notes or add photos.",
     createSuccess: "Project created",
     createPendingCloudSuccess: "Pending cloud project saved on this device",
     destinationPendingCloud: "Pending cloud project",
@@ -4298,6 +4298,14 @@ function ProjectForm({
     return () => window.removeEventListener("lifespace-guide-directory-updated", refresh);
   }, []);
   const [selectedGuide, setSelectedGuide] = useState<SystemNameCandidate | undefined>(guide);
+  const [guideEdited, setGuideEdited] = useState(Boolean(archive || guide));
+  const [guideInputActive, setGuideInputActive] = useState(false);
+  useEffect(() => {
+    if (guideEdited || archive) return;
+    const inferred = inferProjectGuide(directory, title, category);
+    setSelectedGuide(inferred || undefined);
+    setSystemName(inferred?.label || title.trim());
+  }, [title, category, directory, guideEdited, archive]);
   const [source, setSource] = useState(archive?.source || "");
   const [plantingRegion, setPlantingRegion] = useState<PlantingRegion | null>(archive ? archive.planting_region || null : loadDefaultPlantingRegion(owner?.userId));
   const [note, setNote] = useState(archive?.note || "");
@@ -4411,15 +4419,24 @@ function ProjectForm({
       />
       <section className="panel project-form-panel">
         <form className="form project-form-compact" onSubmit={submit} noValidate>
-          <div className="field"><label>{copy.title} *</label><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} /></div>
           <div className="field">
             <label>{copy.category} *</label>
-            <select value={category} onChange={(event) => { setCategory(event.target.value as ArchiveCategory); setSubcategory(""); setGroupName(""); setSubTagId(""); setGroupTagId(""); }}>
+            <select value={category} onChange={(event) => { setCategory(event.target.value as ArchiveCategory); setGuideEdited(false); setSelectedGuide(undefined); setGuideInputActive(false); setSubcategory(""); setGroupName(""); setSubTagId(""); setGroupTagId(""); }}>
               <option value="plant">{copy.plant}</option>
               <option value="system">{copy.system}</option>
               <option value="insect_fish">{copy.insect_fish}</option>
               <option value="other">{copy.other}</option>
             </select>
+          </div>
+          <div className="field"><label>{copy.title} *</label><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} placeholder={language === "zh" ? "输入项目名称" : "Enter project name"} /></div>
+          <div className="field"><label>{copy.systemName} *</label><input value={systemName} onFocus={() => setGuideInputActive(true)} onBlur={() => setGuideInputActive(false)} onChange={(event) => {
+            const value = event.target.value;
+            setGuideEdited(true);
+            setGuideInputActive(true);
+            setSystemName(value);
+            setSelectedGuide(resolveExactSystemNameCandidate(directory.filter((candidate) => candidate.category === category), value) || undefined);
+          }} maxLength={160} placeholder={copy.guideHint} />
+            {guideInputActive && systemName.trim() && !selectedGuide ? <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && candidate.label.toLowerCase().includes(systemName.trim().toLowerCase())).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onPointerDown={(event) => event.preventDefault()} onClick={() => { setGuideEdited(true); setSystemName(candidate.label); setSelectedGuide(candidate); setGuideInputActive(false); }}>{candidate.label}</button>)}</div> : null}
           </div>
           {archive && depths[category] >= 2 ? <div className="field"><label>{language === "zh" ? "一级分组" : "Level 1 group"}</label>
             <select value={subTagId} onChange={(event) => { const next = taxonomy.find((entry) => entry.id === event.target.value && entry.kind === "subcategory"); setSubTagId(next?.id || ""); setSubcategory(next?.label || ""); setGroupName(""); setGroupTagId(""); }}>
@@ -4434,9 +4451,6 @@ function ProjectForm({
                 entry.parentId === subTagId).map((entry) =>
                 <option key={entry.id} value={entry.id}>{entry.label}</option>)}
             </select></div> : null}
-          <div className="field"><label>{copy.systemName} *</label><input value={systemName} onChange={(event) => { setSystemName(event.target.value); setSelectedGuide(undefined); }} maxLength={160} placeholder={copy.guideHint} />
-            {systemName.trim() && !selectedGuide && directory.some((candidate) => candidate.category === category) ? <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && (!systemName.trim() || candidate.label.toLowerCase().includes(systemName.trim().toLowerCase()))).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div> : null}
-          </div>
           {category === "plant" ? <PlantingRegionField value={plantingRegion} onChange={setPlantingRegion} language={language} required={!archive} /> : null}
           <div className="field"><label>{copy.source}</label><input value={source} onChange={(event) => setSource(event.target.value)} maxLength={240} /></div>
           {!archive && destination !== "local-only" ? <div className="field"><label>{copy.visibility}</label><SegmentedChoice label={copy.visibility} value={visibility} options={[{ value: "private", label: language === "zh" ? "仅自己可见" : "Only me" }, { value: "public", label: language === "zh" ? "公开" : "Public" }]} onChange={(value) => setVisibility(value as "public" | "private")} /></div> : null}
@@ -4562,7 +4576,7 @@ function RecordForm({ copy, archive, language, record, allowOfflineAppend = fals
       onBack={onCancel}
     />
     <section className="panel"><form className="form" onSubmit={submit}>
-      <div className="project-meta">{archive.title} · {copy.local}</div>
+      <div className="project-meta">{archive.title}</div>
       <div className="record-option-grid">
         <label className="field">{language === "zh" ? "时间" : "Time"}<select value={timeMode} onChange={(e) => setTimeMode(e.target.value as "photo" | "record" | "custom")} disabled={busy}><option value="photo">{language === "zh" ? "照片时间" : "Photo time"}</option><option value="record">{language === "zh" ? "记录时间" : "Record time"}</option><option value="custom">{language === "zh" ? "自定义时间" : "Custom time"}</option></select></label>
         <div className="field"><label>{copy.visibility}</label><SegmentedChoice label={copy.visibility} value={visibility} options={[{ value: "private", label: language === "zh" ? "仅自己可见" : "Only me" }, { value: "public", label: language === "zh" ? "公开" : "Public" }]} onChange={(value) => setVisibility(value as "public" | "private")} /></div>
@@ -4570,8 +4584,8 @@ function RecordForm({ copy, archive, language, record, allowOfflineAppend = fals
       {timeMode === "record" ? <label className="field">{language === "zh" ? "记录时间" : "Record time"}<input type="datetime-local" value={recordTime} onChange={(e) => setRecordTime(e.target.value)} required disabled={busy} /></label> : null}
       {timeMode === "custom" ? <label className="field">{language === "zh" ? "自定义时间" : "Custom time"}<input type="datetime-local" value={customTime} onChange={(e) => setCustomTime(e.target.value)} required disabled={busy} /></label> : null}
       {archive.cycle_enabled ? <label className="field">{periods.assignLabel}<select value={cycleId} disabled={busy} onChange={(e) => setCycleId(e.target.value)}><option value="">{periods.unassignedOption}</option>{(archive.cycles || []).filter((cycle) => record || cycle.status === "active").map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</option>)}</select></label> : null}
-      <label className="field">{copy.recordNote}<textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={8000} disabled={busy} /></label>
-      <div className="field"><label>{copy.selectPhotos}</label><small>{(record?.images.length || 0) + files.length} {copy.photos}</small>
+      <label className="field">{copy.recordNote}<textarea value={note} onChange={(e) => { setNote(e.target.value); if (error === copy.requiredRecord) setError(""); }} placeholder={language === "zh" ? "填写记录内容（照片选填）" : "Write a note (photos optional)"} maxLength={8000} disabled={busy} /></label>
+      <div className="field"><label>{language === "zh" ? "照片（选填，最多 10 张）" : "Photos (optional, max 10)"}</label>{(record?.images.length || 0) + files.length > 0 ? <small>{(record?.images.length || 0) + files.length} {copy.photos}</small> : null}
         {record?.images.length ? <div className="photo-grid">{record.images.map((image) => <BlobImage key={image.id} image={image} alt="" />)}</div> : null}
         {files.length ? <div className="photo-grid">{files.map((file, index) => <div className="photo-preview" key={`${file.name}-${file.lastModified}-${index}`}><FilePreview file={file} /><button type="button" disabled={busy} aria-label={copy.removePhoto} onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}>×</button></div>)}</div> : null}
         <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
@@ -4583,7 +4597,6 @@ function RecordForm({ copy, archive, language, record, allowOfflineAppend = fals
             if (truncated) setError(copy.photoLimit);
           }).catch(() => setError(language === "zh" ? "无法读取图库照片。" : "Unable to read gallery photos."));
         }}>{copy.album}</button></div>
-        <small>{language === "zh" ? "每次最多添加 10 张照片；保存时自动压缩至长边不超过 1800px。" : "Add up to 10 photos; saved photos use a long edge of no more than 1800px."}</small>
       </div>
       {!record && files.length > 1 ? <label style={{ display: "flex", alignItems: "center", gap: 8 }}><input type="checkbox" checked={splitByDate} onChange={(e) => setSplitByDate(e.target.checked)} disabled={busy} /><span>{language === "zh" ? "按日期分开生成多条记录" : "Create separate records by date"}</span></label> : null}
       {error ? <section className="notice warning" role="alert"><p>{error}</p></section> : null}
