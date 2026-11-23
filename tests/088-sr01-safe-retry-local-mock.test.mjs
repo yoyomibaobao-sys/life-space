@@ -146,7 +146,11 @@ const stubs={
     "return {originalFile,uploadFile:originalFile,thumbFile:result.file,standardized:null};",
     "};"
   ].join("\n"),
-  "@/lib/android-connectivity":"export const isAndroidOnline=()=>true;",
+  "@/lib/android-connectivity":[
+    "export const isAndroidOnline=()=>true;",
+    "export const getAndroidConnectivitySnapshot=()=>({transportStatus:'connected',serviceStatus:'reachable',status:'online',generation:0});",
+    "export const recheckAndroidConnectivity=async()=>true;"
+  ].join("\\n"),
   "@/lib/image-compression":[
     "export const standardizeRecordPhotoFile=async()=>{throw Error('unexpected compression')};",
     "export const createImageThumbnailFile=async()=>({wasGenerated:true,file:new File(['thumbnail-bytes'],'thumbnail.jpg',{type:'image/jpeg'})});"
