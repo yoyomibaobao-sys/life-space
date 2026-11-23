@@ -35,7 +35,7 @@ test("cloud project visibility defaults and transitions stay unified", async () 
   assert.match(newProject, /function canCreatePublicCloudProject\(/);
   assert.match(newProject, /const DEFAULT_RECORD_VISIBILITY = "public"/);
   assert.match(newProject, /useState<boolean \| null>\(null\)/);
-  assert.match(newProject, /resolveCloudProjectVisibility\(visibilityChoice, plusPublicAllowed\)/);
+  assert.match(newProject, /resolveCloudProjectVisibility\(visibilityChoice, publicAllowed\)/);
   assert.match(newProject, /is_public: archiveIsPublic/);
   assert.match(newProject, /recordVisibility = archiveIsPublic \? DEFAULT_RECORD_VISIBILITY : "private"/);
   assert.match(newProject, /default_record_visibility: recordVisibility/);
