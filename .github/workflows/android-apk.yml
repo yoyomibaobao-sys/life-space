@@ -49,6 +49,8 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/android-apk.yml"
+      - "lib/android-connectivity.ts"
+      - "tests/**"
       - "tests/android-shell.test.mjs"
   pull_request:
     paths:
@@ -74,6 +76,8 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/android-apk.yml"
+      - "lib/android-connectivity.ts"
+      - "tests/**"
       - "tests/android-shell.test.mjs"
 
 permissions:
