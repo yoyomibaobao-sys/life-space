@@ -474,7 +474,7 @@ function TaxonomyChipButton({
 function panelStyle(compact: boolean): CSSProperties {
   return {
     marginBottom: compact ? 5 : 18,
-    padding: compact ? "5px 8px" : "12px 14px",
+    padding: compact ? "3px 6px" : "12px 14px",
     border: "1px solid #edf0e8",
     borderRadius: compact ? 12 : 16,
     background: "#fff",
@@ -507,7 +507,7 @@ function separatorStyle(compact: boolean): CSSProperties {
   return {
     height: 1,
     background: "#edf0e8",
-    margin: compact ? "5px 0" : "10px 0",
+    margin: compact ? "3px 0" : "10px 0",
   };
 }
 
@@ -519,7 +519,7 @@ function pillStyle(active: boolean, compact: boolean, compactEnglish = false): C
     borderRadius: 999,
     padding: compactEnglish ? "5px 3px" : compact ? "5px 7px" : "7px 14px",
     fontSize: compact ? 13 : 15,
-    fontWeight: 700,
+    fontWeight: active ? 650 : 550,
     cursor: "pointer",
     lineHeight: compact ? 1.15 : 1.3,
     minHeight: compact ? 40 : undefined,
@@ -558,11 +558,11 @@ function chipButtonStyle(active: boolean, compact: boolean): CSSProperties {
     borderRadius: 999,
     padding: compact ? "5px 10px" : "7px 13px",
     fontSize: compact ? 13 : 15,
-    fontWeight: active ? 700 : 500,
+    fontWeight: active ? 650 : 500,
     cursor: "pointer",
     lineHeight: compact ? 1.15 : 1.3,
     whiteSpace: "nowrap",
-    boxShadow: active ? "0 6px 14px rgba(63,125,61,0.18)" : "none",
+    boxShadow: "none",
     touchAction: compact ? "pan-x" : undefined,
     userSelect: compact ? "none" : undefined,
     WebkitUserSelect: compact ? "none" : undefined,
@@ -618,8 +618,8 @@ const dialogPanelStyle: CSSProperties = {
 
 const dialogTitleStyle: CSSProperties = {
   color: "#243524",
-  fontSize: 18,
-  fontWeight: 850,
+  fontSize: 17,
+  fontWeight: 650,
   lineHeight: 1.35,
   overflowWrap: "anywhere",
 };
@@ -630,8 +630,8 @@ const dialogDangerButtonStyle: CSSProperties = {
   borderRadius: 13,
   background: "#fff8f7",
   color: "#ad5049",
-  fontSize: 15,
-  fontWeight: 750,
+  fontSize: 14,
+  fontWeight: 600,
   padding: "0 13px",
 };
 
@@ -641,8 +641,8 @@ const dialogSecondaryButtonStyle: CSSProperties = {
   borderRadius: 13,
   background: "#fff",
   color: "#657264",
-  fontSize: 15,
-  fontWeight: 750,
+  fontSize: 14,
+  fontWeight: 600,
   padding: "0 13px",
 };
 
@@ -652,8 +652,8 @@ const dialogPrimaryButtonStyle: CSSProperties = {
   borderRadius: 13,
   background: "#3f7d3d",
   color: "#fff",
-  fontSize: 15,
-  fontWeight: 750,
+  fontSize: 14,
+  fontWeight: 600,
   padding: "0 13px",
 };
 
