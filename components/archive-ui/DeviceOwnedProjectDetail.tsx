@@ -102,7 +102,21 @@ export default function DeviceOwnedProjectDetail({
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxRecord, setLightboxRecord] = useState<RecordItem | null>(null);
   const [recordToDelete, setRecordToDelete] = useState<LocalRecordWithImages | null>(null);
-  const [deleteArchiveOpen, setDeleteArchiveOpen] = useState(false);
+  const [deleteArchiveTarget, setDeleteArchiveTarget] = useState<{ archiveId: string; ownerId: string | null } | null>(null);
+  const [recordDeleteScope, setRecordDeleteScope] = useState<{ archiveId: string; ownerId: string | null } | null>(null);
+  const currentOwnerId = ownerContext?.userId || null;
+  const canConfirmArchiveDelete = !isCloudCache && canEditArchive && !busy &&
+    deleteArchiveTarget?.archiveId === archive.id && deleteArchiveTarget.ownerId === currentOwnerId;
+  const confirmedRecord = !isCloudCache && !busy && recordToDelete &&
+    recordDeleteScope?.archiveId === archive.id && recordDeleteScope.ownerId === currentOwnerId
+    ? detail.records.find((item) => item.id === recordToDelete.id &&
+        canEditLocalArchiveRecord(archive, item, ownerContext))
+    : undefined;
+  useEffect(() => {
+    setDeleteArchiveTarget(null);
+    setRecordDeleteScope(null);
+    setRecordToDelete(null);
+  }, [archive.id, currentOwnerId]);
   const [taxonomy, setTaxonomy] = useState<LocalTaxonomyItem[]>([]);
   useEffect(() => {
     let active = true;
@@ -273,7 +287,7 @@ export default function DeviceOwnedProjectDetail({
           ended_at: archive.status === "ended" ? null : new Date().toISOString(),
         }, ownerContext));
       }}
-      onDeleteArchive={() => { if (!isCloudCache) setDeleteArchiveOpen(true); }}
+      onDeleteArchive={() => { if (!isCloudCache && canEditArchive && !busy) setDeleteArchiveTarget({ archiveId: archive.id, ownerId: currentOwnerId }); }}
       onSaveTitle={async (nextTitle) => {
         await updateLocalArchiveFields(archive.id, { title: nextTitle }, ownerContext);
         await onChanged();
@@ -411,7 +425,10 @@ export default function DeviceOwnedProjectDetail({
             onNoteSaved={async () => undefined}
             onRecordDeleted={editable && !isCloudCache ? (recordId) => {
               const target = detail.records.find((item) => item.id === recordId);
-              if (target) setRecordToDelete(target);
+              if (target && !busy) {
+                setRecordDeleteScope({ archiveId: archive.id, ownerId: currentOwnerId });
+                setRecordToDelete(target);
+              }
             } : undefined}
             cycleOptions={cycleOptions}
             onCycleChange={editable ? async (recordId, cycleId) => {
@@ -441,27 +458,29 @@ export default function DeviceOwnedProjectDetail({
       dialogs={
         <>
           <ConfirmDialog
-            open={Boolean(recordToDelete)}
+            open={Boolean(confirmedRecord)}
             title={recordCopy.delete_local_record_title}
             message={recordCopy.delete_local_record_message}
             confirmText={recordCopy.confirm_delete}
             danger
-            onClose={() => setRecordToDelete(null)}
+            onClose={() => { setRecordToDelete(null); setRecordDeleteScope(null); }}
             onConfirm={() => {
-              if (recordToDelete) onDeleteRecord(recordToDelete.id);
+              const target = confirmedRecord;
               setRecordToDelete(null);
+              setRecordDeleteScope(null);
+              if (target) onDeleteRecord(target.id);
             }}
           />
           <ConfirmDialog
-            open={deleteArchiveOpen}
+            open={Boolean(canConfirmArchiveDelete)}
             title={archiveCopy.delete_local_project}
             message={archiveCopy.delete_local_project_message}
             confirmText={archiveCopy.confirm_delete_project}
             danger
-            onClose={() => setDeleteArchiveOpen(false)}
+            onClose={() => setDeleteArchiveTarget(null)}
             onConfirm={() => {
-              setDeleteArchiveOpen(false);
-              onDeleteArchive();
+              setDeleteArchiveTarget(null);
+              if (canConfirmArchiveDelete) onDeleteArchive();
             }}
           />
         </>
