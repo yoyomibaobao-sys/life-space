@@ -4,6 +4,7 @@ import Link from "@/components/navigation/InternalLink";
 import { useEffect, useState, type CSSProperties, type ChangeEvent } from "react";
 import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { buildLoginHref } from "@/lib/auth-return";
 import { getPayPalPaymentCopy } from "@/lib/i18n/paypal-payment";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -108,6 +109,11 @@ export default function MembershipPaymentPage() {
   const [userId, setUserId] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [order, setOrder] = useState<PaymentOrder | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<{ orderId: string; ownerId: string } | null>(null);
+  const cancelCurrent = Boolean(cancelTarget && userId && cancelTarget.ownerId === userId &&
+    order?.id === cancelTarget.orderId && order.status === "pending_payment" &&
+    !loading && !creating && !submitting && !paypalStarting);
+  useEffect(() => { setCancelTarget(null); }, [userId, order?.id, order?.status]);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const paypalCopy = getPayPalPaymentCopy(language);
@@ -286,15 +292,23 @@ export default function MembershipPaymentPage() {
   }
 
   async function cancelPendingOrder() {
-    if (!order || order.status !== "pending_payment" || canceling) return;
-    if (!window.confirm(t.membership_page.cancel_order_confirm)) return;
+    if (!order || !cancelTarget || !cancelCurrent || canceling) return;
+    const target = cancelTarget;
 
     setCanceling(true);
     setErrorMessage("");
+    const identity = await supabase.auth.getUser();
+    if (identity.error || identity.data.user?.id !== target.ownerId) {
+      setCanceling(false);
+      setCancelTarget(null);
+      showToast(t.membership_page.cancel_order_failed);
+      return;
+    }
     const { data, error } = await supabase.rpc(
       "cancel_membership_payment_order_json",
-      { p_order_id: order.id }
+      { p_order_id: target.orderId }
     );
+    setCancelTarget(null);
     setCanceling(false);
 
     const result = (Array.isArray(data) ? data[0] : data) as PaymentOrderRpcResult | null;
@@ -533,7 +547,7 @@ export default function MembershipPaymentPage() {
                     <button
                       type="button"
                       style={cancelOrderButtonStyle}
-                      onClick={() => void cancelPendingOrder()}
+                      onClick={() => { if (userId && order.status === "pending_payment" && !canceling && !paypalStarting) setCancelTarget({ orderId: order.id, ownerId: userId }); }}
                       disabled={canceling || paypalStarting}
                     >
                       {canceling
@@ -666,6 +680,18 @@ export default function MembershipPaymentPage() {
 
         </>
       )}
+      <ConfirmDialog
+        open={cancelCurrent}
+        title={t.membership_page.cancel_and_choose_again}
+        message={t.membership_page.cancel_order_confirm}
+        confirmText={canceling ? t.membership_page.canceling_order : t.confirm}
+        cancelText={t.cancel}
+        confirmDisabled={canceling}
+        cancelDisabled={canceling}
+        danger
+        onClose={() => setCancelTarget(null)}
+        onConfirm={cancelPendingOrder}
+      />
     </main>
   );
 }
