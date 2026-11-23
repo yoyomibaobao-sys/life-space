@@ -422,35 +422,17 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
       setEntry(error ? null : row);
       basicReady = Boolean(row && !error);
       setLoading(false);
-      let sectionRow: PublicGuideSection | null = null;
       if (!error && row?.section_id) {
-        const sectionResult = await supabase
+        void Promise.resolve(supabase
           .from("guide_sections")
-          .select(
-            "id, category, slug, name, name_en, summary, summary_en, sort_order",
-          )
+          .select("id, category, slug, name, name_en, summary, summary_en, sort_order")
           .eq("id", row.section_id)
-          .maybeSingle();
-        if (!sectionResult.error) {
-          sectionRow = sectionResult.data as PublicGuideSection | null;
-        }
+          .maybeSingle())
+          .then((result) => {
+            if (!cancelled && !result.error) setSection(result.data as PublicGuideSection | null);
+          }).catch(() => undefined);
       }
-
-      if (!cancelled) {
-        if (error) console.warn("load public guide detail failed:", error);
-        setEntry(error ? null : row);
-        setSection(sectionRow);
-        setHasCloudAccess(false);
-        setMemberContent(null);
-        setRelatedArchives([]);
-        setExperienceCards([]);
-        setRelatedRecords([]);
-        setHasMoreCards(false);
-        setHasMoreRecords(false);
-        basicReady = Boolean(row && !error);
-        // Guest reading is ready before optional auth and member lookups.
-        setLoading(false);
-      }
+      if (error) console.warn("load public guide detail failed:", error);
 
       if (cancelled) return;
       if (error || !row) { setMemberState("unavailable"); setRelatedState("unavailable"); return; }
@@ -461,7 +443,9 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
       setIsSignedIn(Boolean(user));
       setUserId(user?.id || null);
       if (!user) {
-        setMemberState(authResult.error ? "unavailable" : "guest");
+        const missingSession = typeof authResult.error === "object" && authResult.error !== null &&
+          "name" in authResult.error && authResult.error.name === "AuthSessionMissingError";
+        setMemberState(authResult.error && !missingSession ? "unavailable" : "guest");
         setRelatedState("ready");
         return;
       }
