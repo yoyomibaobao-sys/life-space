@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useSupportIdentity } from "@/components/support/useSupportIdentity";
 import AdminSupportAudit from "@/components/support/AdminSupportAudit";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import { formatPreciseDateTime } from "@/lib/date-time";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -61,10 +62,10 @@ function AdminGate({ userId }: { userId: string }) {
   if (failed) return <p role="alert">{copy.loadError} <button className={styles.secondary} onClick={() => { setFailed(false); setRevision(value => value + 1); }}>{copy.retry}</button></p>;
   if (allowed === null) return <p role="status">{copy.loading}</p>;
   if (!allowed) return <p>{copy.denied}</p>;
-  return <SupportQueue />;
+  return <SupportQueue adminId={userId} />;
 }
 
-function SupportQueue() {
+function SupportQueue({ adminId }: { adminId: string }) {
   const { language } = useLanguage();
   const copy = getSupportCopy(language);
   const [kind, setKind] = useState<SupportSubmissionKind>("report");
@@ -88,8 +89,8 @@ function SupportQueue() {
       </label>
     </div>
     {kind === "report"
-      ? <ReportGroups key={`reports-${status}`} status={status} />
-      : <QueueItems key={`${kind}-${status}`} kind={kind} status={status} />}
+      ? <ReportGroups key={`reports-${status}`} status={status} adminId={adminId} />
+      : <QueueItems key={`${kind}-${status}`} kind={kind} status={status} adminId={adminId} />}
     <button className={styles.secondary} onClick={() => setShowAudit(value => !value)}>
       {language === "zh" ? "管理员操作记录" : "Administrator action history"}
     </button>
@@ -97,7 +98,7 @@ function SupportQueue() {
   </>;
 }
 
-function ReportGroups({ status }: { status: string }) {
+function ReportGroups({ status, adminId }: { status: string; adminId: string }) {
   const { language } = useLanguage();
   const copy = getSupportCopy(language);
   const [groups, setGroups] = useState<AdminSupportReportGroupRow[]>([]);
@@ -137,7 +138,7 @@ function ReportGroups({ status }: { status: string }) {
         {!groups.length && <p>{copy.empty}</p>}
         {groups.map(group => <ReportGroupCard
           key={group.target_type + ":" + group.target_id + ":" + status + ":" + revision}
-          group={group} status={status}
+          group={group} status={status} adminId={adminId}
           onUpdated={() => { setMessage(copy.updated); setRevision(value => value + 1); }}
         />)}
         <div className={styles.actions}>
@@ -153,8 +154,8 @@ function ReportGroups({ status }: { status: string }) {
   </section>;
 }
 
-function ReportGroupCard({ group, status, onUpdated }: {
-  group: AdminSupportReportGroupRow; status: string; onUpdated: () => void;
+function ReportGroupCard({ group, status, adminId, onUpdated }: {
+  group: AdminSupportReportGroupRow; status: string; adminId: string; onUpdated: () => void;
 }) {
   const { language } = useLanguage();
   const copy = getSupportCopy(language);
@@ -171,6 +172,11 @@ function ReportGroupCard({ group, status, onUpdated }: {
   const [moderationLoadFailed, setModerationLoadFailed] = useState(false);
   const [moderationReasonCode, setModerationReasonCode] = useState("");
   const moderationRequestRef = useRef<{ key: string; requestId: string } | null>(null);
+  const [decision, setDecision] = useState<{ action: "resolve" | "hide" | "restore"; key: string } | null>(null);
+  const decisionKey = JSON.stringify([adminId, group.target_type, group.target_id, group.representative_id,
+    group.actionable_submission_id, status, detailPage, moderation?.version, moderation?.isHidden, moderationReasonCode, resolution, note]);
+  const decisionCurrent = Boolean(decision && expanded && !loading && decision.key === decisionKey);
+  useEffect(() => { setDecision(null); }, [decisionKey, expanded]);
   const inFlight = useRef(false);
   const pageSize = 50;
   const total = Number(details[0]?.total_count ?? group.report_count);
@@ -243,6 +249,8 @@ function ReportGroupCard({ group, status, onUpdated }: {
     setSaving(true);
     setActionFailed(false);
     try {
+      const identity = await supabase.auth.getUser();
+      if (identity.error || identity.data.user?.id !== adminId) { setActionFailed(true); return; }
       const { data, error } = await supabase.rpc("admin_moderate_record", {
         p_record_id: group.target_id,
         p_action: action,
@@ -274,13 +282,17 @@ function ReportGroupCard({ group, status, onUpdated }: {
     }
   }
 
-  async function update(nextStatus: "needs_info" | "resolved") {
+  async function update(nextStatus: "needs_info" | "resolved", approved = false) {
     if (inFlight.current || (nextStatus === "resolved" && !resolution)) return;
     if (nextStatus === "resolved" && resolution === "action_taken" && !canTakeReportAction) {
       setActionFailed(true);
       return;
     }
-    if (nextStatus === "resolved" && !window.confirm(copy.confirmGroup)) return;
+    if (nextStatus === "resolved" && !approved) {
+      setDecision({ action: "resolve", key: decisionKey });
+      return;
+    }
+    if (nextStatus === "resolved" && (!decisionCurrent || decision?.action !== "resolve")) return;
     if (nextStatus === "resolved" && resolution === "action_taken") {
       if (!canTakeReportAction || !group.actionable_submission_id) {
         setActionFailed(true);
@@ -295,6 +307,8 @@ function ReportGroupCard({ group, status, onUpdated }: {
     setSaving(true);
     setActionFailed(false);
     try {
+      const identity = await supabase.auth.getUser();
+      if (identity.error || identity.data.user?.id !== adminId) { setActionFailed(true); return; }
       const { data, error } = await supabase.rpc("admin_update_support_submission", {
         p_submission_id: group.representative_id, p_status: nextStatus,
         p_resolution: nextStatus === "resolved" ? resolution : null,
@@ -376,20 +390,12 @@ function ReportGroupCard({ group, status, onUpdated }: {
         </label>}        {moderation && <div className={styles.actions}>
           <button type="button" className={styles.secondary}
             disabled={saving || moderation.isHidden || !group.actionable_submission_id || !moderationReasonCode || detailError || details.length === 0}
-            onClick={() => {
-              if (window.confirm(language === "zh" ? "确认下架这条记录？" : "Hide this record?")) {
-                void moderateRecord("hide");
-              }
-            }}>
+            onClick={() => setDecision({ action: "hide", key: decisionKey })}>
             {language === "zh" ? "下架记录" : "Hide record"}
           </button>
           <button type="button" className={styles.secondary}
             disabled={saving || !moderation.isHidden}
-            onClick={() => {
-              if (window.confirm(language === "zh" ? "确认恢复这条记录的公开资格？" : "Restore this record's public eligibility?")) {
-                void moderateRecord("restore");
-              }
-            }}>
+            onClick={() => setDecision({ action: "restore", key: decisionKey })}>
             {language === "zh" ? "恢复记录" : "Restore record"}
           </button>
         </div>}
@@ -424,10 +430,29 @@ function ReportGroupCard({ group, status, onUpdated }: {
       </div>}
       {actionFailed && <p role="alert" className={styles.error}>{copy.actionError}</p>}
     </>}
+    <ConfirmDialog
+      open={decisionCurrent}
+      title={decision?.action === "hide" ? (language === "zh" ? "下架记录" : "Hide record")
+        : decision?.action === "restore" ? (language === "zh" ? "恢复记录" : "Restore record") : copy.markResult}
+      message={decision?.action === "hide" ? (language === "zh" ? "确认下架这条记录？" : "Hide this record?")
+        : decision?.action === "restore" ? (language === "zh" ? "确认恢复这条记录的公开资格？" : "Restore this record's public eligibility?") : copy.confirmGroup}
+      danger={decision?.action === "hide"}
+      confirmDisabled={saving}
+      cancelDisabled={saving}
+      onClose={() => setDecision(null)}
+      onConfirm={async () => {
+        if (!decisionCurrent || !decision || saving) return;
+        try {
+          if (decision.action === "resolve") await update("resolved", true);
+          else if (decision.action === "hide" && canTakeReportAction && !moderation?.isHidden) await moderateRecord("hide");
+          else if (decision.action === "restore" && moderation?.isHidden) await moderateRecord("restore");
+        } finally { setDecision(null); }
+      }}
+    />
   </article>;
 }
 
-function QueueItems({ kind, status }: { kind: SupportSubmissionKind; status: string }) {
+function QueueItems({ kind, status, adminId }: { kind: SupportSubmissionKind; status: string; adminId: string }) {
   const { language } = useLanguage();
   const copy = getSupportCopy(language);
   const [rows, setRows] = useState<AdminSupportSubmissionRow[]>([]);
@@ -456,12 +481,12 @@ function QueueItems({ kind, status }: { kind: SupportSubmissionKind; status: str
     {message && <p role="status" className={styles.message}>{message}</p>}
     {loading ? <p role="status">{copy.loading}</p> : error ? <p role="alert" className={styles.error}>{copy.loadError}</p> : <>
       {!rows.length && <p>{copy.empty}</p>}
-      {rows.map(row => <QueueItem key={`${row.id}-${row.updated_at}`} row={row} onUpdated={() => { setMessage(copy.updated); setRevision(value => value + 1); }} />)}
+      {rows.map(row => <QueueItem key={`${row.id}-${row.updated_at}`} row={row} adminId={adminId} onUpdated={() => { setMessage(copy.updated); setRevision(value => value + 1); }} />)}
     </>}
   </>;
 }
 
-function QueueItem({ row, onUpdated }: { row: AdminSupportSubmissionRow; onUpdated: () => void }) {
+function QueueItem({ row, adminId, onUpdated }: { row: AdminSupportSubmissionRow; adminId: string; onUpdated: () => void }) {
   const { language } = useLanguage();
   const copy = getSupportCopy(language);
   const [note, setNote] = useState(row.admin_note || "");
@@ -469,13 +494,20 @@ function QueueItem({ row, onUpdated }: { row: AdminSupportSubmissionRow; onUpdat
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
   const inFlight = useRef(false);
+  const [confirmKey, setConfirmKey] = useState<string | null>(null);
+  const currentKey = JSON.stringify([adminId, row.id, row.updated_at, row.status, resolution, note]);
+  const confirmCurrent = confirmKey === currentKey && row.status !== "resolved" && Boolean(resolution);
+  useEffect(() => { setConfirmKey(null); }, [currentKey]);
   const href = safeSupportUrl(row.target_url || row.source_url);
   const choices = row.kind === "report" ? ["no_violation", "duplicate", "closed"] : ["recorded", "action_taken", "not_planned", "closed"];
-  async function update(status: "needs_info" | "resolved") {
+  async function update(status: "needs_info" | "resolved", approved = false) {
     if (inFlight.current || (status === "resolved" && !resolution)) return;
-    if (status === "resolved" && !window.confirm(row.kind === "report" ? copy.confirmGroup : copy.confirm)) return;
+    if (status === "resolved" && !approved) { setConfirmKey(currentKey); return; }
+    if (status === "resolved" && !confirmCurrent) return;
     inFlight.current = true; setSaving(true); setFailed(false);
     try {
+      const identity = await supabase.auth.getUser();
+      if (identity.error || identity.data.user?.id !== adminId) { setFailed(true); return; }
       const { data, error } = await supabase.rpc("admin_update_support_submission", { p_submission_id: row.id, p_status: status, p_resolution: status === "resolved" ? resolution : null, p_admin_note: note.trim() || null });
       if (error || !(data as SupportRpcResult | null)?.ok) { setFailed(true); return; }
       onUpdated();
@@ -503,5 +535,13 @@ function QueueItem({ row, onUpdated }: { row: AdminSupportSubmissionRow; onUpdat
       </div>
     </div>}
     {failed && <p role="alert" className={styles.error}>{copy.actionError}</p>}
+    <ConfirmDialog open={confirmCurrent} title={copy.markResult}
+      message={row.kind === "report" ? copy.confirmGroup : copy.confirm}
+      confirmDisabled={saving} cancelDisabled={saving}
+      onClose={() => setConfirmKey(null)}
+      onConfirm={async () => {
+        if (!confirmCurrent || saving) return;
+        try { await update("resolved", true); } finally { setConfirmKey(null); }
+      }} />
   </article>;
 }
