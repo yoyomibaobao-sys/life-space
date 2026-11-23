@@ -965,7 +965,7 @@ export default function ArchivePage() {
   }
 
   async function updateArchiveStatus(item: ArchiveItem, nextStatus: "active" | "ended", approved = false) {
-    if (!isVerifiedOwner(item.user_id) || !requireCloudWriteAccess()) return;
+    if (!item.user_id || !isVerifiedOwner(item.user_id) || !requireCloudWriteAccess()) return;
     const isEnding = nextStatus === "ended";
 
     if (isEnding && !approved) {
@@ -1009,7 +1009,7 @@ export default function ArchivePage() {
   }
 
   async function toggleArchivePublic(item: ArchiveItem, approved = false) {
-    if (!isVerifiedOwner(item.user_id)) return;
+    if (!item.user_id || !isVerifiedOwner(item.user_id)) return;
     const newValue = !item.is_public;
     if (newValue && !requireCloudWriteAccess()) return;
     if (newValue && !approved) {
