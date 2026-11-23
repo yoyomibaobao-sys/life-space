@@ -217,8 +217,8 @@ test("formal W4 staging workflow uses low-privilege public auth config and uploa
   assert.match(workflow, /CANDIDATE_VERSION_NOT_DEPLOYED=PASS/);
   assert.match(workflow, /candidate_version_not_found_after_upload/);
   assert.match(workflow, /unexpected_active_deployment_before_stage/);
-  assert.match(workflow, /assert\.equal\(latest\.id, "f43c05be-af86-403b-9359-ff9a6f6ec79c"/);
-  assert.match(workflow, /version_id: "d35f531f-6b90-4e4e-9fd7-131f94815bec"/);
+  assert.match(workflow, /assert\.equal\(latest\.id, "13f5ade5-db86-4fc1-ab26-e08b35ab5c1e"/);
+  assert.match(workflow, /version_id: "46ddec7c-f19c-445e-b692-1c6792894192"/);
   assert.match(workflow, /FORMAL_W4_VERSION_STAGED_NOT_DEPLOYED=PASS/);
   assert.doesNotMatch(workflow, /wrangler deploy|versions deploy|deploy --config dist\/server\/wrangler\.json/);
   assert.doesNotMatch(workflow, /^\s*schedule:/m);
