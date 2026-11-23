@@ -488,6 +488,15 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
   const [refundRows, setRefundRows] = useState<MembershipRefundQueueRow[]>([]);
   const [refundLoading, setRefundLoading] = useState(false);
   const [refundActionId, setRefundActionId] = useState<string | null>(null);
+  const [financeDecision, setFinanceDecision] = useState<{
+    kind: "payment-confirm" | "payment-update" | "refund-approve" | "refund-reject" | "refund-complete" | "manual";
+    adminId: string; key: string; message: string; step?: "input" | "confirm";
+  } | null>(null);
+  const [financeNote, setFinanceNote] = useState("");
+  const [financeAmount, setFinanceAmount] = useState("");
+  const [financeBusy, setFinanceBusy] = useState(false);
+  const financeLock = useRef(false);
+  useEffect(() => { setFinanceDecision(null); setFinanceNote(""); setFinanceAmount(""); }, [currentUserId, isAdmin]);
   const [operationsDashboard, setOperationsDashboard] =
     useState<AdminOperationsDashboard | null>(null);
   const [operationsLoading, setOperationsLoading] = useState(false);
@@ -748,12 +757,12 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
     }
   }
 
-  async function confirmPendingPayment(row: PendingPaymentQueueRow) {
-    if (pendingPaymentActionId) return;
-    const confirmed = window.confirm(
+  async function confirmPendingPayment(row: PendingPaymentQueueRow, approved = false) {
+    if (pendingPaymentActionId || row.status !== "submitted") return;
+    const message = (
       `${t.admin_memberships.confirm_submitted_payment_prefix}${row.email || (language === "zh" ? "未提供邮箱" : "Email not available")}${t.admin_memberships.confirm_submitted_payment_suffix}\n${row.order_number || ""}\n${formatPaymentAmount(row.amount, row.currency)}\n\n${t.admin_memberships.confirm_submitted_payment_notice}`
     );
-    if (!confirmed) return;
+    if (!approved) { openFinanceDecision("payment-confirm", JSON.stringify(row), message); return; }
 
     setPendingPaymentActionId(row.id);
     const { data, error } = await supabase.rpc(
@@ -777,12 +786,13 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
     setPendingPaymentActionId(null);
   }
 
-  async function requestPaymentUpdate(row: PendingPaymentQueueRow) {
-    if (pendingPaymentActionId) return;
-    const note = window.prompt(
-      t.admin_memberships.request_payment_update_prompt,
-      t.admin_memberships.request_payment_update_default
-    )?.trim();
+  async function requestPaymentUpdate(row: PendingPaymentQueueRow, suppliedNote?: string) {
+    if (pendingPaymentActionId || row.status !== "submitted") return;
+    if (suppliedNote === undefined) {
+      openFinanceDecision("payment-update", JSON.stringify(row), "", t.admin_memberships.request_payment_update_default);
+      return;
+    }
+    const note = suppliedNote.trim();
     if (!note) return;
 
     setPendingPaymentActionId(row.id);
@@ -817,15 +827,15 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
     await Promise.all(tasks);
   }
 
-  async function approveRefund(row: MembershipRefundQueueRow) {
+  async function approveRefund(row: MembershipRefundQueueRow, approved = false) {
     if (refundActionId || row.status !== "submitted") return;
-    const confirmed = window.confirm(
+    const message = (
       `${t.admin_memberships.refund_approve_confirm_prefix}${formatPaymentAmount(
         row.refund_amount,
         row.currency
       )}${t.admin_memberships.refund_approve_confirm_suffix}\n\n${t.admin_memberships.refund_approve_notice}`
     );
-    if (!confirmed) return;
+    if (!approved) { openFinanceDecision("refund-approve", JSON.stringify(row), message); return; }
 
     setRefundActionId(row.id);
     const { data, error } = await supabase.rpc(
@@ -844,9 +854,13 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
     setRefundActionId(null);
   }
 
-  async function rejectRefund(row: MembershipRefundQueueRow) {
+  async function rejectRefund(row: MembershipRefundQueueRow, suppliedNote?: string) {
     if (refundActionId || row.status !== "submitted") return;
-    const note = window.prompt(t.admin_memberships.refund_reject_prompt)?.trim();
+    if (suppliedNote === undefined) {
+      openFinanceDecision("refund-reject", JSON.stringify(row), "");
+      return;
+    }
+    const note = suppliedNote.trim();
     if (!note) return;
 
     setRefundActionId(row.id);
@@ -866,30 +880,31 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
     setRefundActionId(null);
   }
 
-  async function completeRefund(row: MembershipRefundQueueRow) {
+  async function completeRefund(row: MembershipRefundQueueRow, reference?: string, confirmedAmount?: string, approved = false) {
     if (refundActionId || row.status !== "approved_pending_refund") return;
     const expectedAmount = Number(row.refund_amount || 0).toFixed(2);
-    const refundReference = window.prompt(
-      t.admin_memberships.refund_reference_prompt
-    )?.trim();
+    if (reference === undefined || confirmedAmount === undefined) {
+      openFinanceDecision("refund-complete", JSON.stringify(row), "", "", expectedAmount, "input");
+      return;
+    }
+    const refundReference = reference.trim();
     if (!refundReference) return;
-
-    const amountText = window.prompt(
-      t.admin_memberships.refund_amount_prompt,
-      expectedAmount
-    )?.trim();
+    const amountText = confirmedAmount.trim();
     if (!amountText || Number(amountText) !== Number(expectedAmount)) {
       showToast(t.admin_memberships.refund_amount_mismatch);
       return;
     }
 
-    const confirmed = window.confirm(
+    const message = (
       `${t.admin_memberships.refund_complete_confirm_prefix}${formatPaymentAmount(
         expectedAmount,
         row.currency
       )}${t.admin_memberships.refund_complete_confirm_suffix}\n${refundReference}\n\n${t.admin_memberships.refund_complete_notice}`
     );
-    if (!confirmed) return;
+    if (!approved) {
+      setFinanceDecision((current) => current?.kind === "refund-complete" ? { ...current, message, step: "confirm" } : null);
+      return;
+    }
 
     setRefundActionId(row.id);
     const { data, error } = await supabase.rpc(
@@ -1347,7 +1362,7 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
     }
   }
 
-  async function handleCreatePayment() {
+  async function handleCreatePayment(approved = false) {
     if (!selected || paymentSaving || paymentSubmittingRef.current) return;
 
     const amountValue = Number(paymentAmount || 0);
@@ -1402,7 +1417,11 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
       t.admin_memberships.confirm_payment_notice,
     ].join("\n");
 
-    if (!window.confirm(confirmText)) return;
+    if (!approved) {
+      openFinanceDecision("manual", manualPaymentKey(finalPaymentReference), confirmText);
+      return;
+    }
+    if (financeDecision?.kind !== "manual" || financeDecision.key !== manualPaymentKey(finalPaymentReference)) return;
 
     paymentSubmittingRef.current = true;
     setPaymentSaving(true);
@@ -1464,6 +1483,61 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
     } finally {
       paymentSubmittingRef.current = false;
       setPaymentSaving(false);
+    }
+  }
+
+  function manualPaymentKey(reference = paymentReference.trim()) {
+    return JSON.stringify([selected?.user_id, paymentPlan, paymentAmount, paymentCurrency, paymentMethod,
+      reference, paymentNote, paymentPaidAtDate, paymentServiceMonths, storageLimitBytes, baseMarketPostLimit]);
+  }
+  function openFinanceDecision(kind: NonNullable<typeof financeDecision>["kind"], key: string, message: string,
+    note = "", amount = "", step?: "input" | "confirm") {
+    if (!isAdmin || checking || !currentUserId || financeLock.current || financeDecision) return;
+    setFinanceNote(note);
+    setFinanceAmount(amount);
+    setFinanceDecision({ kind, adminId: currentUserId, key, message, step });
+  }
+  const financeOwnerCurrent = Boolean(financeDecision && isAdmin && !checking && financeDecision.adminId === currentUserId);
+  const financePaymentRow = financeOwnerCurrent && financeDecision?.kind.startsWith("payment-") && !pendingPaymentLoading
+    ? pendingPaymentRows.find((row) => JSON.stringify(row) === financeDecision.key && row.status === "submitted") : undefined;
+  const financeRefundRow = financeOwnerCurrent && financeDecision?.kind.startsWith("refund-") && !refundLoading
+    ? refundRows.find((row) => JSON.stringify(row) === financeDecision.key &&
+        row.status === (financeDecision.kind === "refund-complete" ? "approved_pending_refund" : "submitted")) : undefined;
+  const financeManualCurrent = financeOwnerCurrent && financeDecision?.kind === "manual" && Boolean(selected) &&
+    financeDecision.key === manualPaymentKey();
+  const financeCurrent = Boolean(financePaymentRow || financeRefundRow || financeManualCurrent);
+  const financeNeedsNote = financeDecision?.kind === "payment-update" || financeDecision?.kind === "refund-reject";
+  const financeCompleteInput = financeDecision?.kind === "refund-complete" && financeDecision.step === "input";
+  const financeInputsValid = financeNeedsNote ? Boolean(financeNote.trim())
+    : financeCompleteInput ? Boolean(financeNote.trim() && financeAmount.trim() &&
+        Number(financeAmount) === Number(financeRefundRow?.refund_amount || 0)) : true;
+
+  async function applyFinanceDecision() {
+    const target = financeDecision;
+    if (!target || !financeCurrent || !financeInputsValid || financeLock.current) return;
+    financeLock.current = true;
+    setFinanceBusy(true);
+    let keepOpen = false;
+    try {
+      const identity = await supabase.auth.getUser();
+      if (identity.error || identity.data.user?.id !== target.adminId) {
+        showToast(t.admin_memberships.verify_admin_failed);
+        return;
+      }
+      if (target.kind === "payment-confirm" && financePaymentRow) await confirmPendingPayment(financePaymentRow, true);
+      else if (target.kind === "payment-update" && financePaymentRow) await requestPaymentUpdate(financePaymentRow, financeNote);
+      else if (target.kind === "refund-approve" && financeRefundRow) await approveRefund(financeRefundRow, true);
+      else if (target.kind === "refund-reject" && financeRefundRow) await rejectRefund(financeRefundRow, financeNote);
+      else if (target.kind === "refund-complete" && financeRefundRow) {
+        await completeRefund(financeRefundRow, financeNote, financeAmount, target.step === "confirm");
+        keepOpen = target.step === "input";
+      } else if (target.kind === "manual" && financeManualCurrent) await handleCreatePayment(true);
+    } catch (error) {
+      showToast(describeSupabaseError(error, language) || (language === "zh" ? "操作失败" : "Operation failed"));
+    } finally {
+      financeLock.current = false;
+      setFinanceBusy(false);
+      if (!keepOpen) setFinanceDecision(null);
     }
   }
 
@@ -2399,7 +2473,7 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
                   </label>
 
                   <div style={{ ...actionRowStyle, marginTop: 12 }}>
-                    <button type="button" style={primaryButtonStyle} onClick={handleCreatePayment} disabled={paymentSaving}>
+                    <button type="button" style={primaryButtonStyle} onClick={() => void handleCreatePayment()} disabled={paymentSaving}>
                       {paymentSaving
                         ? t.admin_memberships.confirming
                         : t.admin_memberships.confirm_and_open}
@@ -2596,6 +2670,34 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
         )}
       </section>
 
+      <ConfirmDialog
+        open={financeCurrent}
+        title={financeDecision?.kind === "refund-complete" ? (language === "zh" ? "确认退款完成" : "Complete refund")
+          : financeDecision?.kind === "refund-reject" ? (language === "zh" ? "拒绝退款" : "Reject refund")
+          : financeDecision?.kind === "refund-approve" ? (language === "zh" ? "批准退款" : "Approve refund")
+          : financeDecision?.kind === "payment-update" ? (language === "zh" ? "要求补充付款资料" : "Request payment update")
+          : (language === "zh" ? "确认付款" : "Confirm payment")}
+        message={financeDecision?.message || ""}
+        confirmText={financeCompleteInput ? (language === "zh" ? "下一步" : "Next") : t.confirm}
+        confirmDisabled={financeBusy || !financeInputsValid}
+        cancelDisabled={financeBusy}
+        danger={financeDecision?.kind === "refund-reject"}
+        onClose={() => setFinanceDecision(null)}
+        onConfirm={applyFinanceDecision}
+      >
+        {financeNeedsNote || financeCompleteInput ? <div style={{ display: "grid", gap: 10 }}>
+          <input value={financeNote} onChange={(event) => setFinanceNote(event.target.value)}
+            placeholder={financeCompleteInput ? t.admin_memberships.refund_reference_prompt : financeDecision?.kind === "refund-reject"
+              ? t.admin_memberships.refund_reject_prompt : t.admin_memberships.request_payment_update_prompt}
+            aria-label={financeCompleteInput ? t.admin_memberships.refund_reference_prompt : (language === "zh" ? "审核说明" : "Review note")}
+            style={inputStyle} disabled={financeBusy} />
+          {financeCompleteInput ? <input value={financeAmount} onChange={(event) => setFinanceAmount(event.target.value)}
+            inputMode="decimal" aria-label={t.admin_memberships.refund_amount_prompt}
+            placeholder={t.admin_memberships.refund_amount_prompt} style={inputStyle} disabled={financeBusy} /> : null}
+          {financeCompleteInput && financeAmount.trim() && Number(financeAmount) !== Number(financeRefundRow?.refund_amount || 0)
+            ? <span role="alert" style={{ fontSize: 13, color: "#a34f48" }}>{t.admin_memberships.refund_amount_mismatch}</span> : null}
+        </div> : null}
+      </ConfirmDialog>
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title={t.admin_memberships.delete_membership}
