@@ -19,6 +19,11 @@ test("a visitor sees the plant basic overview while Android auth never resolves"
       if (!(index in states)) states[index] = typeof initial === "function" ? initial() : initial;
       return [states[index], (value) => { states[index] = typeof value === "function" ? value(states[index]) : value; }];
     },
+    useRef(initial) {
+      const index = slot++;
+      if (!(index in states)) states[index] = { current: initial };
+      return states[index];
+    },
     useMemo: (compute) => compute(),
     useEffect: (effect) => { effects.push(effect); },
   };
@@ -74,7 +79,8 @@ test("a visitor sees the plant basic overview while Android auth never resolves"
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(calls, ["get_public_plant_catalog"]);
   assert.equal(states[3], "先从少量罗勒开始观察。");
-  assert.equal(states[17], false);
+  assert.equal(states[16], false);
+  assert.equal(states[17], "loading");
   assert.equal(states[0].common_name, "罗勒");
   slot = 0;
   const rendered = PlantDetailContent(props);
