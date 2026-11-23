@@ -215,7 +215,7 @@ jobs:
           set -euo pipefail
           # Current production Worker was last updated through the script API; strict mode would reject a safe version upload.
           # The generated config is already checked above for exact production bindings and gates.
-          npx wrangler versions upload --message "Registered permissions and photo quality ${GITHUB_SHA}" --config dist/server/wrangler.json --keep-vars
+          npx wrangler versions upload --config dist/server/wrangler.json --keep-vars --message "Registered permissions and photo quality ${GITHUB_SHA}"
           echo "FORMAL_W4_VERSION_STAGED_NOT_DEPLOYED=PASS"
       - name: Verify candidate is staged and active production traffic is unchanged
         shell: bash
