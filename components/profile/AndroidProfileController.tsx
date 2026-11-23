@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import MobileProfileView from "@/components/profile/MobileProfileView";
+import AppConfirmDialog from "@/components/mobile/AppConfirmDialog";
 import AndroidCloudTrialEntry from "@/components/profile/AndroidCloudTrialEntry";
 import {
   androidProfileIdentityAvatarFallbackStyle,
@@ -51,6 +52,17 @@ export default function AndroidProfileController({ snapshot, online, signedIn, o
   const [module, setModule] = useState<MobileProfileModule | null>(initialModule || null);
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
+  const [exportConfirmation, setExportConfirmation] = useState<{ ownerId: string; question: string; timeZone: string; revision: number } | null>(null);
+  const exportScope = useRef({ ownerId: snapshot.userId, online, signedIn, module, revision: 0 });
+  if (exportScope.current.ownerId !== snapshot.userId || exportScope.current.online !== online ||
+      exportScope.current.signedIn !== signedIn || exportScope.current.module !== module) {
+    exportScope.current = { ownerId: snapshot.userId, online, signedIn, module, revision: exportScope.current.revision + 1 };
+  }
+  useEffect(() => { setExportConfirmation(null); }, [snapshot.userId, online, signedIn, module]);
+  const currentExport = (ownerId: string, revision: number) => {
+    const scope = exportScope.current;
+    return scope.ownerId === ownerId && scope.revision === revision && scope.online && scope.signedIn && scope.module === "backup";
+  };
   const [editingProfile, setEditingProfile] = useState<"username" | "country" | "region" | "city" | null>(null);
   const cancelBlurSaveRef = useRef(false);
   const [name, setName] = useState("");
@@ -184,7 +196,9 @@ export default function AndroidProfileController({ snapshot, online, signedIn, o
   }
 
   async function exportCloudZip() {
-    if (!online || !signedIn || !snapshot.userId || exporting) return;
+    if (!online || !signedIn || !snapshot.userId || exporting || exportConfirmation) return;
+    const ownerId = snapshot.userId;
+    const revision = exportScope.current.revision;
     setExporting(true);
     setExportStatus("");
     try {
@@ -201,16 +215,42 @@ export default function AndroidProfileController({ snapshot, online, signedIn, o
       const question = language === "zh"
         ? `导出本人全部云项目：${estimate.projects} 个项目、${estimate.records} 条记录、${estimate.media} 个媒体文件（预计 ${size}）。继续保存 ZIP？`
         : `Export all your cloud projects: ${estimate.projects} projects, ${estimate.records} records and ${estimate.media} media files (about ${size}). Save the ZIP?`;
-      if (!window.confirm(question)) return;
-      setExportStatus(language === "zh" ? "正在生成和下载云端 ZIP…" : "Preparing and downloading cloud ZIP…");
-      const saved = await saveAndroidCloudExport(request);
-      setExportStatus(saved.cancelled ? "" : (language === "zh" ? "ZIP 已保存到所选位置。" : "ZIP saved to the selected location."));
+      if (currentExport(ownerId, revision)) setExportConfirmation({ ownerId, question, timeZone, revision });
     } catch (cause) {
       const unavailable = cause instanceof Error &&
         ["matching_export_service_required", "qa_export_to_production_rejected"].includes(cause.message);
       setExportStatus(unavailable
         ? (language === "zh" ? "此测试环境尚未配置匹配的云端导出服务。" : "This build has no matching cloud export service.")
         : (language === "zh" ? "导出失败，请检查网络、登录状态及保存空间后重试。" : "Export failed. Check your connection, session and available storage."));
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function confirmCloudExport() {
+    const target = exportConfirmation;
+    setExportConfirmation(null);
+    if (!target || exporting || !currentExport(target.ownerId, target.revision)) return;
+    setExporting(true);
+    setExportStatus("");
+    try {
+      // Never reuse a token acquired before the user confirmed the export.
+      const identity = await supabase.auth.getUser();
+      const session = await supabase.auth.getSession();
+      if (!currentExport(target.ownerId, target.revision) || identity.error ||
+          identity.data.user?.id !== target.ownerId || session.error ||
+          session.data.session?.user.id !== target.ownerId || !session.data.session.access_token) {
+        throw new Error(language === "zh" ? "请重新登录后再导出。" : "Sign in again to export.");
+      }
+      setExportStatus(language === "zh" ? "正在生成和下载云端 ZIP…" : "Preparing and downloading cloud ZIP…");
+      const saved = await saveAndroidCloudExport(cloudExportRequest(session.data.session.access_token, target.timeZone));
+      if (currentExport(target.ownerId, target.revision)) {
+        setExportStatus(saved.cancelled ? "" : (language === "zh" ? "ZIP 已保存到所选位置。" : "ZIP saved to the selected location."));
+      }
+    } catch {
+      if (currentExport(target.ownerId, target.revision)) {
+        setExportStatus(language === "zh" ? "导出失败，请检查网络、登录状态及保存空间后重试。" : "Export failed. Check your connection, session and available storage.");
+      }
     } finally {
       setExporting(false);
     }
@@ -224,7 +264,7 @@ export default function AndroidProfileController({ snapshot, online, signedIn, o
     ? locationDisplayParts.join(" · ")
     : buildRegionDisplay(locationParts, language);
 
-  return <MobileProfileView
+  return <><MobileProfileView
     email={snapshot.email} avatarUrl={profile?.avatar_url || snapshot.avatarUrl}
     username={profile?.username || snapshot.username || t.profile.unset_username}
     accountNumber={accountNumber}
@@ -372,7 +412,17 @@ export default function AndroidProfileController({ snapshot, online, signedIn, o
       {online ? <div style={{ display: "grid", gap: 10 }}>
         <button type="button" style={accountDeleteButtonStyle} onClick={() => void Browser.open({ url: "https://life-space.uk/profile#profile-module-account" })}>{t.profile.delete_account}</button>
       </div> : <p>{needNetwork}</p>}</div> : null}
-  </MobileProfileView>;
+  </MobileProfileView>
+    <AppConfirmDialog
+      open={Boolean(exportConfirmation && !exporting && currentExport(exportConfirmation.ownerId, exportConfirmation.revision))}
+      title={language === "zh" ? "导出云端资料" : "Export cloud data"}
+      message={exportConfirmation?.question}
+      cancelLabel={t.cancel}
+      confirmLabel={language === "zh" ? "保存 ZIP" : "Save ZIP"}
+      onCancel={() => setExportConfirmation(null)}
+      onConfirm={() => void confirmCloudExport()}
+    />
+  </>;
 }
 
 const localSpacePreferenceRowStyle: CSSProperties = {
