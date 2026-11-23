@@ -26,7 +26,7 @@ import type {
 } from "@/lib/experience-card-types";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
 import {
-  canCreateMembershipContent,
+  hasActivePlus,
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
@@ -489,7 +489,7 @@ function ExperienceCardEditorBody({
   const hasChanges = !cardId || currentSnapshot !== initialSnapshot;
   const canPersist =
     Boolean(archive) &&
-    canCreateMembershipContent(membership) &&
+    (Boolean(cardId) || hasActivePlus(membership)) &&
     title.trim().length >= 1 &&
     title.trim().length <= 120 &&
     selectedRecords.length >= 3 &&
@@ -763,7 +763,7 @@ function ExperienceCardEditorBody({
     );
   }
 
-  if (!canCreateMembershipContent(membership)) {
+  if (!cardId && !hasActivePlus(membership)) {
     const membershipMessage = (
       <section style={messageCardStyle}>
         <h1 style={titleStyle}>{t.experience.membership_required}</h1>

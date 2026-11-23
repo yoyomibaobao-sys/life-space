@@ -23,7 +23,7 @@ test("new local and cloud record photos share the 1800px quality-82 standard", a
   assert.match(compression, /RECORD_PHOTO_QUALITY = 0\.82/);
   assert.match(
     compression,
-    /standardizeRecordPhotoFile[\s\S]*maxWidthOrHeight: RECORD_PHOTO_MAX_EDGE[\s\S]*quality: RECORD_PHOTO_QUALITY/,
+    /standardizeRecordPhotoFile[\s\S]*maxWidthOrHeight: [^\n]*RECORD_PHOTO_MAX_EDGE[\s\S]*quality: [^\n]*RECORD_PHOTO_QUALITY/,
   );
 
   for (const file of [localDb, addRecord, archiveDetail]) {

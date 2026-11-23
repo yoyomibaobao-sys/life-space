@@ -72,7 +72,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
     <>
       {statsText ? <div style={statsStyle}>{statsText}</div> : null}
 
-      <div className="ls-sticky-workspace-controls" data-ls-sticky-workspace-controls="true">
+      <div className="ls-sticky-workspace-controls" data-ls-sticky-workspace-controls="true" data-includes-header={Boolean(headerSlot)}>
       {headerSlot ? <div className="ls-sticky-workspace-header">{headerSlot}</div> : null}
       <ArchiveSourceSwitcher
         options={sourceOptions}

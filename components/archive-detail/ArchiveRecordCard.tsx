@@ -968,7 +968,7 @@ function MobileRecordMediaGrid({
   canOpen = true,
   onOpen,
 }: {
-  mediaList: Array<{ url: string; alt: string }>;
+  mediaList: Array<{ id?: string; url: string; alt: string }>;
   mediaItems: MediaItem[];
   canOpen?: boolean;
   onOpen: (mediaIndex: number) => void;
@@ -980,10 +980,11 @@ function MobileRecordMediaGrid({
   return (
     <div style={mobileRecordMediaGridStyle}>
       {mediaList.map((media, mediaIndex) => {
-        const target = mediaItems[mediaIndex];
+        const target = mediaItems.find((item) => item.id === media.id);
         const image = (
             <GuardedRecordImage
               src={target?.display_thumb_url || media.url}
+              fallbackSrc={media.url}
               alt={media.alt}
               style={mobileRecordMediaImageStyle}
             />
@@ -1023,7 +1024,7 @@ function DesktopRecordMediaGrid({
   onOpen,
   onDeleteMedia,
 }: {
-  mediaList: Array<{ url: string; alt: string }>;
+  mediaList: Array<{ id?: string; url: string; alt: string }>;
   mediaItems: MediaItem[];
   mode: ArchiveMode;
   canDeleteMedia: boolean;
@@ -1044,7 +1045,7 @@ function DesktopRecordMediaGrid({
       }}
     >
       {mediaList.map((media, mediaIndex) => {
-        const target = mediaItems[mediaIndex];
+        const target = mediaItems.find((item) => item.id === media.id);
         return (
           <div
             key={media.url}
@@ -1063,6 +1064,7 @@ function DesktopRecordMediaGrid({
           >
             <GuardedRecordImage
               src={target?.display_thumb_url || media.url}
+              fallbackSrc={media.url}
               alt={media.alt}
               loading="lazy"
               decoding="async"

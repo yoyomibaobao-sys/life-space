@@ -11,10 +11,7 @@ import {
   getUserTypeLabel,
   getMembershipStatusLabel,
   getMembershipSummary,
-  normalizeCloudTrialClaimRpcResult,
-  normalizeCloudTrialOfferRpcResult,
   normalizeMembershipRpcResult,
-  type CloudTrialOffer,
   type MyMembership,
 } from "@/lib/membership";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -29,10 +26,6 @@ export default function MembershipPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [membershipLoadFailed, setMembershipLoadFailed] = useState(false);
-  const [trialOffer, setTrialOffer] = useState<CloudTrialOffer | null>(null);
-  const [trialOfferLoadFailed, setTrialOfferLoadFailed] = useState(false);
-  const [claimingTrial, setClaimingTrial] = useState(false);
-  const [trialClaimMessage, setTrialClaimMessage] = useState("");
   const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   useEffect(() => {
@@ -51,7 +44,6 @@ export default function MembershipPage() {
       setLoading(true);
       setAuthFailed(false);
       setMembershipLoadFailed(false);
-      setTrialOfferLoadFailed(false);
       try {
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (!active) return;
@@ -60,22 +52,13 @@ export default function MembershipPage() {
         setUserEmail(user?.email || "");
         if (!user) {
           setMembership(null);
-          setTrialOffer(null);
           return;
         }
-        const results = await Promise.allSettled([
-          supabase.rpc("get_my_membership"),
-          supabase.rpc("get_my_cloud_trial_offer"),
-        ]);
+        const result = await supabase.rpc("get_my_membership");
         if (!active) return;
-        const [memberResult, offerResult] = results;
-        const memberOk = memberResult.status === "fulfilled" && !memberResult.value.error;
-        const offerOk = offerResult.status === "fulfilled" && !offerResult.value.error;
-        setMembershipLoadFailed(!memberOk);
-        setMembership(memberOk ? normalizeMembershipRpcResult(memberResult.value.data) : null);
-        const offer = offerOk ? normalizeCloudTrialOfferRpcResult(offerResult.value.data) : null;
-        setTrialOfferLoadFailed(!offerOk || !offer);
-        setTrialOffer(offer);
+        const member = result.error ? null : normalizeMembershipRpcResult(result.data);
+        setMembershipLoadFailed(!member);
+        setMembership(member);
       } catch {
         if (active) setAuthFailed(true);
       } finally {
@@ -85,34 +68,6 @@ export default function MembershipPage() {
     void loadMembership();
     return () => { active = false; };
   }, [reloadKey]);
-
-  async function claimCloudTrial() {
-    if (claimingTrial || !trialOffer?.can_claim || trialOffer.claimed) return;
-    setClaimingTrial(true);
-    setTrialClaimMessage("");
-    try {
-      const { data, error } = await supabase.rpc("claim_my_cloud_trial");
-      if (error) throw error;
-      const result = normalizeCloudTrialClaimRpcResult(data);
-      if (!result?.ok) {
-        const reason = result?.reason;
-        setTrialClaimMessage(
-          reason === "email_not_confirmed" ? t.membership_page.trial_email_unconfirmed
-            : reason === "storage_safety_threshold" ? t.membership_page.trial_storage_paused
-              : reason === "membership_active" ? t.membership_page.trial_membership_active
-                : reason === "paid_membership_history" ? t.membership_page.trial_paid_history
-                  : t.membership_page.trial_claim_failed
-        );
-        return;
-      }
-      setTrialClaimMessage(t.membership_page.trial_claim_success);
-      setReloadKey((value) => value + 1);
-    } catch {
-      setTrialClaimMessage(t.membership_page.trial_claim_failed);
-    } finally {
-      setClaimingTrial(false);
-    }
-  }
 
   const endDate = getMembershipEndDate(membership);
   const daysRemaining = getDaysRemaining(endDate);
@@ -135,29 +90,6 @@ export default function MembershipPage() {
     ? `${Number(membership.market_post_limit || 0)}${t.membership_page.simultaneous_posts_suffix}`
     : t.membership_page.zero_posts;
   const isLocalFreeUser = Boolean(userId && !membership && !membershipLoadFailed);
-  const trialOfferStatusText = trialOffer?.claimed
-    ? trialOffer.lifecycle_status === "converted_to_paid"
-      ? t.membership_page.trial_converted_to_paid
-      : trialOffer.lifecycle_status === "cleanup_completed"
-        ? t.membership_page.trial_cleanup_completed
-        : trialOffer.lifecycle_status === "cleanup_in_progress" ||
-            trialOffer.lifecycle_status === "cleanup_due"
-          ? t.membership_page.trial_cleanup_in_progress
-          : trialOffer.lifecycle_status === "handling_period"
-            ? t.membership_page.trial_handling_period
-            : t.membership_page.trial_already_claimed
-    : trialOffer?.reason === "email_not_confirmed"
-      ? t.membership_page.trial_email_unconfirmed
-      : trialOffer?.reason === "membership_active"
-        ? t.membership_page.trial_membership_active
-        : trialOffer?.reason === "paid_membership_history"
-          ? t.membership_page.trial_paid_history
-        : trialOffer?.reason === "storage_safety_threshold"
-          ? t.membership_page.trial_storage_paused
-          : trialOffer?.can_claim
-            ? t.membership_page.trial_available
-            : t.membership_page.trial_unavailable;
-
   return (
     <main style={isMobileViewport ? mobilePageStyle : pageStyle}>
       <section style={isMobileViewport ? mobileHeroStyle : heroStyle}>
@@ -189,7 +121,7 @@ export default function MembershipPage() {
             <p style={mutedTextStyle}>
               {membershipLoadFailed
                 ? t.membership_page.load_failed
-                : getMembershipSummary(membership, language, trialOfferLoadFailed ? null : trialOffer?.lifecycle_status)}
+                : getMembershipSummary(membership, language)}
             </p>
           </div>
 
@@ -218,9 +150,7 @@ export default function MembershipPage() {
               label={t.membership_page.storage_capacity}
               value={membershipLoadFailed ? "—" : membership ? storageLimitText : "0 B"}
               hint={
-                membership?.plan === "trial"
-                  ? t.membership_page.trial_storage_hint
-                  : t.membership_page.cloud_storage_hint
+                t.membership_page.cloud_storage_hint
               }
               compact={isMobileViewport}
             />
@@ -237,57 +167,6 @@ export default function MembershipPage() {
               {t.membership_page.local_user_notice}
             </div>
           ) : null}
-
-          <div id="cloud-trial" style={{ scrollMarginTop: 90 }}>
-          {trialOfferLoadFailed ? (
-            <div style={trialClaimCardStyle} role="status">
-              <p>{language === "en" ? "Could not read cloud trial availability." : "暂时无法读取云端体验资格。"}</p>
-              <button type="button" style={primaryButtonStyle} onClick={() => setReloadKey((value) => value + 1)}>
-                {language === "en" ? "Try again" : "重新读取"}
-              </button>
-            </div>
-          ) : trialOffer ? (
-            <div style={trialClaimCardStyle}>
-              <div>
-                <div style={sectionLabelStyle}>{t.membership_page.trial_claim_eyebrow}</div>
-                <strong style={trialClaimTitleStyle}>{t.membership_page.trial_claim_title}</strong>
-                <p style={trialClaimTextStyle}>{t.membership_page.trial_claim_description}</p>
-                <p style={trialClaimStatusStyle}>{trialOfferStatusText}</p>
-                {trialOffer.claimed && trialOffer.trial_ends_at ? (
-                  <p style={trialClaimTextStyle}>
-                    {t.membership_page.trial_valid_until_prefix}
-                    {formatMembershipDate(trialOffer.trial_ends_at, language)}
-                  </p>
-                ) : null}
-                {trialOffer.claimed &&
-                trialOffer.cleanup_due_at &&
-                trialOffer.lifecycle_status !== "converted_to_paid" &&
-                trialOffer.lifecycle_status !== "cleanup_completed" ? (
-                  <p style={trialClaimTextStyle}>
-                    {t.membership_page.trial_handling_until_prefix}
-                    {formatMembershipDate(trialOffer.cleanup_due_at, language)}
-                  </p>
-                ) : null}
-                {trialClaimMessage ? (
-                  <p style={trialClaimStatusStyle}>{trialClaimMessage}</p>
-                ) : null}
-              </div>
-              {trialOffer.can_claim && !trialOffer.claimed ? (
-                <button
-                  type="button"
-                  style={primaryButtonStyle}
-                  onClick={() => void claimCloudTrial()}
-                  disabled={claimingTrial}
-                >
-                  {claimingTrial
-                    ? t.membership_page.trial_claiming
-                    : t.membership_page.trial_claim_action}
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-
-          </div>
 
           {shouldShowRenewalNotice ? (
             <div style={renewalNoticeStyle}>
@@ -377,14 +256,6 @@ export default function MembershipPage() {
         </section>
       ) : (
         <>
-          <section style={trialNoticeStyle}>
-            <div style={sectionLabelStyle}>{t.membership_page.trial_label}</div>
-            <h2 style={noteTitleStyle}>{t.membership_page.trial_title}</h2>
-            <p style={mutedTextStyle}>
-              {t.membership_page.trial_description}
-            </p>
-          </section>
-
           <section style={plansGridStyle}>
             {t.membership_page.plans.map((plan, index) => (
               <PlanCard

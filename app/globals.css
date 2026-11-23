@@ -436,3 +436,18 @@ html[data-native-window-insets="true"] .app-status-bar-surface {
     isolation: isolate;
   }
 }
+
+@media (max-width: 759px) {
+  .ls-sticky-workspace-controls[data-includes-header="true"] { top: var(--app-safe-area-top, 0px); }
+}
+
+[data-w5-pending-item] { background: #fff; }
+[data-w5-pending-item] button, [data-w5-pending-only-detail] > button {
+  border: 1px solid #dbe0d8;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: #f6f9f3;
+  color: #355a34;
+  font: inherit;
+}
+[data-w5-pending-item] button:disabled { opacity: .55; }

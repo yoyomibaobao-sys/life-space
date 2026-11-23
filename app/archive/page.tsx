@@ -2459,21 +2459,7 @@ export default function ArchivePage() {
         margin: "0 auto",
       }}
     >
-      {isMobileViewport ? (
-        <PersonalSpaceMobileIdentity
-          avatarUrl={spaceProfile?.avatar_url}
-          username={spaceProfile?.username || t.nav.username_unset}
-          membershipLabel={membershipLabel}
-          storageUsagePercent={storageUsagePercent}
-          storageTotalLabel={storageTotalLabel}
-          experienceLabel={t.archive_workspace.experience_cards}
-          experienceCardCount={experienceCardCount}
-          profileHref="/profile"
-          experienceHref="/experience-cards"
-          notificationSlot={<MobileNotificationLink />}
-          language={language}
-        />
-      ) : (
+      {isMobileViewport ? null : (
         <section style={personalSpaceIdentityStyle(false)}>
           <div style={personalSpaceIdentityMainStyle}>
             {spaceProfile?.avatar_url ? (
@@ -2503,6 +2489,21 @@ export default function ArchivePage() {
       {currentOwnerContext && !membershipLoading && !membershipFailed && !membership ? <CloudTrialEntry /> : null}
 
       <ArchiveWorkspaceTemplate<ArchiveSourceFilter>
+        headerSlot={isMobileViewport ? (
+        <PersonalSpaceMobileIdentity
+          avatarUrl={spaceProfile?.avatar_url}
+          username={spaceProfile?.username || t.nav.username_unset}
+          membershipLabel={membershipLabel}
+          storageUsagePercent={storageUsagePercent}
+          storageTotalLabel={storageTotalLabel}
+          experienceLabel={t.archive_workspace.experience_cards}
+          experienceCardCount={experienceCardCount}
+          profileHref="/profile"
+          experienceHref="/experience-cards"
+          notificationSlot={<MobileNotificationLink />}
+          language={language}
+        />
+        ) : null}
         sourceOptions={[
           { value: "cloud", label: t.archive_workspace.cloud_space, count: isCapacitorAndroid() ? w5Workspace.counts.cloud : archiveCount },
           ...(isCapacitorAndroid() && currentOwnerContext?.userId ? [{ value: "pending" as const, label: t.archive_workspace.temporary_space, count: w5Workspace.pending.length }] : []),

@@ -249,3 +249,7 @@ button:disabled { opacity: 0.55; }
     isolation: isolate;
   }
 }
+
+@media (max-width: 759px) {
+  .ls-sticky-workspace-controls[data-includes-header="true"] { top: var(--app-safe-area-top, 0px); }
+}

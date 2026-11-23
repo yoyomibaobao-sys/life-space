@@ -14,12 +14,6 @@ import type {
 } from "@/lib/archive-detail-types";
 import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
 import UiIcon from "@/components/ui/UiIcon";
-import {
-  canCreateMembershipContent,
-  getCreateContentBlockedText,
-  normalizeMembershipRpcResult,
-  type MyMembership,
-} from "@/lib/membership";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type CommentItem = RecordComment & {
@@ -47,7 +41,7 @@ export default function ArchiveCommentsSection({
   showStatusHint?: boolean;
   compactMobile?: boolean;
 }) {
-  const { language, t } = useLanguage();
+  const { t } = useLanguage();
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
@@ -55,15 +49,7 @@ export default function ArchiveCommentsSection({
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
-  const [membership, setMembership] = useState<MyMembership | null>(null);
-  const [membershipLoading, setMembershipLoading] = useState(false);
-
-  const membershipBlocked = Boolean(
-    currentUserId &&
-      !membershipLoading &&
-      !canCreateMembershipContent(membership),
-  );
-  const canWrite = Boolean(currentUserId && !membershipLoading && !membershipBlocked);
+  const canWrite = Boolean(currentUserId);
   const canAdoptSuggestions = Boolean(
     currentUserId &&
     (recordStatusTag === "help" || recordStatusTag === "resolved"),
@@ -76,30 +62,6 @@ export default function ArchiveCommentsSection({
     void loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordId, currentUserId]);
-
-  useEffect(() => {
-    async function loadMembership() {
-      if (!currentUserId) {
-        setMembership(null);
-        setMembershipLoading(false);
-        return;
-      }
-
-      setMembershipLoading(true);
-      const { data, error } = await supabase.rpc("get_my_membership");
-
-      if (error) {
-        console.error("load comment membership error:", error);
-        setMembership(null);
-      } else {
-        setMembership(normalizeMembershipRpcResult(data));
-      }
-
-      setMembershipLoading(false);
-    }
-
-    void loadMembership();
-  }, [currentUserId]);
 
   useEffect(() => {
     if (!onCommentCountChange) return;
@@ -189,15 +151,6 @@ export default function ArchiveCommentsSection({
       return;
     }
 
-    if (membershipLoading) {
-      showToast(t.archive_comments.membership_loading);
-      return;
-    }
-
-    if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership, language));
-      return;
-    }
 
     setSubmitting(true);
     const { error } = await supabase.from("comments").insert({
@@ -275,15 +228,6 @@ export default function ArchiveCommentsSection({
       return;
     }
 
-    if (membershipLoading) {
-      showToast(t.archive_comments.membership_loading);
-      return;
-    }
-
-    if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership, language));
-      return;
-    }
 
     const { error } = await supabase.rpc("set_comment_adoption", {
       p_comment_id: comment.id,
@@ -380,19 +324,6 @@ export default function ArchiveCommentsSection({
           >
             {t.archive_comments.write_comment}
           </button>
-        ) : !compactMobile && membershipLoading && currentUserId ? (
-          <span style={{ fontSize: 12, color: "#8b9688" }}>
-            {t.archive_comments.membership_loading}{t.archive_comments.loading_suffix}
-          </span>
-        ) : !compactMobile && membershipBlocked ? (
-          <span style={{ fontSize: 12, color: "#9a6232" }}>
-            {getCreateContentBlockedText(membership, language)}
-            {t.archive_comments.membership_link_prefix}
-            <InternalLink href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
-              {t.archive_comments.learn_membership}
-            </InternalLink>
-            {t.archive_comments.membership_link_suffix}
-          </span>
         ) : !compactMobile ? (
           <span style={{ fontSize: 12, color: "#8b9688" }}>
             {t.archive_comments.login_to_comment}
@@ -624,19 +555,6 @@ export default function ArchiveCommentsSection({
                     </div>
                   </div>
                 </>
-              ) : membershipLoading && currentUserId ? (
-                <div style={{ fontSize: 12, color: "#7b8776" }}>
-                  {t.archive_comments.membership_loading}{t.archive_comments.loading_suffix}
-                </div>
-              ) : membershipBlocked ? (
-                <div style={{ fontSize: 12, color: "#7b8776", lineHeight: 1.7 }}>
-                  {getCreateContentBlockedText(membership, language)}
-                  {t.archive_comments.membership_link_prefix}{" "}
-                  <InternalLink href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
-                    {t.archive_comments.learn_membership}
-                  </InternalLink>
-                  {t.archive_comments.membership_link_suffix}
-                </div>
               ) : (
                 <div style={{ fontSize: 12, color: "#7b8776" }}>
                   {t.archive_comments.login_to_comment}

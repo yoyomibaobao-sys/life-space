@@ -26,7 +26,7 @@ export async function createLiveCloudArchive(input: {
     if (existing.data.user_id !== input.userId) throw new Error("云端项目标识冲突。");
     return input.id;
   }
-  const entries = await loadCloudProjectTaxonomy(input.userId);
+  const entries = input.subTagId || input.groupTagId ? await loadCloudProjectTaxonomy(input.userId) : [];
   const sub = entries.find((entry) => entry.kind === "subcategory" && entry.id === input.subTagId && entry.category === input.category);
   const group = entries.find((entry) => entry.kind === "group" && entry.id === input.groupTagId && entry.parentId === sub?.id);
   if ((input.subTagId && !sub) || (input.groupTagId && !group)) throw new Error("云端分组已变化，请重新选择。");
@@ -47,5 +47,5 @@ export async function createLiveCloudArchive(input: {
   // The response can be lost after a successful insert. Query the stable ID before retrying.
   const recovered = await supabase.from("archives").select("id,user_id").eq("id", input.id).maybeSingle();
   if (recovered.data?.id === input.id && recovered.data.user_id === input.userId) return input.id;
-  throw created.error || recovered.error || new Error("创建云端项目失败，请重试。");
+  throw new Error(created.error?.message || recovered.error?.message || "创建云端项目失败，请重试。");
 }

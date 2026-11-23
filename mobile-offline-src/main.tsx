@@ -2385,7 +2385,8 @@ function App() {
       project={{ ...base, href: undefined, visibilityLabel: badge, visibilityTone: "neutral", latestText: counts }}
       onClick={() => { if (sourceFilter === "pending" || item.creating) { setSourceFilter("pending"); setFocusedPendingKey(item.key); } else if (local) openDetail(local.id); else if (item.cloud) setScreen({ kind: "cloud-detail", archiveId: item.cloud.id }); }}
       mobileMode mobileShowCategoryBadge={false}
-      actionSlot={authenticatedOwnerContext ? <div className="action-row">
+    />}
+    {!focused && authenticatedOwnerContext ? <div className="action-row pending-project-actions">
         {online ? <button type="button" className="secondary-button compact-card-action"
           disabled={Boolean(syncingArchiveId)} onClick={() => void uploadPendingProject(item)}>
           {syncingArchiveId === item.key || syncingArchiveId === item.summaries[0]?.local_archive_id ? (language === "zh" ? "上传中…" : "Uploading…") : item.failed ? (language === "zh" ? "重试" : "Retry") : (language === "zh" ? "上传" : "Upload")}
@@ -2395,7 +2396,6 @@ function App() {
           title={!item.creating ? (language === "zh" ? "远端或修改状态未知，不能安全取消" : "Cannot safely cancel remote edits") : undefined}
           onClick={() => void cancelPendingCreatedProject(item)}>{language === "zh" ? "取消待上传" : "Cancel pending"}</button>
       </div> : null}
-    />}
     </div>;
   }
   function renderProjectActions(archive: CloudArchiveSummary | LocalArchiveSummary, source: "cloud" | "local" | "cache") {
@@ -2900,7 +2900,7 @@ function App() {
               : openCloudLogin("list-cloud")}>{copy.login}</button>
           </div>
         ) : (newProjectDestination === "live-cloud" || newProjectDestination === "pending-cloud") &&
-        !canCreateMembershipContent(membership) ? (
+        !canCreatePendingCloud && !canCreateMembershipContent(membership) ? (
           <div data-android-shell-page="cloud-create-access">
             <MobilePageHeaderView
               title={copy.newProject}
@@ -2926,12 +2926,13 @@ function App() {
               await loadList();
             } catch (error) {
               const message = error instanceof Error ? error.message : "";
-              if (message !== "SAF revision conflict." && message !== "SAF concurrent revision conflict.") throw error;
+              if (message === "SAF revision conflict." || message === "SAF concurrent revision conflict.") {
               console.error("SAF project committed; rereading the list after a revision conflict.", error);
               try { await loadList(); }
               catch (retryError) {
                 console.error("SAF project committed; opening it before the list refresh finishes.", retryError);
               }
+              } else { console.error("Project saved; list refresh failed.", error); }
             }
             showToast(
               archive.sync?.operation_kind === "create-archive"
@@ -2952,7 +2953,7 @@ function App() {
             }
           }}
           onLiveSaved={async (id) => {
-            await loadCloudList(authenticatedOwnerContext?.userId);
+            void loadCloudList(authenticatedOwnerContext?.userId).catch((error) => console.error("Project saved; list refresh failed.", error));
             finishCompletedFlow(COMPLETED_PROJECT_FLOW_KINDS, "cloud-detail", () => {
               setScreen({ kind: "cloud-detail", archiveId: id });
             });
@@ -3595,7 +3596,7 @@ function App() {
             </div>
             ) : null}
             <div className="choose-project-create-actions">
-              {localSpaceClosed ? null : (auth.status === "signed-out" ? ["login" as const] : projectCreationDestinations(online, auth.status === "signed-in", localSpaceEnabled, offlineOwnerRead).filter((destination) => destination !== "local-only")).map((destination) => <div key={destination} className="choose-project-create-item"><button type="button" className="primary-button" onClick={() => destination === "login" ? openCloudLogin("choose-project") : setScreen({ kind: "new-project", destination })}>{destination === "login" ? copy.cloudSignIn : copy.newProject}</button>{!online && destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</div>)}
+              {(auth.status === "signed-out" ? ["login" as const] : projectCreationDestinations(online, auth.status === "signed-in", localSpaceEnabled, offlineOwnerRead).filter((destination) => destination !== "local-only")).map((destination) => <div key={destination} className="choose-project-create-item"><button type="button" className="primary-button" onClick={() => destination === "login" ? openCloudLogin("choose-project") : setScreen({ kind: "new-project", destination })}>{destination === "login" ? copy.cloudSignIn : copy.newProject}</button>{!online && destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</div>)}
               <button type="button" className="secondary-button choose-project-cancel" onClick={() => { setQuickAddDraft(null); goList(); }}>{copy.cancel}</button>
             </div>
           </section>
@@ -4227,18 +4228,19 @@ function ProjectForm({
   const [localTaxonomy, setLocalTaxonomy] = useState<ProjectTaxonomyEntry[]>([]);
   const [liveTaxonomy, setLiveTaxonomy] = useState<ProjectTaxonomyEntry[]>(cloudTaxonomy);
   const [liveDepths, setLiveDepths] = useState<ArchiveCategoryDepths>(cloudDepths);
-  const [liveTaxonomyReady, setLiveTaxonomyReady] = useState(destination !== "live-cloud");
+  
   useEffect(() => {
     let active = true;
+    if (destination !== "local-only") return;
     void listVisibleLocalTaxonomyItems(owner ? { userId: owner.userId, email: owner.email, snapshotOnly: true } : null)
-      .then((rows) => { if (active) setLocalTaxonomy(mapLocalProjectTaxonomy(rows)); });
+      .then((rows) => { if (active) setLocalTaxonomy(mapLocalProjectTaxonomy(rows)); }).catch(() => { if (active) setError(copy.readFailed); });
     return () => { active = false; };
-  }, [owner]);
+  }, [destination, owner, copy.readFailed]);
   useEffect(() => {
     if (destination !== "live-cloud" || !owner?.userId) return;
     let active = true;
     void Promise.all([loadCloudProjectTaxonomy(owner.userId), getCloudArchiveCategoryDepths(owner.userId)]).then(([entries, depths]) => {
-      if (active) { setLiveTaxonomy(entries); setLiveDepths(depths); setLiveTaxonomyReady(true); }
+      if (active) { setLiveTaxonomy(entries); setLiveDepths(depths); }
     }).catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : copy.cloudLoadFailed); });
     return () => { active = false; };
   }, [destination, owner?.userId, copy.cloudLoadFailed]);
@@ -4282,9 +4284,6 @@ function ProjectForm({
     if (!systemName.trim()) {
       setError(language === "zh" ? "请选择或填写关联指引。" : "Choose or enter an associated guide.");
       return;
-    }
-    if (destination === "live-cloud" && !liveTaxonomyReady) {
-      setError(copy.cloudLoading); return;
     }
     const normalizedRegion = normalizePlantingRegion(plantingRegion);
     const hasRegionDraft = plantingRegion && Object.values(plantingRegion).some((value) => value.trim());
@@ -4416,7 +4415,7 @@ function ProjectForm({
           {error ? <section className="notice warning"><p>{error}</p></section> : null}
           <div className="submit-row">
             <button className="secondary-button" type="button" onClick={onCancel}>{copy.cancel}</button>
-            <button className="primary-button" type="submit" disabled={busy || !liveTaxonomyReady}>{busy ? copy.saving : copy.save}</button>
+            <button className="primary-button" type="submit" disabled={busy}>{busy ? copy.saving : copy.save}</button>
           </div>
         </form>
       </section>

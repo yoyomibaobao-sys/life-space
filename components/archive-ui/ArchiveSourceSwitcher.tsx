@@ -45,6 +45,7 @@ export default function ArchiveSourceSwitcher<T extends string>({
             minWidth: 0,
             whiteSpace: "nowrap",
             gridColumn: 4,
+            borderRadius: 999,
             boxShadow: "0 3px 9px rgba(79,132,75,0.16)",
           },
         },
@@ -77,7 +78,7 @@ function sourceSwitchStyle(singleLine: boolean, packedMobile = false): CSSProper
     margin: packedMobile ? "0 0 4px" : "0 0 12px",
     display: singleLine ? "grid" : "flex",
     gridTemplateColumns: singleLine
-      ? "repeat(3, minmax(0, 1fr)) auto"
+      ? packedMobile ? "max-content max-content minmax(0, 1fr) auto" : "repeat(3, minmax(0, 1fr)) auto"
       : undefined,
     alignItems: "center",
     gap: singleLine ? 6 : 8,

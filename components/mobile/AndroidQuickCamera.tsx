@@ -125,7 +125,7 @@ export default function AndroidQuickCamera({
         </button>
         <button type="button" onClick={onSkip} style={sideActionStyle}>
           <UiIcon name="arrow-right" size={24} />
-          <span>{language === "zh" ? "下一步" : "Next"}</span>
+          <span>{language === "zh" ? "跳过照片，下一步" : "Continue without photos"}</span>
         </button>
       </div>
     </section>

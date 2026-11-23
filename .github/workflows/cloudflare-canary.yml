@@ -189,9 +189,9 @@ jobs:
           assert.ok(Array.isArray(deployments.deployments) && deployments.deployments.length > 0, "active_deployment_missing");
           assert.ok(Array.isArray(versions.items), "worker_versions_missing");
           const latest = deployments.deployments[0];
-          assert.equal(latest.id, "13f5ade5-db86-4fc1-ab26-e08b35ab5c1e", "unexpected_active_deployment_before_stage");
+          assert.equal(latest.id, "b2074e5c-63be-4aec-9d31-d24592df1372", "unexpected_active_deployment_before_stage");
           assert.deepEqual(latest.versions, [{
-            version_id: "46ddec7c-f19c-445e-b692-1c6792894192",
+            version_id: "07605ef0-fb79-43ed-acc3-c9919047d88d",
             percentage: 100,
           }], "unexpected_active_worker_version_before_stage");
           assert.equal(latest.versions.reduce((sum, item) => sum + item.percentage, 0), 100, "active_traffic_not_100_percent");
@@ -215,7 +215,7 @@ jobs:
           set -euo pipefail
           # Current production Worker was last updated through the script API; strict mode would reject a safe version upload.
           # The generated config is already checked above for exact production bindings and gates.
-          npx wrangler versions upload --config dist/server/wrangler.json --keep-vars
+          npx wrangler versions upload --config dist/server/wrangler.json --keep-vars --message "Registered permissions and photo quality ${GITHUB_SHA}"
           echo "FORMAL_W4_VERSION_STAGED_NOT_DEPLOYED=PASS"
       - name: Verify candidate is staged and active production traffic is unchanged
         shell: bash

@@ -117,11 +117,8 @@ export function getUserTypeLabel({ signedIn, membership, loading = false, failed
   if (loading) return language === "en" ? "Loading…" : "读取中…";
   if (failed) return language === "en" ? "Unavailable" : "暂时无法读取";
   if (!signedIn) return language === "en" ? "Visitor" : "游客";
-  // An admin plan is a legacy access grant, not a paid customer tier.
-  if (membership?.plan === "admin") return language === "en" ? "Registered user" : "注册用户";
-  if (membership?.plan === "trial" && membership.can_create_content !== true) return language === "en" ? "Registered user" : "注册用户";
-  if (membership?.plan === "large") return "Plus";
-  return getMembershipPlanLabel(membership?.plan, language);
+  if (!membership) return language === "en" ? "Unavailable" : "暂时无法读取";
+  return hasActivePlus(membership) ? "Plus" : "Free";
 }
 
 export function getMembershipStatusLabel(
@@ -184,54 +181,12 @@ export function getMembershipEndDate(membership?: MyMembership | null) {
 export function getMembershipSummary(
   membership?: MyMembership | null,
   language: Language = "zh",
-  trialLifecycle?: CloudTrialOffer["lifecycle_status"]
 ) {
-  if (!membership) {
-    if (["cleanup_due", "cleanup_in_progress", "cleanup_completed"].includes(trialLifecycle || "")) {
-      return language === "en"
-        ? "The 30-day cloud trial handling period has ended. Trial cloud data is no longer accessible; local data remains available."
-        : "云体验30天处理期已结束，体验云资料不再可访问；本地资料不受影响。";
-    }
-    return language === "en"
-      ? "Registered user · Free local features"
-      : "注册用户 · 免费使用本地功能";
-  }
-
-  const label = getMembershipPlanLabel(membership.plan, language);
+  if (!membership) return language === "en" ? "Unavailable" : "暂时无法读取";
+  if (!hasActivePlus(membership)) return language === "en" ? "Free · 30 MB" : "Free · 永久 30MB";
+  const label = "Plus";
   const status = getMembershipStatusLabel(membership.status, language);
-  const endDate = getMembershipEndDate(membership);
-  const days = getDaysRemaining(endDate);
-
-  if (membership.plan === "trial") {
-    if (membership.can_create_content === false) {
-      if (trialLifecycle === "handling_period") {
-        return language === "en"
-          ? "The 90-day cloud trial has ended. During the 30-day read-only handling period, you can export or save your cloud projects locally one by one."
-          : "90天云体验已结束。30天只读处理期内可导出资料，或逐个保存本人云项目到本机。";
-      }
-      if (["cleanup_due", "cleanup_in_progress", "cleanup_completed"].includes(trialLifecycle || "")) {
-        return language === "en"
-          ? "The 30-day cloud trial handling period has ended. Trial cloud data is no longer accessible; local data remains available."
-          : "云体验30天处理期已结束，体验云资料不再可访问；本地资料不受影响。";
-      }
-      return language === "en"
-        ? "The 90-day cloud trial has ended. Connect to verify whether the 30-day handling period is still open."
-        : "90天云体验已结束。请联网确认是否仍处于30天处理期。";
-    }
-    return language === "en"
-      ? `${label} · ${status}. The 90-day trial ends ${formatMembershipDate(endDate, language)}; check the server for remaining time.`
-      : `${label} · ${status}。90天云体验截至 ${formatMembershipDate(endDate, language)}；剩余时间以云端为准。`;
-  }
-
-  if (membership.can_create_content === false) {
-    if (["basic", "large", "seller"].includes(membership.plan)) {
-      return language === "en"
-        ? `${label} · ${status}. Cloud data remains read-only for the long term; you can export or save projects locally one by one.`
-        : `${label} · ${status}。云端资料长期只读保留，可导出或逐个保存到本机。`;
-    }
-    return `${label} · ${status}`;
-  }
-
+  const days = getDaysRemaining(membership.paid_until);
   if (typeof days === "number") {
     return language === "en"
       ? `${label} · ${status}, ${days} days remaining.`
@@ -258,7 +213,7 @@ export function canCreateMembershipMarketPost(membership?: MyMembership | null) 
   return membership?.can_create_market_post === true;
 }
 
-export function canAccessMembershipGuidance(membership?: MyMembership | null) {
+export function hasActivePlus(membership?: MyMembership | null) {
   // B R08 paid plan/status and server write permission; retain C's current
   // paid_until guard. Free cloud write rights never grant full Guide access.
   if (membership?.can_create_content !== true ||

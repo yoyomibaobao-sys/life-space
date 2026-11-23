@@ -62,7 +62,7 @@ export function buildMediaList(
     .map((item) => ({
       id: item?.id,
       recordId: item?.record_id,
-      url: item?.display_url,
+      url: item?.display_url || item?.display_thumb_url,
     }))
     .filter((item): item is typeof item & { url: string } => Boolean(item.url))
     .map((item, index: number) => ({

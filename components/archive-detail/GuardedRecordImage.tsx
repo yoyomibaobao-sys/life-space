@@ -1,9 +1,14 @@
 "use client";
 
-import type { ComponentPropsWithoutRef } from "react";
+import { useState, type ComponentPropsWithoutRef } from "react";
 import { useGuardedRecordImage } from "@/lib/use-guarded-record-image";
 
-export default function GuardedRecordImage({ src, ...props }: ComponentPropsWithoutRef<"img">) {
-  const imageUrl = useGuardedRecordImage(typeof src === "string" ? src : undefined);
-  return <img {...props} src={typeof src === "string" ? imageUrl : src} />;
+export default function GuardedRecordImage({ src, fallbackSrc, ...props }: ComponentPropsWithoutRef<"img"> & { fallbackSrc?: string }) {
+  const [failed, setFailed] = useState<string>();
+  const source = typeof src === "string" && src === failed ? fallbackSrc : src;
+  const imageUrl = useGuardedRecordImage(typeof source === "string" ? source : undefined);
+  return <img {...props} src={typeof source === "string" ? imageUrl : source} onError={(event) => {
+    if (typeof src === "string" && fallbackSrc && fallbackSrc !== src) setFailed(src);
+    props.onError?.(event);
+  }} />;
 }

@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { photoQualities, defaultPhotoQuality, photoQualityLabel, type PhotoQuality } from "@/lib/record-photo-quality";
 import { supabase } from "@/lib/supabase";
 import { getAndroidAuthSnapshot, isConfirmedInvalidAndroidSession } from "@/lib/android-auth-state";
 import InternalLink from "@/components/navigation/InternalLink";
@@ -9,6 +10,7 @@ import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import {
+  hasActivePlus,
   canCreateMembershipContent,
   formatStorageBytes,
   getCreateContentBlockedText,
@@ -121,6 +123,7 @@ export default function AddRecord({
   const terminology = getArchiveCycleTerminology(archiveCategory, language);
   const [text, setText] = useState(initialNote);
   const [files, setFiles] = useState<File[]>([]);
+  const [qualities, setQualities] = useState(new Map<File, PhotoQuality>());
   const [filePreviews, setFilePreviews] = useState<SelectedPreview[]>([]);
   const [timeMode, setTimeMode] = useState("exif");
   const [customTime, setCustomTime] = useState("");
@@ -721,13 +724,19 @@ export default function AddRecord({
     setStorageUsedBytes(Number(data?.storage_used || 0));
   }
 
+  function selectedQuality(file: File, verified: MyMembership | null) {
+    if (!hasActivePlus(verified)) return "standard";
+    return qualities.get(file) ?? defaultPhotoQuality(membershipScope.current.ownerId);
+  }
+
   async function uploadMedia(
     recordId: string,
     userId: string,
     file: File,
     capturedAt: string | null,
+    quality: PhotoQuality,
   ) {
-    const compressed = await standardizeRecordPhotoFile(file, { requireSanitized: true });
+    const compressed = await standardizeRecordPhotoFile(file, { requireSanitized: true, quality });
     const uploadFile = compressed.file;
     const thumbnail = await createImageThumbnailFile(uploadFile);
     const thumbFile = thumbnail.wasGenerated ? thumbnail.file : null;
@@ -1141,6 +1150,7 @@ export default function AddRecord({
             stagedSinglePhoto = await stageRecovery({
               ownerId: user.id, archiveId, requestId, note: text.trim(),
               files: [photoGroups[0].photos[0].file],
+              quality: selectedQuality(files[0], freshMembership),
             });
           }
           saveCloudPickerResume({
@@ -1225,6 +1235,7 @@ export default function AddRecord({
               user.id,
               photo.file,
               photo.capturedAt,
+              selectedQuality(photo.file, freshMembership),
             );
             uploadedBytes += bytes;
             if (bytes > 0) uploadedPhotoCount += 1;
@@ -1582,9 +1593,20 @@ export default function AddRecord({
         <div style={{ marginTop: 6, fontSize: 12, color: "#777", lineHeight: 1.55 }}>
           {copy.photo_limit_prefix} {MAX_RECORD_PHOTOS_PER_ADD} {copy.photo_limit_suffix}
           <br />
-          {copy.standard_photo_hint}
+          {!hasActivePlus(membership) && copy.standard_photo_hint}
         </div>
 
+        {hasActivePlus(membership) && files.length > 1 && (
+          <label>{language === "zh" ? "批量设置画质 " : "Set quality for all "}
+            <select value="" disabled={loading} onChange={event => {
+              const quality = event.target.value as PhotoQuality;
+              setQualities(new Map(files.map(file => [file, quality])));
+            }}>
+              <option value="" disabled>{language === "zh" ? "选择画质" : "Select quality"}</option>
+              {photoQualities.map(q => <option key={q} value={q}>{photoQualityLabel(q, language)}</option>)}
+            </select>
+          </label>
+        )}
         {filePreviews.length > 0 ? (
           <div
             style={{
@@ -1614,6 +1636,17 @@ export default function AddRecord({
                     display: "block",
                   }}
                 />
+                {hasActivePlus(membership) && (
+                  <select aria-label={preview.name + (language === "zh" ? " 画质" : " quality")}
+                    style={{ position: "absolute", bottom: 0, width: "100%" }}
+                    disabled={loading} value={selectedQuality(files[index], membership)}
+                    onChange={event => {
+                      const quality = event.target.value as PhotoQuality;
+                      setQualities(previous => new Map(previous).set(files[index], quality));
+                    }}>
+                    {photoQualities.map(q => <option key={q} value={q}>{photoQualityLabel(q, language)}</option>)}
+                  </select>
+                )}
                 <button
                   type="button"
                   onClick={() => removeSelectedFile(index)}

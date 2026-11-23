@@ -46,11 +46,6 @@ export default function MembershipBenefitsPage() {
       </details>
 
       <details style={detailsStyle}>
-        <summary style={summaryStyle}>{t.membership_page.trial_title}</summary>
-        <p style={detailsBodyStyle}>{t.membership_page.trial_description}</p>
-      </details>
-
-      <details style={detailsStyle}>
         <summary style={summaryStyle}>{t.membership_page.rules_title}</summary>
         <ul style={listStyle}>
           {t.membership_page.rules.map((rule) => <li key={rule}>{rule}</li>)}
