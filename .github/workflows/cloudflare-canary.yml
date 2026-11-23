@@ -189,9 +189,9 @@ jobs:
           assert.ok(Array.isArray(deployments.deployments) && deployments.deployments.length > 0, "active_deployment_missing");
           assert.ok(Array.isArray(versions.items), "worker_versions_missing");
           const latest = deployments.deployments[0];
-          assert.equal(latest.id, "ba075720-19fe-4203-9540-6fe5bc9b672b", "unexpected_active_deployment_before_stage");
+          assert.equal(latest.id, "06b407d2-928c-42f2-9f4a-5740d2bb02ea", "unexpected_active_deployment_before_stage");
           assert.deepEqual(latest.versions, [{
-            version_id: "01f5f371-cf58-444e-ba45-6a30ea904b76",
+            version_id: "e63c0cc6-e6a1-45b0-bcac-9a47abc0c5bb",
             percentage: 100,
           }], "unexpected_active_worker_version_before_stage");
           assert.equal(latest.versions.reduce((sum, item) => sum + item.percentage, 0), 100, "active_traffic_not_100_percent");
@@ -215,7 +215,7 @@ jobs:
           set -euo pipefail
           # Current production Worker was last updated through the script API; strict mode would reject a safe version upload.
           # The generated config is already checked above for exact production bindings and gates.
-          npx wrangler versions upload --config dist/server/wrangler.json --keep-vars --message "Registered permissions and photo quality ${GITHUB_SHA}"
+          npx wrangler versions upload --config dist/server/wrangler.json --keep-vars --message "UI recovery and guide loading ${GITHUB_SHA}"
           echo "FORMAL_W4_VERSION_STAGED_NOT_DEPLOYED=PASS"
       - name: Verify candidate is staged and active production traffic is unchanged
         shell: bash
