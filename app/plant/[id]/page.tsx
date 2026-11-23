@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "@/components/navigation/InternalLink";
 import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
@@ -1226,6 +1226,9 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [hasCloudAccess, setHasCloudAccess] = useState(false);
+  const [guideReadState, setGuideReadState] = useState<"loading" | "guest" | "ready" | "unavailable" | "offline">("loading");
+  const [retryRevision, setRetryRevision] = useState(0);
+  const observedOwner = useRef<string | null | undefined>(undefined);
   const [interestAdded, setInterestAdded] = useState(false);
   const [actionLoading, setActionLoading] = useState<"interest" | null>(null);
   const [actionMessage, setActionMessage] = useState<ActionMessage | null>(null);
@@ -1235,8 +1238,15 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
   const [authRevision, setAuthRevision] = useState(0);
   useEffect(() => {
     if (typeof supabase.auth.onAuthStateChange !== "function") return;
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "INITIAL_SESSION") return;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextOwner = session?.user.id || null;
+      if (event === "INITIAL_SESSION") { observedOwner.current = nextOwner; return; }
+      if (observedOwner.current === nextOwner && (event === "TOKEN_REFRESHED" || event === "SIGNED_IN")) return;
+      observedOwner.current = nextOwner;
+      setGuideReadState("loading");
+      setIsSignedIn(Boolean(nextOwner));
+      setCurrentUserId(nextOwner);
+      setInterestAdded(false);
       setHasCloudAccess(false);
       setParameters(null);
       setGrowthCycle(null);
@@ -1264,6 +1274,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
       setLoading(false);
     }
     if (offline) {
+      setGuideReadState("offline");
       setVisibleCards(RELATED_ARCHIVE_LIMIT);
       setVisibleRecords(RELATED_ARCHIVE_LIMIT);
       setHasCloudAccess(false);
@@ -1285,8 +1296,10 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
       setVisibleCards(RELATED_ARCHIVE_LIMIT);
       setVisibleRecords(RELATED_ARCHIVE_LIMIT);
 
-      if (!cachedPlant) setLoading(true);
+      if (!cachedPlant) { setPlant(null); setLoading(true); }
+      setGuideReadState("loading");
       setActionMessage(null);
+      const authPromise = supabase.auth.getUser().catch(() => ({ data: { user: null }, error: true }));
       setHasCloudAccess(false);
       setParameters(null);
       setGrowthCycle(null);
@@ -1348,8 +1361,10 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
       setBasicOverview(publicOverview[0]?.summary || (offlineGuide ? getOfflineGuideOverview(offlineGuide, language) : null));
       setLoading(false);
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const authResult = await authPromise;
+      const user = authResult.data.user;
       if (cancelled) return;
+      if (user) observedOwner.current = user.id;
       setIsSignedIn(Boolean(user));
       setCurrentUserId(user?.id || null);
       const plusResult = user
@@ -1371,6 +1386,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
         : null;
       const canReadFullGuide = Boolean(plusDetail);
       setHasCloudAccess(canReadFullGuide);
+      setGuideReadState(canReadFullGuide ? "ready" : user || authResult.error ? "unavailable" : "guest");
 
       const [{ data: i18nData }, { data: aliasData }] = await Promise.all([
         catalogAvailable ? Promise.resolve({ data: catalogRow?.translations || [] }) : supabase
@@ -1519,10 +1535,10 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
 
     void load().catch((error) => {
       console.warn("load plant guide detail failed:", error);
-      if (!cancelled) setLoading(false);
+      if (!cancelled) { setLoading(false); setGuideReadState((previous) => previous === "ready" ? previous : "unavailable"); }
     });
     return () => { cancelled = true; };
-  }, [id, language, offline, offlineGuide, authRevision]);
+  }, [id, language, offline, offlineGuide, authRevision, retryRevision]);
 
   const zh = useMemo(
     () => i18n.find((item: PlantSpeciesI18nRow) => item.language_code === "zh"),
@@ -1721,9 +1737,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
     if (!hasCloudAccess) {
       setActionMessage({
         type: "error",
-        text: copy.save_cloud_only,
-        href: "/membership",
-        hrefText: copy.learn_membership,
+        text: language === "zh" ? "指引尚未加载完成，请稍后重试。" : "The guide is not available yet. Please retry.",
       });
       return;
     }
@@ -1924,7 +1938,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
               lineHeight: 1.7,
             }}
           >
-            {copy.plus_visible}
+            {guideReadState === "loading" ? t.loading : guideReadState === "guest" ? copy.plus_visible : guideReadState === "offline" ? (language === "zh" ? "联网后查看完整指引" : "Connect to view the full guide") : <>{language === "zh" ? "指引暂未加载成功" : "Guide could not be loaded"} <button type="button" onClick={() => setRetryRevision((value) => value + 1)}>{language === "zh" ? "重试" : "Retry"}</button></>}
           </div>
         ) : null}
 
