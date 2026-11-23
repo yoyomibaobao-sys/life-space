@@ -1421,6 +1421,13 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
       setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
       // Render the core guide before optional related projects/cards finish loading.
       setLoading(false);
+      if (!user) { setInterestAdded(false); return; }
+
+      // Favorites are independent of the paginated related-content lookup.
+      void Promise.resolve(supabase.from("user_plant_interests").select("id")
+        .eq("user_id", user.id).eq("species_id", resolvedPlantId).maybeSingle())
+        .then((result) => { if (!cancelled && !result.error) setInterestAdded(Boolean(result.data)); })
+        .catch(() => undefined);
 
       const plantNameTerms = buildPlantNameTerms(plantRow, i18nRows, aliasRows);
       const archiveMatchFilter = buildArchiveMatchFilter(resolvedPlantId, plantNameTerms);
@@ -1518,26 +1525,12 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
         setMoreFreeRecords(false);
       }
 
-      if (user) {
-        const { data: interestData } = await supabase
-          .from("user_plant_interests")
-          .select("id")
-          .eq("user_id", user.id)
-          .eq("species_id", resolvedPlantId)
-          .maybeSingle();
-
-        if (cancelled) return;
-        setInterestAdded(Boolean(interestData));
-      } else {
-        setInterestAdded(false);
-      }
-
       setLoading(false);
     }
 
     void load().catch((error) => {
       console.warn("load plant guide detail failed:", error);
-      if (!cancelled) { setLoading(false); setGuideReadState((previous) => previous === "ready" ? previous : "unavailable"); }
+      if (!cancelled) { setLoading(false); setGuideReadState((previous) => previous === "loading" ? "unavailable" : previous); }
     });
     return () => { cancelled = true; };
   }, [id, language, offline, offlineGuide, authRevision, retryRevision]);
