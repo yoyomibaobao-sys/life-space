@@ -1754,27 +1754,27 @@ export default function AddRecord({
 
 const mobileFieldStyle: CSSProperties = {
   display: "grid",
-  gap: 7,
-  marginTop: 14,
+  gap: 5,
+  marginTop: 10,
 };
 
 const mobileFieldLabelStyle: CSSProperties = {
   color: "#344633",
-  fontSize: 15,
-  fontWeight: 750,
+  fontSize: 14,
+  fontWeight: 600,
 };
 
 const mobileTextAreaStyle: CSSProperties = {
   width: "100%",
-  minHeight: 142,
+  minHeight: 110,
   resize: "vertical",
   boxSizing: "border-box",
   border: "1px solid #ccd5c8",
-  borderRadius: 16,
+  borderRadius: 12,
   background: "#fff",
-  padding: "12px 13px",
+  padding: "10px 11px",
   color: "#263426",
-  fontSize: 16,
+  fontSize: 15,
   lineHeight: 1.55,
 };
 
@@ -1827,13 +1827,13 @@ const mobilePhotoActionsStyle: CSSProperties = {
 };
 
 const mobilePhotoButtonStyle: CSSProperties = {
-  minHeight: 46,
+  minHeight: 44,
   border: "1px solid #d6dfd2",
   borderRadius: 999,
   background: "#fff",
   color: "#356033",
-  fontSize: 15,
-  fontWeight: 750,
+  fontSize: 14,
+  fontWeight: 600,
 };
 
 const cycleSelectLabelStyle = {
