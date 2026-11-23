@@ -74,7 +74,7 @@ export default function ArchiveSourceSwitcher<T extends string>({
 
 function sourceSwitchStyle(singleLine: boolean, packedMobile = false): CSSProperties {
   return {
-    margin: packedMobile ? "0 0 7px" : "0 0 12px",
+    margin: packedMobile ? "0 0 4px" : "0 0 12px",
     display: singleLine ? "grid" : "flex",
     gridTemplateColumns: singleLine
       ? "repeat(3, minmax(0, 1fr)) auto"

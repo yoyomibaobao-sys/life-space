@@ -38,6 +38,8 @@ type ArchiveRecordCardProps = {
   variant?: "cloud" | "local";
   /** Display only: pending cloud records retain the existing local data adapter. */
   localStatusLabel?: string;
+  /** Hide the device-only badge when a record belongs to a cloud cache or pending cloud project. */
+  showLocalStatus?: boolean;
   cloudWritable?: boolean;
   startTime?: string | null;
   isHighlighted: boolean;
@@ -81,6 +83,7 @@ export default function ArchiveRecordCard({
   mode,
   variant = "cloud",
   localStatusLabel,
+  showLocalStatus = true,
   cloudWritable = true,
   startTime,
   isHighlighted,
@@ -400,7 +403,7 @@ export default function ArchiveRecordCard({
             ) : null}
 
             {isLocalMode ? (
-              <MobileLocalRecordMetaRow statusLabel={localStatusLabel} />
+              showLocalStatus ? <MobileLocalRecordMetaRow statusLabel={localStatusLabel} /> : null
             ) : (
               <>
                 <MobileRecordMetaRow

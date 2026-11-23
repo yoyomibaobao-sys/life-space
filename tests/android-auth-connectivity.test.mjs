@@ -118,6 +118,7 @@ function createAuthHarness(authModule, {
   proof = null,
   verifiedUser,
   getUserError = null,
+  deferGetUser = false,
 } = {}) {
   let sessionUser = user;
   let getSessionCalls = 0;
@@ -125,9 +126,15 @@ function createAuthHarness(authModule, {
   let serviceOnline = online;
   let explicitlySignedOut = explicit;
   let remembered = rememberedOwner;
+  let offlineProof = proof;
+  let offlineReadError = null;
   let authListener = null;
   let getUserCalls = 0;
   let cacheClearCalls = 0;
+  let resolveDeferredGetUser = null;
+  const deferredGetUser = deferGetUser
+    ? new Promise((resolve) => { resolveDeferredGetUser = resolve; })
+    : null;
   const client = {
     auth: {
       getSession: async () => {
@@ -140,6 +147,7 @@ function createAuthHarness(authModule, {
       getUser: async (jwt) => {
         getUserCalls += 1;
         lastGetUserJwt = jwt || null;
+        if (deferredGetUser) return deferredGetUser;
         return {
           data: { user: verifiedUser === undefined ? sessionUser : verifiedUser },
           error: getUserError,
@@ -170,7 +178,14 @@ function createAuthHarness(authModule, {
     clearExplicitSignOut: () => {
       explicitlySignedOut = false;
     },
-    offlineOwner: { read: async () => proof, seal: async () => null, revoke: async () => {} },
+    offlineOwner: {
+      read: async () => {
+        if (offlineReadError) throw offlineReadError;
+        return offlineProof;
+      },
+      seal: async () => null,
+      revoke: async () => {},
+    },
     clearCloudCache: async () => {
       cacheClearCalls += 1;
     },
@@ -180,9 +195,12 @@ function createAuthHarness(authModule, {
     emit: (event, session) => authListener?.(event, session),
     setOnline: (value) => { serviceOnline = value; },
     setSessionUser: (value) => { sessionUser = value; },
+    setProof: (value) => { offlineProof = value; },
+    setOfflineReadError: (value) => { offlineReadError = value; },
     getUserCalls: () => getUserCalls,
     getSessionCalls: () => getSessionCalls,
     lastGetUserJwt: () => lastGetUserJwt,
+    resolveGetUser: (result) => resolveDeferredGetUser?.(result),
     cacheClearCalls: () => cacheClearCalls,
   };
 }
@@ -257,6 +275,92 @@ test("outage exposes only proof-backed local Owner until online revalidation", a
   assert.equal(harness.controller.getSnapshot().sessionUserId, "owner");
   assert.equal(statuses.includes("signed-out"), false);
   unsubscribe();
+});
+
+test("a confirmed missing Keystore proof clears the previously retained offline Owner", async () => {
+  const authModule = await loadAuthModule();
+  const proof = { userId: "owner", email: "owner@example.test" };
+  const harness = createAuthHarness(authModule, { user: null, online: false, proof });
+  await harness.controller.initialize();
+  assert.deepEqual(authModule.resolveAndroidReadOwner(harness.controller.getSnapshot()), proof);
+
+  harness.setProof(null);
+  await harness.controller.revalidate();
+  const snapshot = harness.controller.getSnapshot();
+  assert.equal(snapshot.status, "checking");
+  assert.equal(snapshot.offlineReadOwner, null);
+  assert.equal(authModule.resolveAndroidReadOwner(snapshot), null);
+});
+
+test("a transient Keystore read error preserves an already verified offline Owner", async () => {
+  const authModule = await loadAuthModule();
+  const proof = { userId: "owner", email: "owner@example.test" };
+  const harness = createAuthHarness(authModule, { user: null, online: false, proof });
+  await harness.controller.initialize();
+  harness.setOfflineReadError(new Error("temporary Keystore read failure"));
+  await harness.controller.revalidate();
+  const snapshot = harness.controller.getSnapshot();
+  assert.equal(snapshot.status, "checking");
+  assert.deepEqual(authModule.resolveAndroidReadOwner(snapshot), proof);
+});
+
+
+test("offline Owner remains readable while online identity revalidation is in flight", async () => {
+  const authModule = await loadAuthModule();
+  const owner = { id: "owner", email: "owner@example.test" };
+  const proof = { userId: owner.id, email: owner.email };
+  const harness = createAuthHarness(authModule, {
+    user: null, online: false, proof, deferGetUser: true,
+  });
+  await harness.controller.initialize();
+  assert.equal(harness.controller.getSnapshot().status, "offline-owner-read");
+
+  harness.setSessionUser(owner);
+  harness.setOnline(true);
+  const request = harness.controller.revalidate();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const verifying = harness.controller.getSnapshot();
+  assert.equal(verifying.status, "checking");
+  assert.deepEqual(authModule.resolveAndroidReadOwner(verifying), proof);
+
+  harness.resolveGetUser({ data: { user: owner }, error: null });
+  await request;
+  assert.equal(harness.controller.getSnapshot().status, "signed-in");
+  assert.equal(authModule.resolveAndroidReadOwner(harness.controller.getSnapshot()).userId, owner.id);
+});
+
+test("missing stored Session during reconnect does not turn a verified offline Owner into a guest", async () => {
+  const authModule = await loadAuthModule();
+  const proof = { userId: "owner", email: "owner@example.test" };
+  const harness = createAuthHarness(authModule, { user: null, online: false, proof });
+  await harness.controller.initialize();
+  harness.setOnline(true);
+
+  await harness.controller.revalidate();
+  const snapshot = harness.controller.getSnapshot();
+  assert.equal(snapshot.status, "offline-owner-read");
+  assert.deepEqual(authModule.resolveAndroidReadOwner(snapshot), proof);
+  assert.equal(harness.getUserCalls(), 0);
+});
+
+test("a different account being verified cannot inherit the previous offline Owner cache", async () => {
+  const authModule = await loadAuthModule();
+  const ownerA = { userId: "owner-a", email: "a@example.test" };
+  const ownerB = { id: "owner-b", email: "b@example.test" };
+  const harness = createAuthHarness(authModule, {
+    user: null, online: false, proof: ownerA, deferGetUser: true,
+  });
+  await harness.controller.initialize();
+  harness.setSessionUser(ownerB);
+  harness.setOnline(true);
+  const request = harness.controller.revalidate();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(harness.controller.getSnapshot().status, "checking");
+  assert.equal(authModule.resolveAndroidReadOwner(harness.controller.getSnapshot()), null);
+  harness.resolveGetUser({ data: { user: ownerB }, error: null });
+  await request;
+  assert.equal(harness.controller.getSnapshot().sessionUserId, ownerB.id);
 });
 
 test("offline explicit logout survives reconnect and clears cache without restoring auth", async () => {
@@ -675,7 +779,8 @@ test("remembered owner cannot identify a signed-out Android user in My Space", a
   await harness.controller.initialize();
   assert.equal(auth.resolveAuthenticatedOwnerContext(harness.controller.getSnapshot(), owner), null);
   const shell = read("mobile-offline-src/main.tsx");
-  assert.match(shell, /const hasAuthenticatedIdentity = auth\.status === "signed-in" && Boolean\(authenticatedOwnerContext\)/);
+  assert.match(shell, /const hasAuthenticatedIdentity = Boolean\(readOwnerContext\?\.userId\)/);
+  assert.match(shell, /const offlineOwnerRead = !auth\.explicitSignedOut/);
   assert.match(shell, /signedIn: hasAuthenticatedIdentity, membership: hasAuthenticatedIdentity \? membership : null/);
   // W5 online My Space no longer advertises an independent device space.
   assert.match(shell, /hasAuthenticatedIdentity[\s\S]*spaceProfile\?\.username \|\| auth\.email[\s\S]*"我的空间"/);

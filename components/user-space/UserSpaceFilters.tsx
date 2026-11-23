@@ -1,4 +1,5 @@
 import CategoryLabel from "@/components/ui/CategoryLabel";
+import styles from "./UserSpaceFilters.module.css";
 import {
   type ArchiveCategory,
   getArchiveCategoryLabel,
@@ -39,6 +40,7 @@ export default function UserSpaceFilters({
   const { language, t } = useLanguage();
   return (
     <section
+      className={styles.sticky}
       style={{
         background: "#fff",
         border: "1px solid #edf1e8",

@@ -80,6 +80,7 @@ import {
   type ArchiveCategoryDepths,
 } from "@/lib/archive-category-settings";
 import { Capacitor } from "@capacitor/core";
+import { getAndroidAuthSnapshot, resolveAndroidReadOwner } from "@/lib/android-auth-state";
 import { LOCAL_ORIGIN_MIGRATED_EVENT } from "@/lib/local-origin-migration";
 import { PENDING_CLOUD_SYNC_UPDATED_EVENT, syncPendingCloudArchive, discardUnattemptedPendingArchiveEdit } from "@/lib/pending-cloud-sync";
 import { buildAndroidCloudWorkspace, type PendingCloudProject } from "@/lib/android-cloud-workspace";
@@ -1167,6 +1168,10 @@ export default function ArchivePage() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       const user = session?.user || null;
+      if (!user && isCapacitorAndroid()) {
+        const retainedOfflineOwner = resolveAndroidReadOwner(getAndroidAuthSnapshot());
+        if (retainedOfflineOwner?.userId && sessionOwnerRef.current === retainedOfflineOwner.userId) return;
+      }
       const id = user?.id || null;
       if (initializedOwnerRef.current && sessionOwnerRef.current === id) return;
       initializedOwnerRef.current = true;

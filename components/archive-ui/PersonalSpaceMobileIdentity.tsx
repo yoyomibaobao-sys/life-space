@@ -154,11 +154,11 @@ const identityStyle: CSSProperties = {
   alignItems: "center",
   justifyContent: "space-between",
   gap: 8,
-  marginBottom: 5,
+  marginBottom: 2,
   marginTop: 0,
   marginLeft: 0,
   marginRight: 0,
-  padding: "5px 2px",
+  padding: "3px 2px",
   borderBottom: "1px solid #edf1ea",
   background: "transparent",
 };
@@ -168,7 +168,7 @@ const identityLinkStyle: CSSProperties = {
   flex: 1,
   display: "flex",
   alignItems: "center",
-  gap: 9,
+  gap: 7,
   color: "#253725",
 };
 
@@ -202,7 +202,7 @@ const identityTextStyle: CSSProperties = {
   minWidth: 0,
   flex: 1,
   display: "grid",
-  gap: 3,
+  gap: 2,
 };
 
 const nameRowStyle: CSSProperties = {
@@ -241,7 +241,7 @@ const storageRowStyle: CSSProperties = {
   minWidth: 0,
   display: "flex",
   alignItems: "center",
-  gap: 6,
+  gap: 4,
 };
 
 const storageTrackStyle: CSSProperties = {
@@ -269,7 +269,7 @@ const storageTotalStyle: CSSProperties = {
 };
 
 const inlineEntryStyle: CSSProperties = {
-  minHeight: 32,
+  minHeight: 28,
   display: "inline-flex",
   alignItems: "center",
   color: "#4f604d",

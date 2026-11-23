@@ -987,7 +987,7 @@ function App() {
     const trusted = resolveAndroidReadOwner(auth);
     return trusted ? { ...trusted, snapshotOnly: true } : null;
   }, [auth]);
-  const offlineOwnerRead = auth.status === "offline-owner-read";
+  const offlineOwnerRead = !auth.explicitSignedOut && auth.status !== "signed-in" && Boolean(readOwnerContext?.userId) && (auth.status === "offline-owner-read" || auth.status === "checking");
   // A checking transition may keep an already mounted editor in quarantine.
   // This memory-only marker grants NO Owner, DB access or online permission.
   const recordEditorOwnerRef = useRef<{ ownerId: string; archiveId: string } | null>(null);
@@ -1329,7 +1329,8 @@ function App() {
   }, [online]);
 
   useEffect(() => {
-    if (auth.status === "checking") {
+    const retainedOfflineOwner = !auth.explicitSignedOut ? resolveAndroidReadOwner(auth) : null;
+    if (auth.status === "checking" && !retainedOfflineOwner) {
       listRequestRef.current += 1;
       cloudListRequestRef.current += 1;
       setCloudLoading(false);
@@ -1337,13 +1338,13 @@ function App() {
       if (!retainCheckingEditor) setDetail(null);
       return;
     }
-    if (auth.status === "offline-owner-read" && auth.offlineReadOwner) {
-      const identity = readShellIdentityCache(auth.offlineReadOwner.userId);
+    if ((auth.status === "offline-owner-read" || auth.status === "checking") && retainedOfflineOwner?.userId) {
+      const identity = readShellIdentityCache(retainedOfflineOwner.userId);
       setSpaceProfile(identity?.profile || null);
       setMembership(identity?.membership || null);
       setExperienceCardCount(identity?.experienceCardCount || 0);
-      setOwner(auth.offlineReadOwner);
-      refreshListSafely({ ...auth.offlineReadOwner, snapshotOnly: true });
+      setOwner(retainedOfflineOwner);
+      refreshListSafely({ ...retainedOfflineOwner, snapshotOnly: true });
       return;
     }
     if (auth.status === "signed-in" && auth.sessionUserId) {
@@ -1378,6 +1379,7 @@ function App() {
     refreshListSafely(ownerContext);
   }, [
     auth.email,
+    auth.explicitSignedOut,
     auth.offlineReadOwner,
     auth.rememberedOwner,
     auth.sessionUserId,
@@ -2102,22 +2104,22 @@ function App() {
   // Preserve the saved preference and all underlying local/SAF data untouched.
   const localSpaceEnabled = false;
   const cloudReadable = canReadAndroidCloudWorkspace({
-    auth: auth.status,
+    auth: offlineOwnerRead ? "offline-owner-read" : auth.status,
     userId: readOwnerContext?.userId || null,
     offlineOwnerId: offlineOwnerRead ? readOwnerContext?.userId : null,
     membership,
     trialAccess: cloudTrialAccess,
   });
   useEffect(() => {
-    if (auth.status === "checking") return;
-    const available = w5WorkspaceSources(auth.status);
+    if (auth.status === "checking" && !offlineOwnerRead) return;
+    const available = w5WorkspaceSources(offlineOwnerRead ? "offline-owner-read" : auth.status);
     if (!available.length || available.includes(sourceFilter)) return;
     setSourceFilter(available[0]);
     setSubcategoryFilter(null);
     setGroupFilter(null);
-  }, [auth.status, localSpaceEnabled, cloudReadable, sourceFilter]);
+  }, [auth.status, offlineOwnerRead, localSpaceEnabled, cloudReadable, sourceFilter]);
   function openNewProjectEntry() {
-    if (auth.status === "checking") {
+    if (auth.status === "checking" && !offlineOwnerRead) {
       showToast(language === "zh"
         ? "正在核验云端身份，请先点“重新检查云端”；本机记录保持不变。"
         : "Cloud identity is being verified. Recheck connection; local records are preserved.");
@@ -2139,6 +2141,7 @@ function App() {
   // Old links can omit a destination; the online App must never create local-only.
   const newProjectDestination: CreationDestination | null = screen.kind === "new-project"
     ? (screen.destination === "pending-cloud" || !online || offlineOwnerRead ? "pending-cloud" : "live-cloud") : null;
+  const canCreatePendingCloud = newProjectDestination === "pending-cloud" && offlineOwnerRead && Boolean(readOwnerContext?.userId);
   const filteredLocalArchives = workspace.localOnly.filter((archive) => filterCategory(archive) &&
     (!subcategoryFilter || archive.subcategory === subcategoryLabel) &&
     (!groupFilter || archive.group_name === groupLabel));
@@ -2558,7 +2561,7 @@ function App() {
   const storageTotalLabel = storageLimitBytes > 0
     ? formatStorage(storageLimitBytes)
     : "—";
-  const hasAuthenticatedIdentity = auth.status === "signed-in" && Boolean(authenticatedOwnerContext);
+  const hasAuthenticatedIdentity = Boolean(readOwnerContext?.userId);
   const membershipLabel = offlineOwnerRead ? (language === "zh" ? "离线访问" : "Offline access") : getUserTypeLabel(
     { signedIn: hasAuthenticatedIdentity, membership: hasAuthenticatedIdentity ? membership : null },
     language,
@@ -2627,30 +2630,7 @@ function App() {
         onLocalUse={undefined}
         onBrowseHome={screen.kind === "about" ? () => setScreen({ kind: "activity" }) : undefined}
       /> : null}
-      {screen.kind === "list" ? (
-        <PersonalSpaceMobileIdentity
-          avatarUrl={hasAuthenticatedIdentity ? spaceProfile?.avatar_url : null}
-          username={
-            hasAuthenticatedIdentity
-              ? spaceProfile?.username || auth.email || (language === "zh" ? "我的空间" : "My space")
-              : language === "zh" ? "我的空间" : "My space"
-          }
-          membershipLabel={membershipLabel}
-          storageUsagePercent={hasAuthenticatedIdentity ? storageUsagePercent : null}
-          storageTotalLabel={hasAuthenticatedIdentity ? storageTotalLabel : null}
-          experienceLabel={hasAuthenticatedIdentity ? (language === "zh" ? "经验卡" : "Experience") : null}
-          experienceCardCount={hasAuthenticatedIdentity ? experienceCardCount : null}
-          experienceHref={hasAuthenticatedIdentity && online ? "/experience-cards" : null}
-          onExperienceClick={hasAuthenticatedIdentity && !online ? () => showToast(language === "zh" ? "需联网查看经验卡" : "Connect to view experience cards") : undefined}
-          language={language}
-          profileHref="/profile"
-          notificationSlot={!hasAuthenticatedIdentity && online ? (
-            <button type="button" className="secondary-button" onClick={() => openCloudLogin("profile")}>
-              {copy.login}
-            </button>
-          ) : null}
-        />
-      ) : null}
+
 
 
       {/* Online Android has no independent SAF folder connection action.
@@ -2663,9 +2643,33 @@ function App() {
       {screen.kind === "list" ? (
         <div data-android-shell-page="personal-space">
         <ArchiveWorkspaceTemplate<ShellSourceFilter>
+          headerSlot={
+            <PersonalSpaceMobileIdentity
+              avatarUrl={hasAuthenticatedIdentity ? spaceProfile?.avatar_url : null}
+              username={
+                hasAuthenticatedIdentity
+                  ? spaceProfile?.username || auth.email || (language === "zh" ? "我的空间" : "My space")
+                  : language === "zh" ? "我的空间" : "My space"
+              }
+              membershipLabel={membershipLabel}
+              storageUsagePercent={hasAuthenticatedIdentity ? storageUsagePercent : null}
+              storageTotalLabel={hasAuthenticatedIdentity ? storageTotalLabel : null}
+              experienceLabel={hasAuthenticatedIdentity ? (language === "zh" ? "经验卡" : "Experience") : null}
+              experienceCardCount={hasAuthenticatedIdentity ? experienceCardCount : null}
+              experienceHref={hasAuthenticatedIdentity && online ? "/experience-cards" : null}
+              onExperienceClick={hasAuthenticatedIdentity && !online ? () => showToast(language === "zh" ? "需联网查看经验卡" : "Connect to view experience cards") : undefined}
+              language={language}
+              profileHref="/profile"
+              notificationSlot={!hasAuthenticatedIdentity && online ? (
+                <button type="button" className="secondary-button" onClick={() => openCloudLogin("profile")}>
+                  {copy.login}
+                </button>
+              ) : null}
+            />
+          }
           online={online}
           showConnectivityNotice={false}
-          sourceOptions={w5WorkspaceSources(auth.status).map((value) => ({
+          sourceOptions={w5WorkspaceSources(offlineOwnerRead ? "offline-owner-read" : auth.status).map((value) => ({
             value,
             ...(value === "all"
               ? { label: copy.all, count: workspace.counts.all }
@@ -2723,7 +2727,7 @@ function App() {
             />
             </>
           )}
-          noticeSlot={auth.status === "checking" && auth.verification === "service-unavailable" ? (
+          noticeSlot={auth.status === "checking" && !offlineOwnerRead && auth.verification === "service-unavailable" ? (
             <section className="notice warning" data-w5-offline-owner-needs-verification="true">
               <p>{language === "zh"
                 ? "请联网核验身份后读取本机缓存与待上传资料。原资料已保留。"
@@ -2886,14 +2890,14 @@ function App() {
       ) : null}
 
       {screen.kind === "new-project" ? (
-        auth.status !== "signed-in" ? (
+        auth.status !== "signed-in" && !canCreatePendingCloud ? (
           <div data-android-shell-page="s6-local-create-deferred" className="panel">
             <p>{language === "zh"
-              ? "独立本地项目已延期至S6，原有本地资料仍被保留。请从云空间新建项目。"
-              : "Independent local projects are deferred to S6. Existing local data is preserved; create new projects in Cloud Space."}</p>
+              ? "离线新建需要已验证的云端账号，才能暂存为待上传项目。请先联网登录；已有缓存和待上传记录会保留。"
+              : "Creating an offline pending-cloud project requires a previously verified cloud account. Connect and sign in first; cached and pending data will be preserved."}</p>
             <button type="button" onClick={() => auth.status === "signed-in"
               ? setScreen({ kind: "new-project", destination: online ? "live-cloud" : "pending-cloud" })
-              : openCloudLogin("list-cloud")}>{copy.newProject}</button>
+              : openCloudLogin("list-cloud")}>{copy.login}</button>
           </div>
         ) : (newProjectDestination === "live-cloud" || newProjectDestination === "pending-cloud") &&
         !canCreateMembershipContent(membership) ? (
@@ -3564,7 +3568,7 @@ function App() {
           .map((archive) => ({ id: archive.id, title: archive.title, open: () => setScreen({ kind: "new-record", archiveId: archive.id }) }));
         const visibleCloud = chooseProjectExpanded.cloud ? cloudOptions : cloudOptions.slice(0, 4);
         const visibleLocal = chooseProjectExpanded.local ? localOptions : localOptions.slice(0, 4);
-        const chooseSources = auth.status === "checking"
+        const chooseSources = auth.status === "checking" && !offlineOwnerRead
           ? (localSpaceEnabled ? ["local" as const] : [])
           : chooseProjectSources(Boolean(readOwnerContext), localSpaceEnabled);
         const localSpaceClosed = !readOwnerContext && auth.status === "signed-out" && !localSpaceEnabled;

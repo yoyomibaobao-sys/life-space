@@ -4,16 +4,16 @@
     position: sticky;
     top: calc(50px + var(--app-safe-area-top, 0px));
     z-index: 85;
-    padding: 3px 0;
+    padding: 2px 0;
     background: #f7faf5;
   }
-  .row.sticky { margin-bottom: 4px; }
+  .row.sticky { margin-bottom: 2px; }
 }
 
 .row {
   display: grid;
   gap: 3px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .withHelp {
