@@ -64,3 +64,15 @@ test("P1 temporary-space project opens pending-only read view, never editable cl
   assert.match(web, /w5FocusedPendingKey === item\.key/);
   assert.match(read("components/mobile/AndroidPendingRecordReview.tsx"), /\(detail\?\.records \|\| \[\]\)\.filter\(pendingRecord\)/);
 });
+
+test("Pending record cancellation uses the app dialog and rechecks the selected owner and archive", () => {
+  const view = read("components/mobile/AndroidPendingRecordReview.tsx");
+  assert.doesNotMatch(view, /window\.confirm\(/);
+  assert.match(view, /<AppConfirmDialog[\s\S]*?open=\{Boolean\(confirmRecord\)\}[\s\S]*?destructive[\s\S]*?onCancel=\{\(\) => setConfirmTarget\(null\)\}/);
+  assert.match(view, /confirmTarget\.ownerId === owner\.userId && confirmTarget\.archiveId === archiveId/);
+  assert.match(view, /detail\?\.archive\.id === archiveId && detail\.archive\.local_owner_user_id === owner\.userId/);
+  assert.match(view, /pending\.find\(\(record\) => record\.id === confirmTarget\.recordId && safelyCancelable\(record\)\)/);
+  assert.match(view, /onConfirm=\{\(\) => \{[\s\S]*?if \(record\) void cancel\(record\)/);
+  assert.match(view, /data\.user\?\.id !== owner\.userId/);
+  assert.match(view, /await cancelNeverUploadedCloudRecord\(record\.id, owner\)/);
+});
