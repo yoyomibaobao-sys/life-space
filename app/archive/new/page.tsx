@@ -27,6 +27,7 @@ import {
 import {
   getSystemNameCandidates,
   filterSystemNameCandidates,
+  inferProjectGuide,
   hasExactSystemNameCandidate,
   resolveExactSystemNameCandidate,
   type SystemNameCandidate,
@@ -86,7 +87,7 @@ function NewArchiveContent() {
     : null;
 
   const { plantingRegion, changePlantingRegion } = usePlantingRegionDraft();
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(preselectedSystemName);
   const [category, setCategory] = useState<ArchiveCategory | null>(
     validPreselectedCategory && !preselectedSpeciesId
       ? validPreselectedCategory
@@ -95,7 +96,7 @@ function NewArchiveContent() {
 
   const [systemCandidates, setSystemCandidates] = useState<SystemNameCandidate[]>([]);
   const [candidatesLoading, setCandidatesLoading] = useState(true);
-  const guideEditedRef = useRef(false);
+  const guideEditedRef = useRef(Boolean(preselectedSystemName));
   const [speciesId, setSpeciesId] = useState<string | null>(null);
   const [pendingSpeciesName, setPendingSpeciesName] = useState<string | null>(
     null
@@ -187,17 +188,30 @@ function NewArchiveContent() {
   const publicAllowed = !membershipLoading && canCreatePublicCloudProject(membership);
   const archiveIsPublic = resolveCloudProjectVisibility(visibilityChoice, publicAllowed);
   const guideSearch = category === "plant" ? speciesSearch : systemSearch;
-  const systemOptions = filterSystemNameCandidates(systemCandidates, guideSearch, category);
+  const categoryCandidates = systemCandidates.filter((candidate) => candidate.category === category);
+  const systemOptions = guideSearch.trim() ? filterSystemNameCandidates(categoryCandidates, guideSearch, category) : [];
+  useEffect(() => {
+    if (guideEditedRef.current || !category || (preselectedSpeciesId && candidatesLoading)) return;
+    const inferred = inferProjectGuide(systemCandidates, title, category);
+    const name = inferred?.label || title.trim();
+    setSpeciesSearch(name);
+    setSystemSearch(name);
+    setSystemName(name);
+    setSpeciesId(category === "plant" ? inferred?.plantId || null : null);
+    setPendingSpeciesName(category === "plant" && !inferred?.plantId ? name || null : null);
+  }, [title, category, systemCandidates, preselectedSpeciesId, candidatesLoading]);
 
   function switchCategory(nextCategory: ArchiveCategory) {
-    guideEditedRef.current = true;
-    setSpeciesSearch(guideSearch);
-    setSystemSearch(guideSearch);
+    guideEditedRef.current = false;
     setCategory(nextCategory);
-    const exact = resolveExactSystemNameCandidate(systemCandidates, guideSearch);
-    const nextPlantId = nextCategory === "plant" && exact?.category === "plant" ? exact.plantId || null : null;
+    const inferred = inferProjectGuide(systemCandidates, title, nextCategory);
+    const name = inferred?.label || title.trim();
+    setSpeciesSearch(name);
+    setSystemSearch(name);
+    setSystemName(name);
+    const nextPlantId = nextCategory === "plant" ? inferred?.plantId || null : null;
     setSpeciesId(nextPlantId);
-    setPendingSpeciesName(nextCategory === "plant" && !nextPlantId ? guideSearch.trim() : null);
+    setPendingSpeciesName(nextCategory === "plant" && !nextPlantId ? name || null : null);
     setPlantSuggestionsOpen(false);
     setSystemSuggestionsOpen(false);
   }
@@ -403,15 +417,15 @@ function NewArchiveContent() {
               setSystemSuggestionsOpen(true);
             }}
             candidates={systemOptions}
-            resolutionCandidates={systemCandidates}
+            resolutionCandidates={categoryCandidates}
             selectedValue={systemName}
             suggestionsOpen={plantSuggestionsOpen || systemSuggestionsOpen}
             onSuggestionsOpenChange={(open) => {
               setPlantSuggestionsOpen(open);
               setSystemSuggestionsOpen(open);
             }}
-            hasExactMatch={hasExactSystemNameCandidate(systemCandidates, guideSearch)}
-            onResolveCandidate={associateGuide}
+            hasExactMatch={hasExactSystemNameCandidate(categoryCandidates, guideSearch)}
+            onResolveCandidate={(candidate) => { if (candidate.category === category) associateGuide(candidate); }}
             onSelect={(candidate) => {
               guideEditedRef.current = true;
               associateGuide(candidate);
@@ -434,7 +448,7 @@ function NewArchiveContent() {
             loading={candidatesLoading}
             required
             showCategory
-            placeholder={copy.guide_selector_placeholder}
+            placeholder={language === "zh" ? "自动关联，亦可搜索或输入自定义名称" : "Auto-linked; search or enter a custom name"}
             inputStyle={archiveNewProjectInputStyle}
             panelStyle={archiveNewProjectSuggestionPanelStyle}
             optionStyle={(candidate, selected) => archiveNewProjectSuggestionButtonStyle(selected)}

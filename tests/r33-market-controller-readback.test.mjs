@@ -34,7 +34,9 @@ function harness({ writeError = null, readError = null, readData = null, readPro
         return [states[at], (next) => { states[at] = typeof next === "function" ? next(states[at]) : next; }];
       },
     },
-    "react/jsx-runtime": { jsx: (type, props) => ({ type, props }) },
+    "react/jsx-runtime": { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: Symbol("Fragment") },
+    "@/components/mobile/AppConfirmDialog": { __esModule: true, default: () => null },
+    "@/components/Toast": { showToast: (message) => alerts.push(message) },
     "@/components/market/MarketDetailView": { __esModule: true, default: () => null },
     "@/lib/market-detail-loader": { loadMarketPostDetail() { throw Error("unexpected load"); } },
     "@/lib/market-media-storage": { requestMarketPostDeletion() { throw Error("unexpected delete"); } },
@@ -44,10 +46,10 @@ function harness({ writeError = null, readError = null, readData = null, readPro
   vm.runInNewContext(compiled, {
     module, exports: module.exports,
     require(name) { assert.ok(name in mocks, "unexpected dependency " + name); return mocks[name]; },
-    window: { alert: (message) => alerts.push(message) }, console: { error: (...args) => errors.push(args) },
+    window: { alert: () => { throw Error("Native alert must not be called"); } }, console: { error: (...args) => errors.push(args) },
   });
   const view = module.exports.default({ id: "post-a", online: true, onBack() {}, onDeleted() {} });
-  return { states, calls, alerts, errors, status: view.props.onStatus };
+  return { states, calls, alerts, errors, status: view.props.children[0].props.onStatus };
 }
 
 test("R33 re-publish reads server publication and edit timestamps with the original Owner filters", async () => {

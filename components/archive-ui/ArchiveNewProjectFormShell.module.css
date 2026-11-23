@@ -17,8 +17,8 @@
 
 .form {
   display: grid;
-  gap: 16px;
-  margin-top: 20px;
+  gap: 12px;
+  margin-top: 16px;
 }
 
 .categoryGrid {
@@ -29,15 +29,15 @@
 
 .categoryButton {
   min-width: 0;
-  min-height: 84px;
-  padding: 12px;
+  min-height: 44px;
+  padding: 8px 10px;
   border: 1px solid #dfe8d7;
   border-radius: 14px;
   background: #fbfdf8;
   color: #394639;
   text-align: left;
   display: grid;
-  align-content: start;
+  align-content: center;
   gap: 4px;
   cursor: pointer;
 }
@@ -50,6 +50,7 @@
 
 .categoryLabel {
   line-height: 1.35;
+  font-weight: 600;
 }
 
 .categoryDescription {
@@ -87,7 +88,7 @@
   }
 
   .form {
-    gap: 14px;
+    gap: 12px;
     margin-top: 0;
   }
 
@@ -97,8 +98,8 @@
   }
 
   .categoryButton {
-    min-height: 64px;
-    padding: 9px 10px;
+    min-height: 44px;
+    padding: 7px 9px;
     border-radius: 12px;
   }
 

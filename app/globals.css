@@ -421,7 +421,8 @@ html[data-native-window-insets="true"] .app-status-bar-surface {
   }
 
   .page-title {
-    font-size: 24px;
+    font-size: 21px;
+    font-weight: 650;
   }
 }
 

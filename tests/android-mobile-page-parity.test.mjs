@@ -131,7 +131,7 @@ test("guide online and offline keep the PlantPage presentation and swap data", (
   assert.match(shell, /findOfflineGuideEntry/);
   assert.match(shell, /data-android-shell-page="guides"/);
   assert.match(shell, /kind: "guide-detail"/);
-  assert.match(shell, /<PlantDetailContent id=\{screen\.id\}/);
+  assert.match(shell, /<PlantDetailContent key=\{screen\.id\} id=\{screen\.id\}/);
   assert.match(shell, /kind: "plant-detail"/);
 });
 

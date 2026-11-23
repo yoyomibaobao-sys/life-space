@@ -91,7 +91,8 @@ test("backup reminder opens the real App module; original web export endpoint re
   assert.match(profile, /initialModule\?: MobileProfileModule/);
   assert.match(profile, /module === "backup"/);
   assert.match(profile, /estimateAndroidCloudExport\(request\)/);
-  assert.match(profile, /saveAndroidCloudExport\(request\)/);
+  assert.match(profile, /async function confirmCloudExport\(\)[\s\S]*?identity\.data\.user\?\.id !== target\.ownerId[\s\S]*?saveAndroidCloudExport\(cloudExportRequest\(session\.data\.session\.access_token, target\.timeZone\)\)/);
+  assert.match(profile, /onConfirm=\{\(\) => void confirmCloudExport\(\)\}/);
   assert.doesNotMatch(profile, /Browser\.open\(\{ url: "https:\/\/life-space\.uk\/profile" \}\)/);
   assert.match(source("app/api/export/my-records/route.ts"), /const zip = new SimpleZipBuilder\(\)/);
 });

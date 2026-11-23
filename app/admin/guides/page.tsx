@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import { showToast } from "@/components/Toast";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import UiIcon from "@/components/ui/UiIcon";
 import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 import { buildLoginHref } from "@/lib/auth-return";
@@ -27,6 +28,10 @@ export default function AdminGuideReviewPage({ onBack, onRequireLogin }: { onBac
   const isEnglish = language === "en";
   const [checking, setChecking] = useState(true);
   const [allowed, setAllowed] = useState(false);
+  const [adminId, setAdminId] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<{ id: string; name: string; updatedAt: string | null; adminId: string } | null>(null);
+  const [rejectNote, setRejectNote] = useState("");
+  useEffect(() => { setRejectTarget(null); setRejectNote(""); }, [adminId, allowed]);
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<GuideCandidateRow[]>([]);
   const [actionId, setActionId] = useState("");
@@ -66,6 +71,7 @@ export default function AdminGuideReviewPage({ onBack, onRequireLogin }: { onBac
       });
       const nextAllowed = !adminError && Boolean(adminAllowed);
       setAllowed(nextAllowed);
+      setAdminId(nextAllowed ? data.user.id : null);
       setChecking(false);
       if (nextAllowed) await loadRows();
       } catch {
@@ -77,16 +83,24 @@ export default function AdminGuideReviewPage({ onBack, onRequireLogin }: { onBac
     void init();
   }, [loadRows, onRequireLogin, isEnglish]);
 
-  async function review(row: GuideCandidateRow, decision: "approve" | "reject") {
-    if (actionLock.current) return;
-    const note = decision === "reject"
-      ? window.prompt(isEnglish ? "Optional rejection note" : "可填写拒绝原因（选填）")
-      : "";
-    if (note === null) return;
+  const rejectRow = allowed && !checking && !loading && rejectTarget && adminId === rejectTarget.adminId
+    ? rows.find((row) => row.id === rejectTarget.id && row.name === rejectTarget.name && row.updated_at === rejectTarget.updatedAt)
+    : undefined;
+  async function review(row: GuideCandidateRow, decision: "approve" | "reject", suppliedNote?: string) {
+    if (actionLock.current || !allowed || !adminId) return;
+    if (decision === "reject" && suppliedNote === undefined) {
+      setRejectNote("");
+      setRejectTarget({ id: row.id, name: row.name, updatedAt: row.updated_at, adminId });
+      return;
+    }
+    if (decision === "reject" && rejectRow?.id !== row.id) return;
+    const note = suppliedNote || "";
     actionLock.current = true;
     setActionId(row.id);
     setLastReview(null);
     try {
+      const identity = await supabase.auth.getUser();
+      if (identity.error || identity.data.user?.id !== adminId) { setAllowed(false); return; }
       const result = await reviewGuideCandidate(supabase, row.id, decision, note);
       if (!result.accepted) {
         await loadRows();
@@ -107,6 +121,8 @@ export default function AdminGuideReviewPage({ onBack, onRequireLogin }: { onBac
     } finally {
       actionLock.current = false;
       setActionId("");
+      setRejectTarget(null);
+      setRejectNote("");
     }
   }
 
@@ -179,6 +195,23 @@ export default function AdminGuideReviewPage({ onBack, onRequireLogin }: { onBac
           </section>
         )}
       </div>
+      <ConfirmDialog
+        open={Boolean(rejectRow)}
+        title={isEnglish ? "Reject candidate" : "拒绝候选指引"}
+        message={rejectRow?.name || ""}
+        confirmText={isEnglish ? "Reject" : "拒绝"}
+        cancelText={isEnglish ? "Cancel" : "取消"}
+        danger
+        confirmDisabled={Boolean(actionId)}
+        cancelDisabled={Boolean(actionId)}
+        onClose={() => { setRejectTarget(null); setRejectNote(""); }}
+        onConfirm={() => { if (rejectRow) void review(rejectRow, "reject", rejectNote); }}
+      >
+        <textarea aria-label={isEnglish ? "Rejection note" : "拒绝原因"}
+          placeholder={isEnglish ? "Optional rejection note" : "拒绝原因（选填）"}
+          value={rejectNote} onChange={(event) => setRejectNote(event.target.value)} disabled={Boolean(actionId)}
+          style={{ width: "100%", minHeight: 88, boxSizing: "border-box", padding: 10, border: "1px solid #d9e2d5", borderRadius: 10, fontSize: 14 }} />
+      </ConfirmDialog>
     </main>
   );
 }

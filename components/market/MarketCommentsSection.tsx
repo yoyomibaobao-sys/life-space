@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
+import AppConfirmDialog from "@/components/mobile/AppConfirmDialog";
 import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
 import type { MarketPostStatus } from "@/lib/market-types";
 import UiIcon from "@/components/ui/UiIcon";
@@ -40,6 +41,13 @@ export default function MarketCommentsSection({
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; scopeId: string; userId: string } | null>(null);
+  const confirmedComment = deleteTarget && currentUserId && !deletingId &&
+    deleteTarget.scopeId === marketPostId && deleteTarget.userId === currentUserId
+    ? comments.find((comment) => comment.id === deleteTarget.id && comment.market_post_id === marketPostId &&
+        (comment.user_id === currentUserId || postOwnerId === currentUserId))
+    : undefined;
+  useEffect(() => { setDeleteTarget(null); }, [marketPostId, currentUserId]);
   const [replyTarget, setReplyTarget] = useState<MarketCommentItem | null>(null);
   const [repliesSupported, setRepliesSupported] = useState(false);
 
@@ -205,8 +213,7 @@ export default function MarketCommentsSection({
       return;
     }
 
-    const ok = window.confirm(t.market.comment_delete_confirm);
-    if (!ok) return;
+    if (deletingId || comment.market_post_id !== marketPostId) return;
 
     setDeletingId(comment.id);
 
@@ -299,7 +306,9 @@ export default function MarketCommentsSection({
                     {canDelete ? (
                       <button
                         type="button"
-                        onClick={() => void handleDeleteComment(comment)}
+                        onClick={() => {
+                          if (currentUserId && !deletingId) setDeleteTarget({ id: comment.id, scopeId: marketPostId, userId: currentUserId });
+                        }}
                         disabled={deletingId === comment.id}
                         style={deleteButtonStyle}
                       >
@@ -372,6 +381,20 @@ export default function MarketCommentsSection({
           <div style={closedNoticeStyle}>{t.market.login_to_comment}</div>
         )}
       </div> : null}
+      <AppConfirmDialog
+        open={Boolean(confirmedComment)}
+        title={t.market.delete}
+        message={t.market.comment_delete_confirm}
+        cancelLabel={t.cancel}
+        confirmLabel={t.market.delete}
+        destructive
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          const comment = confirmedComment;
+          setDeleteTarget(null);
+          if (comment) void handleDeleteComment(comment);
+        }}
+      />
     </section>
   );
 }

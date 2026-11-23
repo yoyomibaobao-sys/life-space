@@ -105,23 +105,6 @@ export default function ArchiveNewProjectFormShell({
 
         <form data-project-create onSubmit={onSubmit} className={styles.form}>
 
-          <ArchiveNewProjectField label={copy.project_name_required}>
-            <input
-              value={projectTitle}
-              required
-              aria-label={copy.project_name_required}
-              onChange={(event) => onProjectTitleChange(event.target.value)}
-              placeholder={copy.project_name_placeholder}
-              style={archiveNewProjectInputStyle}
-            />
-          </ArchiveNewProjectField>
-
-          <ArchiveNewProjectField
-            label={systemNameLabel}
-          >
-            {systemControl}
-          </ArchiveNewProjectField>
-
           <ArchiveNewProjectField label={copy.category_required}>
             <div className={styles.categoryGrid} role="radiogroup" aria-label={copy.category_required} aria-required="true">
               {translatedCategoryOptions.map((option) => (
@@ -139,6 +122,23 @@ export default function ArchiveNewProjectFormShell({
                 </button>
               ))}
             </div>
+          </ArchiveNewProjectField>
+
+          <ArchiveNewProjectField label={copy.project_name_required}>
+            <input
+              value={projectTitle}
+              required
+              aria-label={copy.project_name_required}
+              onChange={(event) => onProjectTitleChange(event.target.value)}
+              placeholder={copy.project_name_placeholder}
+              style={archiveNewProjectInputStyle}
+            />
+          </ArchiveNewProjectField>
+
+          <ArchiveNewProjectField
+            label={systemNameLabel}
+          >
+            {systemControl}
           </ArchiveNewProjectField>
 
           {plantingRegionControl}
@@ -274,8 +274,9 @@ const eyebrowStyle: CSSProperties = {
 
 const titleStyle: CSSProperties = {
   margin: "4px 0 8px",
-  fontSize: 26,
-  lineHeight: 1.2,
+  fontSize: 22,
+  fontWeight: 650,
+  lineHeight: 1.25,
 };
 
 const subtitleStyle: CSSProperties = {
@@ -298,13 +299,13 @@ const disabledNoticeStyle: CSSProperties = {
 
 const fieldStyle: CSSProperties = {
   display: "grid",
-  gap: 8,
+  gap: 5,
 };
 
 const labelStyle: CSSProperties = {
   color: "#334033",
   fontSize: 14,
-  fontWeight: 700,
+  fontWeight: 600,
 };
 
 const helperTextStyle: CSSProperties = {

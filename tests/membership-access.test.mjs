@@ -417,7 +417,7 @@ test("record photos are unlimited cumulatively but capped at ten per add operati
   assert.match(batchRules, /recordTimeISO: latestRecordTime\(groupPhotos\)/);
   assert.match(
     cloudAddRecord,
-    /\{copy\.photo_limit_prefix\} \{MAX_RECORD_PHOTOS_PER_ADD\} \{copy\.photo_limit_suffix\}/
+    /照片（选填，最多 \$\{MAX_RECORD_PHOTOS_PER_ADD\} 张）/
   );
   assert.match(zhCopy, /单条记录累计照片不设上限/);
   assert.match(cloudArchive, /limitRecordPhotoBatch/);

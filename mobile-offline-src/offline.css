@@ -13,7 +13,7 @@
   /* Native StatusBar.overlaysWebView=false owns the top window inset. */
   --app-safe-area-top: 0px;
   --page-pad-x: 16px;
-  --radius-lg: 18px;
+  --radius-lg: 14px;
 }
 
 * { box-sizing: border-box; }
@@ -34,7 +34,7 @@ button { touch-action: manipulation; }
   width: calc(100% + (var(--shell-pad-x) * 2));
   margin-left: calc(var(--shell-pad-x) * -1);
   margin-right: calc(var(--shell-pad-x) * -1);
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 .offline-shell {
@@ -61,7 +61,7 @@ html[data-app-keyboard-open="true"] [data-mobile-bottom-nav="true"] {
   border: 1px solid var(--line);
   background: #fff;
   color: var(--green-dark);
-  font-weight: 700;
+  font-weight: 600;
 }
 .icon-button { min-width: 44px; padding: 0 12px; }
 .primary-button { border-color: var(--green); background: var(--green); color: #fff; }
@@ -97,9 +97,9 @@ button:disabled { opacity: 0.55; }
 .record-list { display: grid; }
 .panel {
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   background: var(--card);
-  box-shadow: 0 8px 24px rgba(48, 75, 42, 0.05);
+  box-shadow: 0 2px 10px rgba(48, 75, 42, 0.035);
 }
 .project-meta, .record-meta { color: var(--muted); font-size: 13px; line-height: 1.5; }
 
@@ -113,7 +113,7 @@ button:disabled { opacity: 0.55; }
 .back-row { margin-bottom: 12px; }
 .back-button { border: 0; background: transparent; color: var(--green-dark); font-weight: 750; padding: 10px 2px; }
 
-.panel { padding: 18px; margin-bottom: 14px; }
+.panel { padding: 12px; margin-bottom: 10px; }
 .panel h1 { margin: 0 0 8px; font-size: 24px; overflow-wrap: anywhere; }
 .detail-note { white-space: pre-wrap; line-height: 1.6; color: #3d4c39; }
 .action-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
@@ -126,21 +126,23 @@ button:disabled { opacity: 0.55; }
 .link-button { border: 0; background: transparent; color: var(--green-dark); padding: 5px 0; font-weight: 700; }
 .link-button.danger { color: var(--danger); }
 
-.form { display: grid; gap: 15px; }
-.field { display: grid; gap: 7px; }
+.form { display: grid; gap: 12px; font-size: 14px; line-height: 1.5; }
+.field { display: grid; gap: 5px; min-width: 0; }
 .field label { font-weight: 700; color: #344431; }
 .field small { color: var(--muted); line-height: 1.45; }
 .field input, .field select, .field textarea {
   width: 100%;
-  min-height: 48px;
+  min-height: 44px;
   border: 1px solid #cdd7c9;
-  border-radius: 13px;
+  border-radius: 10px;
   background: #fff;
   color: #1f2a1f;
-  padding: 12px 13px;
+  padding: 9px 11px;
+  font-size: 15px;
+  line-height: 1.45;
   outline: none;
 }
-.field textarea { min-height: 110px; resize: vertical; }
+.field textarea { min-height: 96px; resize: vertical; }
 .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(79, 123, 69, 0.12); }
 .submit-row { display: flex; gap: 10px; margin-top: 4px; }
 .submit-row button { flex: 1; }
@@ -172,7 +174,7 @@ button:disabled { opacity: 0.55; }
 :root { font-size: 16px; }
 .offline-shell { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 94px); }
 .header-actions { display: flex; gap: 8px; }
-.section-title h1, .section-title h2, .panel h1, .panel h2 { font-size: 18px; line-height: 1.35; margin-block: 8px 12px; }
+.section-title h1, .section-title h2, .panel h1, .panel h2 { font-size: 17px; font-weight: 650; line-height: 1.35; margin-block: 6px 9px; }
 .detail-heading { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; align-items: center; gap: 8px; }
 .detail-heading h1 { font-size: 20px; line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
 .guide-suggestions { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -217,10 +219,12 @@ button:disabled { opacity: 0.55; }
 .choose-project-create-item { display: grid; gap: 3px; }
 .choose-project-create-item > button, .choose-project-cancel { width: 100%; }
 .choose-project-create-item small { color: var(--muted); font-size: 11.5px; text-align: center; }
-.project-form-panel { padding-top: 12px; }
+.project-form-panel { padding: 12px; }
 .project-form-compact { gap: 10px; }
 .project-form-compact .field { gap: 5px; }
 .project-form-compact .project-form-textarea { min-height: 64px; }
+/* Checkbox/radio controls retain their native compact size inside labelled fields. */
+.field :is(input[type="checkbox"], input[type="radio"]) { width: auto; min-height: 0; padding: 0; }
 .quick-add-actions { position: relative; justify-self: center; align-self: center; width: 58px; height: 48px; }
 .quick-add { position: absolute; left: 5px; top: 0; width: 48px; height: 48px; display: grid; place-items: center; margin-top: -8px; border: 3px solid #fff; border-radius: 50%; background: var(--green); color: #fff; box-shadow: 0 5px 14px rgba(46, 79, 43, 0.24); }
 .market-add { justify-self: center; align-self: center; min-width: 44px; margin-top: -12px; padding: 0; border: 0; background: transparent; color: #806128; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; line-height: 1; font-weight: 800; white-space: nowrap; }

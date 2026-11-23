@@ -176,6 +176,19 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportPhase, setExportPhase] = useState<"idle" | "estimating" | "packaging">("idle");
+  const [exportTarget, setExportTarget] = useState<{ ownerId: string; message: string; timeZone: string; epoch: number } | null>(null);
+  const exportScope = useRef({ ownerId: user?.id || null, epoch: 0, live: true });
+  if (exportScope.current.ownerId !== (user?.id || null)) {
+    exportScope.current = { ownerId: user?.id || null, epoch: exportScope.current.epoch + 1, live: true };
+  }
+  useEffect(() => { setExportTarget(null); }, [user?.id]);
+  useEffect(() => {
+    exportScope.current.live = true;
+    return () => { exportScope.current.live = false; exportScope.current.epoch += 1; };
+  }, []);
+  function exportOwnerCurrent(ownerId: string, epoch: number) {
+    return exportScope.current.live && exportScope.current.ownerId === ownerId && exportScope.current.epoch === epoch;
+  }
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmed, setDeleteConfirmed] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -606,7 +619,9 @@ export default function ProfilePage() {
 
 
   async function handleExport() {
-    if (!user || exporting) return;
+    if (!user || exporting || exportTarget) return;
+    const ownerId = user.id;
+    const epoch = exportScope.current.epoch;
 
     setExporting(true);
     setExportPhase("estimating");
@@ -618,16 +633,17 @@ export default function ProfilePage() {
         error,
       } = await supabase.auth.getSession();
 
-      if (error || !session?.access_token) {
+      if (error || session?.user.id !== ownerId || !session.access_token || !exportOwnerCurrent(ownerId, epoch)) {
         setErrorMsg(t.profile.relogin_export);
         showToast(t.profile.relogin_export);
         router.push(buildLoginHref("/profile"));
         return;
       }
 
+      const timeZone = getClientTimeZone();
       const headers = {
         Authorization: `Bearer ${session.access_token}`,
-        "X-Client-Timezone": getClientTimeZone(),
+        "X-Client-Timezone": timeZone,
       };
       const estimateResponse = await fetch("/api/export/my-records?estimate=1", {
         headers,
@@ -658,11 +674,34 @@ export default function ProfilePage() {
         ? `\n\n${t.profile.export_large_hint}`
         : "";
 
-      if (!window.confirm(`${estimateText}\n\n${t.profile.export_confirm}${largeHint}`)) {
+      if (exportOwnerCurrent(ownerId, epoch)) {
+        setExportTarget({ ownerId, epoch, timeZone, message: `${estimateText}\n\n${t.profile.export_confirm}${largeHint}` });
+      }
+    } catch {
+      if (exportOwnerCurrent(ownerId, epoch)) { setErrorMsg(t.profile.export_failed); showToast(t.profile.export_failed); }
+    } finally {
+      setExporting(false);
+      setExportPhase("idle");
+    }
+  }
+
+  async function confirmExport() {
+    const target = exportTarget;
+    if (!target || exporting || !exportOwnerCurrent(target.ownerId, target.epoch)) return;
+    setExportTarget(null);
+    setExporting(true);
+    setExportPhase("packaging");
+    setErrorMsg("");
+    try {
+      const identity = await supabase.auth.getUser();
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (!exportOwnerCurrent(target.ownerId, target.epoch) || identity.error ||
+          identity.data.user?.id !== target.ownerId || error ||
+          session?.user.id !== target.ownerId || !session.access_token) {
+        showToast(t.profile.relogin_export);
         return;
       }
-
-      setExportPhase("packaging");
+      const headers = { Authorization: `Bearer ${session.access_token}`, "X-Client-Timezone": target.timeZone };
       const response = await fetch("/api/export/my-records", {
         headers: {
           ...headers,
@@ -678,6 +717,7 @@ export default function ProfilePage() {
       }
 
       const blob = await response.blob();
+      if (!exportOwnerCurrent(target.ownerId, target.epoch)) return;
       const disposition = response.headers.get("content-disposition") || "";
       const fileNameMatch = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
       const fileName = fileNameMatch?.[1]
@@ -1044,6 +1084,15 @@ export default function ProfilePage() {
     </>
   );
 
+  const exportDialog = <ConfirmDialog
+    open={Boolean(exportTarget && !exporting && exportOwnerCurrent(exportTarget.ownerId, exportTarget.epoch))}
+    title={language === "zh" ? "导出云端资料" : "Export cloud data"}
+    message={exportTarget?.message || ""}
+    confirmText={language === "zh" ? "保存 ZIP" : "Save ZIP"}
+    onClose={() => setExportTarget(null)}
+    onConfirm={confirmExport}
+  />;
+
   if (initLoading || !user || !profile) {
     return <div style={{ padding: 40 }}>{t.profile.loading}</div>;
   }
@@ -1173,6 +1222,7 @@ export default function ProfilePage() {
         >
           {profileModulePanels}
         </MobileProfileView>
+        {exportDialog}
         <ConfirmDialog
           open={deleteDialogOpen}
           title={t.profile.delete_confirm_title}
@@ -1415,6 +1465,7 @@ export default function ProfilePage() {
           {t.nav.logout_full}
         </button>
       </section>
+      {exportDialog}
       <ConfirmDialog
         open={deleteDialogOpen}
         title={t.profile.delete_confirm_title}

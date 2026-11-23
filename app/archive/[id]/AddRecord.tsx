@@ -7,6 +7,7 @@ import InternalLink from "@/components/navigation/InternalLink";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getBehaviorRestrictionErrorText } from "@/lib/behavior-restriction-errors";
 import { showToast } from "@/components/Toast";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import {
@@ -131,6 +132,7 @@ export default function AddRecord({
   const [recordVisibility, setRecordVisibility] =
     useState<RecordVisibility>(archiveIsPublic ? "public" : "private");
   const [isHelpRecord, setIsHelpRecord] = useState(false);
+  const [helpConfirmation, setHelpConfirmation] = useState<{ archiveId: string; ownerId: string; epoch: number } | null>(null);
   const [selectedCycleId, setSelectedCycleId] = useState<string | undefined>(undefined);
   const [endSelectedCycleAfterSave, setEndSelectedCycleAfterSave] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -990,10 +992,27 @@ export default function AddRecord({
     }
   }
 
-  async function handleAdd() {
+  const helpConfirmationCurrent = Boolean(helpConfirmation && isHelpRecord &&
+    (!archiveIsPublic || recordVisibility !== "public") && helpConfirmation.archiveId === archiveId &&
+    helpConfirmation.ownerId === membershipScope.current.ownerId && helpConfirmation.epoch === membershipScope.current.epoch &&
+    membershipScope.current.live && !membershipScope.current.revoked && !membershipScope.current.paused &&
+    !loading && !membershipLoading && !contentBlocked && !submissionNeedsReview &&
+    (!publicationAccessRef.current || publicationAccessRef.current.isCurrent()));
+  useEffect(() => { setHelpConfirmation(null); }, [archiveId, archiveIsPublic, recordVisibility, isHelpRecord, text, files,
+    timeMode, customTime, splitByDate, selectedCycleId, endSelectedCycleAfterSave, publicationAccess?.scope]);
+
+  async function handleAdd(approvedHelp = false) {
     if (publicationBusy.current || loading || membershipLoading || contentBlocked || submissionNeedsReview || membershipScope.current.revoked || membershipScope.current.paused ||
         (publicationAccessRef.current && !publicationAccessRef.current.isCurrent())) return;
-    if (!text.trim() && files.length === 0) return;
+    if (!text.trim() && files.length === 0) { showToast(language === "zh" ? "请填写记录内容或添加照片。" : "Enter notes or add photos."); return; }
+    if (isHelpRecord && (!archiveIsPublic || recordVisibility !== "public")) {
+      if (!approvedHelp) {
+        setHelpConfirmation({ archiveId, ownerId: membershipScope.current.ownerId, epoch: membershipScope.current.epoch });
+        return;
+      }
+      if (!helpConfirmationCurrent) return;
+    }
+    setHelpConfirmation(null);
 
     // Fence same-render duplicate clicks while asynchronous permission checks run.
     publicationBusy.current = true;
@@ -1106,7 +1125,7 @@ export default function AddRecord({
       }
 
       if (finalStatusTag === "help" && finalVisibility !== "public" &&
-          !confirm(copy.help_public_confirm)) {
+          !approvedHelp) {
         setLoading(false);
         return;
       }
@@ -1412,7 +1431,7 @@ export default function AddRecord({
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={placeholder || t.add_record_placeholder}
+            placeholder={placeholder || (language === "zh" ? "填写记录内容（照片选填）" : "Write a note (photos optional)") }
             rows={5}
             style={mobileTextAreaStyle}
           />
@@ -1421,7 +1440,7 @@ export default function AddRecord({
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={placeholder || t.add_record_placeholder}
+          placeholder={placeholder || (language === "zh" ? "填写记录内容（照片选填）" : "Write a note (photos optional)") }
           style={{ padding: "10px", width: "100%", boxSizing: "border-box" }}
         />
       )}
@@ -1520,8 +1539,8 @@ export default function AddRecord({
         {mobileMode ? (
           <div style={mobilePhotoSectionStyle}>
             <div style={mobilePhotoHeadingStyle}>
-              <strong>{language === "zh" ? `照片（最多 ${MAX_RECORD_PHOTOS_PER_ADD} 张）` : `Photos (max ${MAX_RECORD_PHOTOS_PER_ADD})`}</strong>
-              <span>{files.length} {language === "zh" ? "张照片" : "photos"}</span>
+              <strong>{language === "zh" ? `照片（选填，最多 ${MAX_RECORD_PHOTOS_PER_ADD} 张）` : `Photos (optional, max ${MAX_RECORD_PHOTOS_PER_ADD})`}</strong>
+              {files.length > 0 ? <span>{files.length} {language === "zh" ? "张照片" : "photos"}</span> : null}
             </div>
             <div style={mobilePhotoActionsStyle}>
               <button type="button" onClick={() => cameraInputRef.current?.click()} disabled={loading || membershipLoading || contentBlocked} style={mobilePhotoButtonStyle}>
@@ -1590,11 +1609,6 @@ export default function AddRecord({
           style={{ display: "none" }}
         />
 
-        <div style={{ marginTop: 6, fontSize: 12, color: "#777", lineHeight: 1.55 }}>
-          {copy.photo_limit_prefix} {MAX_RECORD_PHOTOS_PER_ADD} {copy.photo_limit_suffix}
-          <br />
-          {!hasActivePlus(membership) && copy.standard_photo_hint}
-        </div>
 
         {hasActivePlus(membership) && files.length > 1 && (
           <label>{language === "zh" ? "批量设置画质 " : "Set quality for all "}
@@ -1711,14 +1725,19 @@ export default function AddRecord({
       ) : null}
 
       <button
-        onClick={handleAdd}
+        onClick={() => void handleAdd()}
         disabled={loading || membershipLoading || contentBlocked || uploadWouldExceedStorage || submissionNeedsReview}
         style={{
           marginTop: "12px",
+          minHeight: 44,
           padding: "10px 16px",
-          borderRadius: "8px",
-          border: "1px solid #ddd",
-          background: "#fff",
+          borderRadius: 12,
+          border: "1px solid #4f7b45",
+          background: "#4f7b45",
+          color: "#fff",
+          fontSize: 14,
+          fontWeight: 600,
+          opacity: loading || membershipLoading || contentBlocked || uploadWouldExceedStorage || submissionNeedsReview ? 0.55 : 1,
           cursor:
             loading || membershipLoading || contentBlocked || uploadWouldExceedStorage || submissionNeedsReview
               ? "not-allowed"
@@ -1727,33 +1746,40 @@ export default function AddRecord({
       >
         {loading ? t.submitting : t.submit}
       </button>
+      <ConfirmDialog
+        open={helpConfirmationCurrent}
+        title={language === "zh" ? "公开求助" : "Publish help request"}
+        message={copy.help_public_confirm}
+        onClose={() => setHelpConfirmation(null)}
+        onConfirm={() => { if (helpConfirmationCurrent) void handleAdd(true); }}
+      />
     </div>
   );
 }
 
 const mobileFieldStyle: CSSProperties = {
   display: "grid",
-  gap: 7,
-  marginTop: 14,
+  gap: 5,
+  marginTop: 10,
 };
 
 const mobileFieldLabelStyle: CSSProperties = {
   color: "#344633",
-  fontSize: 15,
-  fontWeight: 750,
+  fontSize: 14,
+  fontWeight: 600,
 };
 
 const mobileTextAreaStyle: CSSProperties = {
   width: "100%",
-  minHeight: 142,
+  minHeight: 110,
   resize: "vertical",
   boxSizing: "border-box",
   border: "1px solid #ccd5c8",
-  borderRadius: 16,
+  borderRadius: 12,
   background: "#fff",
-  padding: "12px 13px",
+  padding: "10px 11px",
   color: "#263426",
-  fontSize: 16,
+  fontSize: 15,
   lineHeight: 1.55,
 };
 
@@ -1806,13 +1832,13 @@ const mobilePhotoActionsStyle: CSSProperties = {
 };
 
 const mobilePhotoButtonStyle: CSSProperties = {
-  minHeight: 46,
+  minHeight: 44,
   border: "1px solid #d6dfd2",
   borderRadius: 999,
   background: "#fff",
   color: "#356033",
-  fontSize: 15,
-  fontWeight: 750,
+  fontSize: 14,
+  fontWeight: 600,
 };
 
 const cycleSelectLabelStyle = {

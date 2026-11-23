@@ -24,7 +24,7 @@ export default function DiscoverMarketTabs({ active }: { active: "discover" | "m
 }
 
 const wrapStyle: CSSProperties = {
-  margin: "0 0 12px",
+  margin: "0 0 6px",
   padding: 4,
   border: "1px solid #e2ecd9",
   borderRadius: 16,
@@ -45,6 +45,6 @@ function tabStyle(active: boolean): CSSProperties {
     background: active ? "#e3f1dd" : "transparent",
     color: active ? "#2f6a31" : "#61705d",
     fontSize: 14,
-    fontWeight: 800,
+    fontWeight: active ? 650 : 550,
   };
 }

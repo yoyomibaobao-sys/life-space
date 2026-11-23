@@ -48,6 +48,11 @@ function fixture(status, catalogRows = [row]) {
         states[index] = typeof value === "function" ? value(states[index]) : value;
       }];
     },
+    useRef(initial) {
+      const index = slot++;
+      if (!(index in states)) states[index] = { current: initial };
+      return states[index];
+    },
     useMemo: (compute) => compute(),
     useEffect: (effect) => { effects.push(effect); },
   };
@@ -124,6 +129,7 @@ function fixture(status, catalogRows = [row]) {
     "@/lib/plant-env": { getEnvironmentDetailItems: () => [], getEnvironmentTags: () => [] },
     "@/lib/plant-shared": { getPlantGrowthTypeLabel: () => "" },
     "@/lib/media-urls": { resolveMediaDisplayPairs: async () => [] },
+    "@/lib/guide-association-pages": loadTypeScript("lib/guide-association-pages.ts", {}),
     "@/lib/supabase-schema-compat": { isMissingDatabaseFunction: () => false },
   });
   return { compat, calls, states, effects, render: () => {
@@ -143,7 +149,8 @@ for (const [status, shouldBeFull] of [
     for (let i = 0; i < 12; i++) await new Promise((resolve) => setImmediate(resolve));
     assert.equal(scenario.states[0].id, speciesId);
     assert.equal(scenario.states[3], row.summary_zh);
-    assert.equal(scenario.states[16], shouldBeFull, "full guide remains fail-closed until the paid RPC completes");
+    assert.equal(scenario.states[16], shouldBeFull, "full guide remains fail-closed until the registered-user RPC completes");
+    assert.equal(scenario.states[17], shouldBeFull ? "ready" : "guest");
     const memberTables = scenario.calls.filter((call) => call.kind === "table"
       && ["plant_parameters", "plant_growth_cycle", "plant_care_guides"].includes(call.name));
     assert.deepEqual(memberTables, [], "the client must never SELECT full guide tables directly");

@@ -79,8 +79,8 @@ const mobileHeaderStyle: CSSProperties = {
   position: "sticky",
   top: 0,
   zIndex: 2,
-  minHeight: "calc(62px + var(--app-safe-area-top, env(safe-area-inset-top, 0px)))",
-  padding: "calc(8px + var(--app-safe-area-top, env(safe-area-inset-top, 0px))) 14px 8px",
+  minHeight: "calc(50px + var(--app-safe-area-top, env(safe-area-inset-top, 0px)))",
+  padding: "calc(4px + var(--app-safe-area-top, env(safe-area-inset-top, 0px))) 10px 4px",
   display: "grid",
   gridTemplateColumns: "48px minmax(0, 1fr) 48px",
   alignItems: "center",
@@ -102,15 +102,16 @@ const mobileBackButtonStyle: CSSProperties = {
 const mobileTitleStyle: CSSProperties = {
   textAlign: "center",
   color: "#243523",
-  fontSize: 21,
-  fontWeight: 850,
+  fontSize: 16,
+  fontWeight: 650,
+  lineHeight: 1.3,
 };
 
 const mobileContentStyle: CSSProperties = {
   width: "100%",
   maxWidth: 560,
   margin: "0 auto",
-  padding: "14px 14px 24px",
+  padding: "10px 12px 18px",
   boxSizing: "border-box",
   background: "#fff",
 };
