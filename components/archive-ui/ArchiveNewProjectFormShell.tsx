@@ -105,23 +105,6 @@ export default function ArchiveNewProjectFormShell({
 
         <form data-project-create onSubmit={onSubmit} className={styles.form}>
 
-          <ArchiveNewProjectField label={copy.project_name_required}>
-            <input
-              value={projectTitle}
-              required
-              aria-label={copy.project_name_required}
-              onChange={(event) => onProjectTitleChange(event.target.value)}
-              placeholder={copy.project_name_placeholder}
-              style={archiveNewProjectInputStyle}
-            />
-          </ArchiveNewProjectField>
-
-          <ArchiveNewProjectField
-            label={systemNameLabel}
-          >
-            {systemControl}
-          </ArchiveNewProjectField>
-
           <ArchiveNewProjectField label={copy.category_required}>
             <div className={styles.categoryGrid} role="radiogroup" aria-label={copy.category_required} aria-required="true">
               {translatedCategoryOptions.map((option) => (
@@ -139,6 +122,23 @@ export default function ArchiveNewProjectFormShell({
                 </button>
               ))}
             </div>
+          </ArchiveNewProjectField>
+
+          <ArchiveNewProjectField label={copy.project_name_required}>
+            <input
+              value={projectTitle}
+              required
+              aria-label={copy.project_name_required}
+              onChange={(event) => onProjectTitleChange(event.target.value)}
+              placeholder={copy.project_name_placeholder}
+              style={archiveNewProjectInputStyle}
+            />
+          </ArchiveNewProjectField>
+
+          <ArchiveNewProjectField
+            label={systemNameLabel}
+          >
+            {systemControl}
           </ArchiveNewProjectField>
 
           {plantingRegionControl}
