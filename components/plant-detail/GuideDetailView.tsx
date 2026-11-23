@@ -1,7 +1,7 @@
 "use client";
 
 import InternalLink from "@/components/navigation/InternalLink";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { OfflineGuideDirectoryEntry } from "@/lib/offline-guide-directory";
 import { getOfflineGuideName, getOfflineGuideOverview, getOfflineGuideParameters } from "@/lib/offline-guide-directory";
 import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
@@ -319,6 +319,10 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
   const [savingInterest, setSavingInterest] = useState(false);
   const [hasCloudAccess, setHasCloudAccess] = useState(false);
   const [memberContent, setMemberContent] = useState<PublicGuideContent | null>(null);
+  const [memberState, setMemberState] = useState<"loading" | "guest" | "ready" | "unavailable" | "offline">("loading");
+  const [relatedState, setRelatedState] = useState<"loading" | "ready" | "unavailable">("loading");
+  const [retryRevision, setRetryRevision] = useState(0);
+  const observedOwner = useRef<string | null | undefined>(undefined);
   const [relatedArchives, setRelatedArchives] = useState<
     PlantRelatedArchiveItem[]
   >([]);
@@ -332,8 +336,15 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
   const [authRevision, setAuthRevision] = useState(0);
   useEffect(() => {
     if (typeof supabase.auth.onAuthStateChange !== "function") return;
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "INITIAL_SESSION") return;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextOwner = session?.user.id || null;
+      if (event === "INITIAL_SESSION") { observedOwner.current = nextOwner; return; }
+      if (observedOwner.current === nextOwner && (event === "TOKEN_REFRESHED" || event === "SIGNED_IN")) return;
+      observedOwner.current = nextOwner;
+      setMemberState("loading");
+      setIsSignedIn(Boolean(nextOwner));
+      setUserId(nextOwner);
+      setSaved(false);
       setHasCloudAccess(false);
       setMemberContent(null);
       setRelatedArchives([]);
@@ -351,6 +362,16 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
 
     async function load() {
       setLoading(true);
+      setMemberState(offline ? "offline" : "loading");
+      setRelatedState("loading");
+      setEntry(null);
+      setSection(null);
+      setMemberContent(null);
+      setHasCloudAccess(false);
+      setSaved(false);
+      setRelatedArchives([]);
+      setExperienceCards([]);
+      setRelatedRecords([]);
       setVisibleCards(RELATED_LIMIT);
       setVisibleRecords(RELATED_LIMIT);
       if (offline) {
@@ -380,6 +401,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
         setLoading(false);
         return;
       }
+      const authPromise = supabase.auth.getUser().catch(() => ({ data: { user: null }, error: true }));
       const extended = await supabase.rpc("get_public_guide_catalog", { p_id: id }).maybeSingle();
 
       let row = extended.data as PublicGuideEntry | null;
@@ -396,6 +418,10 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
         error = fallback.error;
       }
 
+      if (cancelled) return;
+      setEntry(error ? null : row);
+      basicReady = Boolean(row && !error);
+      setLoading(false);
       let sectionRow: PublicGuideSection | null = null;
       if (!error && row?.section_id) {
         const sectionResult = await supabase
@@ -426,15 +452,23 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
         setLoading(false);
       }
 
-      if (error || !row || cancelled) return;
-      const authResult = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
+      if (cancelled) return;
+      if (error || !row) { setMemberState("unavailable"); setRelatedState("unavailable"); return; }
+      const authResult = await authPromise;
+      if (cancelled) return;
       const user = authResult.data.user;
-      const [memberResult, interestResult] = await Promise.all([
-        user ? Promise.resolve(supabase.rpc("get_member_guide_content", { p_id: row.id, p_language: language }))
-          .catch((error: unknown) => ({ data: null, error })) : Promise.resolve({ data: null, error: null }),
-        user ? Promise.resolve(supabase.from("user_guide_interests").select("guide_id").eq("user_id", user.id).eq("guide_id", row.id).maybeSingle())
-          .catch(() => ({ data: null })) : Promise.resolve({ data: null }),
-      ]);
+      if (user) observedOwner.current = user.id;
+      setIsSignedIn(Boolean(user));
+      setUserId(user?.id || null);
+      if (!user) {
+        setMemberState(authResult.error ? "unavailable" : "guest");
+        setRelatedState("ready");
+        return;
+      }
+      void Promise.resolve(supabase.from("user_guide_interests").select("guide_id").eq("user_id", user.id).eq("guide_id", row.id).maybeSingle())
+        .then((result) => { if (!cancelled) setSaved(Boolean(result.data)); }).catch(() => undefined);
+      const memberResult = await Promise.resolve(supabase.rpc("get_member_guide_content", { p_id: row.id, p_language: language }))
+        .catch((error: unknown) => ({ data: null, error }));
       if (memberResult.error) console.warn("load member guide content failed:", memberResult.error);
       const rawFull = memberResult.error ? null : memberResult.data;
       const fullContent = rawFull && typeof rawFull === "object" && !Array.isArray(rawFull)
@@ -445,12 +479,12 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
       if (!cancelled) {
         setIsSignedIn(Boolean(user));
         setUserId(user?.id || null);
-        setSaved(Boolean(interestResult.data));
+        setMemberState(fullContent ? "ready" : "unavailable");
         setHasCloudAccess(Boolean(fullContent));
         setMemberContent(fullContent);
       }
 
-      if (!error && row && user) {
+      if (!error && row && user && !cancelled) {
         const related = await loadRelatedGuideContent(row, user?.id || null, language, true);
         if (!cancelled) {
           setRelatedArchives(related.relatedArchives);
@@ -458,6 +492,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
           setRelatedRecords(related.records);
           setHasMoreCards(related.hasMoreCards);
           setHasMoreRecords(related.hasMoreRecords);
+          setRelatedState("ready");
         }
       }
     }
@@ -477,12 +512,14 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
           setHasMoreRecords(false);
         }
         setLoading(false);
+        setMemberState((previous) => previous === "ready" ? previous : "unavailable");
+        setRelatedState("unavailable");
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [language, id, offline, offlineGuide, offlineSignedIn, authRevision]);
+  }, [language, id, offline, offlineGuide, offlineSignedIn, authRevision, retryRevision]);
 
   const cachedEntry: PublicGuideEntry | null = offlineGuide ? {
       id,
@@ -638,9 +675,9 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
               <button type="button" className={styles.saveButton} disabled={savingInterest} onClick={() => void saveGuide()}>
                 {savingInterest ? t.loading : (language === "en" ? "Save guide" : "加入收藏")}
               </button>
-            ) : (
-              <InternalLink href={signedIn ? "/membership" : buildLoginHref(returnHref)} className={styles.saveButton}>{language === "en" ? "Save guide" : "加入收藏"}</InternalLink>
-            )}
+            ) : memberState === "guest" ? (
+              <InternalLink href={buildLoginHref(returnHref)} className={styles.saveButton}>{language === "en" ? "Save guide" : "加入收藏"}</InternalLink>
+            ) : null}
           </div>
 
           {content.overview || summary ? (
@@ -686,7 +723,10 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
             ) : null}
 
             {!canReadFull ? (
-              offline || (!entry && cachedEntry) ? <section className={styles.accessNotice}>{copy.membershipForFull}</section> : <AccessNotice />
+              memberState === "loading" ? <section className={styles.stateCard}>{copy.loading}</section>
+                : offline ? <section className={styles.accessNotice}>{language === "zh" ? "联网后查看完整指引" : "Connect to view the full guide"}</section>
+                : memberState === "guest" ? <AccessNotice />
+                : <section className={styles.stateCard}>{language === "zh" ? "指引暂未加载成功" : "Guide could not be loaded"} <button type="button" className={styles.saveButton} onClick={() => setRetryRevision((value) => value + 1)}>{language === "zh" ? "重试" : "Retry"}</button></section>
             ) : (
               <>
                 {content.cycle ? (
@@ -766,7 +806,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
               {experienceCards.length ? <section className={styles.relatedList}>
                 {experienceCards.slice(0, canReadFull ? visibleCards : undefined).map((card) => <ExperienceCardListCard
                   key={card.id} item={card} dateValue={card.published_at} showAuthor />)}
-              </section> : <div className={styles.stateCard}>{copy.noExperienceCards}</div>}
+              </section> : <div className={styles.stateCard}>{relatedState === "loading" ? copy.loading : relatedState === "unavailable" ? (language === "zh" ? "暂未加载成功，请重试" : "Unable to load; try again") : copy.noExperienceCards}{relatedState === "unavailable" ? <button type="button" className={styles.saveButton} onClick={() => setRetryRevision((value) => value + 1)}>{language === "zh" ? "重试" : "Retry"}</button> : null}</div>}
               {hasMoreCards && !canReadFull ? <AccessNotice /> : null}
               {canReadFull && experienceCards.length > visibleCards ? <button type="button" className={styles.saveButton}
                 onClick={() => setVisibleCards((n) => n + RELATED_LIMIT)}>{language === "zh" ? "加载更多经验卡" : "Load more experience cards"}</button> : null}
@@ -784,7 +824,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
                   <small>{record.record_time || record.created_at || ""}</small>
                 </InternalLink>
               ))}
-            </section> : <div className={styles.stateCard}>{language === "zh" ? "暂无关联的公开种植记录" : "No related public growing records"}</div>}
+            </section> : <div className={styles.stateCard}>{relatedState === "loading" ? copy.loading : relatedState === "unavailable" ? (language === "zh" ? "暂未加载成功，请重试" : "Unable to load; try again") : (language === "zh" ? "暂无关联的公开种植记录" : "No related public growing records")}{relatedState === "unavailable" ? <button type="button" className={styles.saveButton} onClick={() => setRetryRevision((value) => value + 1)}>{language === "zh" ? "重试" : "Retry"}</button> : null}</div>}
             {hasMoreRecords && !canReadFull ? <AccessNotice /> : null}
             {canReadFull && relatedRecords.length > visibleRecords ? <button type="button" className={styles.saveButton}
               onClick={() => setVisibleRecords((n) => n + RELATED_LIMIT)}>{language === "zh" ? "加载更多种植记录" : "Load more growing records"}</button> : null}
