@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import AppConfirmDialog from "@/components/mobile/AppConfirmDialog";
 import {
   cancelNeverUploadedCloudRecord,
   getLocalArchiveDetail,
@@ -47,6 +48,7 @@ export default function AndroidPendingRecordReview({
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<{ recordId: string; archiveId: string; ownerId: string } | null>(null);
   const [error, setError] = useState("");
   const [imageUrls, setImageUrls] = useState<Map<string, string>>(() => new Map());
 
@@ -80,6 +82,13 @@ export default function AndroidPendingRecordReview({
   }, [expanded, archiveId, owner.userId]);
 
   const pending = (detail?.records || []).filter(pendingRecord);
+  const confirmRecord = confirmTarget && owner.userId &&
+    confirmTarget.ownerId === owner.userId && confirmTarget.archiveId === archiveId &&
+    detail?.archive.id === archiveId && detail.archive.local_owner_user_id === owner.userId && !busyId
+    ? pending.find((record) => record.id === confirmTarget.recordId && safelyCancelable(record))
+    : undefined;
+
+  useEffect(() => { setConfirmTarget(null); }, [archiveId, owner.userId]);
   async function upload(record: LocalRecordWithImages) {
     if (!onUploadRecord || busyId) return;
     setBusyId(record.id);
@@ -95,10 +104,8 @@ export default function AndroidPendingRecordReview({
   }
 
   async function cancel(record: LocalRecordWithImages) {
-    if (!owner.userId || busyId || !safelyCancelable(record)) return;
-    if (!window.confirm(language === "zh"
-      ? "确定取消这条从未上传的记录及其照片？删除后不能恢复。"
-      : "Cancel this never-uploaded record and photos? This cannot be undone.")) return;
+    if (!owner.userId || busyId || !safelyCancelable(record) ||
+      detail?.archive.id !== archiveId || detail.archive.local_owner_user_id !== owner.userId) return;
     setBusyId(record.id);
     setError("");
     try {
@@ -122,7 +129,7 @@ export default function AndroidPendingRecordReview({
 
   return <section data-w5-pending-record-review="true">
     {!focused ? <button type="button" aria-expanded={expanded}
-      onClick={() => { setExpanded((open) => !open); setSelectedId(null); }}>
+      onClick={() => { setExpanded((open) => !open); setSelectedId(null); setConfirmTarget(null); }}>
       {language === "zh"
         ? (expanded ? "收起待上传记录" : "查看待上传记录（仅显示未完成同步的内容）")
         : (expanded ? "Hide pending records" : "View pending records only")}
@@ -168,7 +175,9 @@ export default function AndroidPendingRecordReview({
               ) : null}
               {safelyCancelable(record) ? (
                 <button type="button" disabled={Boolean(busyId)}
-                  onClick={() => void cancel(record)}>
+                  onClick={() => {
+                    if (owner.userId && !busyId) setConfirmTarget({ recordId: record.id, archiveId, ownerId: owner.userId });
+                  }}>
                   {language === "zh" ? "删除" : "Delete"}
                 </button>
               ) : (
@@ -182,5 +191,21 @@ export default function AndroidPendingRecordReview({
         {error ? <p role="alert">{error}</p> : null}
       </div>
     ) : null}
+    <AppConfirmDialog
+      open={Boolean(confirmRecord)}
+      title={language === "zh" ? "删除待上传记录" : "Delete pending record"}
+      message={language === "zh"
+        ? "确定取消这条从未上传的记录及其照片？删除后不能恢复。"
+        : "Cancel this never-uploaded record and photos? This cannot be undone."}
+      cancelLabel={language === "zh" ? "取消" : "Cancel"}
+      confirmLabel={language === "zh" ? "删除" : "Delete"}
+      destructive
+      onCancel={() => setConfirmTarget(null)}
+      onConfirm={() => {
+        const record = confirmRecord;
+        setConfirmTarget(null);
+        if (record) void cancel(record);
+      }}
+    />
   </section>;
 }
