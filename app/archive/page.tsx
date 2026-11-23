@@ -176,6 +176,11 @@ export default function ArchivePage() {
   const [currentOwnerContext, setCurrentOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [activeSource, setActiveSource] = useState<ArchiveSourceFilter>("cloud");
   const [w5UploadingKey, setW5UploadingKey] = useState<string | null>(null);
+  const [archiveDecision, setArchiveDecision] = useState<
+    ({ kind: "public" | "end"; archiveId: string } |
+      { kind: "pending"; key: string; archiveId: string; creating: boolean }) &
+    { ownerId: string; epoch: number } | null>(null);
+  const [decisionBusy, setDecisionBusy] = useState(false);
   const [w5FocusedPendingKey, setW5FocusedPendingKey] = useState<string | null>(null);
   const [w5CloudCaches, setW5CloudCaches] = useState<LocalArchiveSummary[]>([]);
   const [w5Online, setW5Online] = useState(true);
@@ -307,6 +312,7 @@ export default function ArchivePage() {
     setLocalHiddenOwnedByOtherCount(0);
     setLocalError("");
     setDeleteArchiveTarget(null);
+    setArchiveDecision(null);
     setEditingPlantArchiveId(null);
     setEditingSystemArchiveId(null);
     setEditingLocalSystemArchiveId(null);
@@ -958,11 +964,12 @@ export default function ArchivePage() {
     }
   }
 
-  async function updateArchiveStatus(item: ArchiveItem, nextStatus: "active" | "ended") {
-    if (!requireCloudWriteAccess()) return;
+  async function updateArchiveStatus(item: ArchiveItem, nextStatus: "active" | "ended", approved = false) {
+    if (!isVerifiedOwner(item.user_id) || !requireCloudWriteAccess()) return;
     const isEnding = nextStatus === "ended";
 
-    if (isEnding && !confirm(t.archive.end_project_message)) {
+    if (isEnding && !approved) {
+      setArchiveDecision({ kind: "end", archiveId: item.id, ownerId: item.user_id, epoch: ownerEpochRef.current });
       return;
     }
 
@@ -1001,11 +1008,14 @@ export default function ArchivePage() {
     ));
   }
 
-  async function toggleArchivePublic(item: ArchiveItem) {
+  async function toggleArchivePublic(item: ArchiveItem, approved = false) {
     if (!isVerifiedOwner(item.user_id)) return;
     const newValue = !item.is_public;
     if (newValue && !requireCloudWriteAccess()) return;
-    if (newValue && !window.confirm(t.archive_workspace.confirm_public_project)) return;
+    if (newValue && !approved) {
+      setArchiveDecision({ kind: "public", archiveId: item.id, ownerId: item.user_id, epoch: ownerEpochRef.current });
+      return;
+    }
     const { data: visibilityResult, error } = await supabase.rpc(
       newValue ? "make_my_archive_public" : "make_my_archive_private",
       { p_archive_id: item.id }
@@ -1309,6 +1319,33 @@ export default function ArchivePage() {
         archive.local_owner_user_id === currentOwnerContext.userId)) : [],
     preferLive: w5Online,
   }), [localArchives, w5CloudCaches, w5Online, authorizedArchives, pendingCloudSyncSummaries, currentOwnerContext?.userId]);
+  const decisionOwnerCurrent = Boolean(archiveDecision && archiveDecision.epoch === ownerEpochRef.current &&
+    archiveDecision.ownerId === sessionOwnerRef.current && archiveDecision.ownerId === currentOwnerContext?.userId);
+  const decisionArchive = decisionOwnerCurrent && archiveDecision && archiveDecision.kind !== "pending" &&
+    isVerifiedOwner(archiveDecision.ownerId) && canCreateMembershipContent(membership)
+    ? archives.find((item) => item.id === archiveDecision.archiveId && item.user_id === archiveDecision.ownerId &&
+        (archiveDecision.kind === "public" ? !item.is_public : item.status !== "ended"))
+    : undefined;
+  const decisionPending = decisionOwnerCurrent && archiveDecision?.kind === "pending" && !w5UploadingKey
+    ? w5Workspace.pending.find((item) => item.key === archiveDecision.key && item.summaries.length === 1 &&
+        item.summaries[0].local_archive_id === archiveDecision.archiveId &&
+        item.summaries[0].archive_create_pending === archiveDecision.creating &&
+        (archiveDecision.creating || (item.summaries[0].archive_update_pending &&
+          !item.summaries[0].record_count && !item.summaries[0].image_count)))
+    : undefined;
+  async function confirmArchiveDecision() {
+    if (!archiveDecision || decisionBusy || !decisionOwnerCurrent) return;
+    const target = archiveDecision;
+    setDecisionBusy(true);
+    try {
+      if (target.kind === "pending" && decisionPending) await w5CancelPending(decisionPending, true);
+      else if (target.kind === "public" && decisionArchive) await toggleArchivePublic(decisionArchive, true);
+      else if (target.kind === "end" && decisionArchive) await updateArchiveStatus(decisionArchive, "ended", true);
+    } finally {
+      setArchiveDecision(null);
+      setDecisionBusy(false);
+    }
+  }
   const visibleCategoryCounts = useMemo(() => {
     const counts: Record<ArchiveCategory, number> = {
       plant: 0,
@@ -1541,8 +1578,10 @@ export default function ArchivePage() {
     } finally { setW5UploadingKey(null); }
   }
 
-  async function w5CancelPending(item: PendingCloudProject<LocalArchiveSummary, ArchiveItem>) {
+  async function w5CancelPending(item: PendingCloudProject<LocalArchiveSummary, ArchiveItem>, approved = false) {
     if (!currentOwnerContext?.userId || w5UploadingKey || item.summaries.length !== 1) return;
+    const ownerId = currentOwnerContext.userId;
+    const epoch = ownerEpochRef.current;
     const summary = item.summaries[0];
     const { data } = await supabase.auth.getUser();
     if (data.user?.id !== currentOwnerContext.userId) {
@@ -1554,9 +1593,13 @@ export default function ArchivePage() {
     if (!creating && !projectEdit) {
       showToast(t.archive_workspace.pending_cancel_blocked); return;
     }
-    if (!window.confirm(creating
-      ? t.archive_workspace.pending_cancel_create_confirm
-      : t.archive_workspace.pending_cancel_edit_confirm)) return;
+    if (!approved) {
+      if (ownerEpochRef.current !== epoch || sessionOwnerRef.current !== ownerId) return;
+      setArchiveDecision({ kind: "pending", key: item.key, archiveId: summary.local_archive_id, creating,
+        ownerId, epoch });
+      return;
+    }
+    if (ownerEpochRef.current !== epoch || sessionOwnerRef.current !== ownerId) return;
     setW5UploadingKey(item.key);
     try {
       if (creating) await cancelNeverUploadedCloudArchive(summary.local_archive_id, currentOwnerContext);
@@ -2586,6 +2629,19 @@ export default function ArchivePage() {
           </section>
         ) : null}
       </ArchiveWorkspaceTemplate>
+      <ConfirmDialog
+        open={Boolean(decisionArchive || decisionPending)}
+        title={archiveDecision?.kind === "pending" ? t.archive_workspace.pending_cancel_action : t.confirm}
+        message={archiveDecision?.kind === "public" ? t.archive_workspace.confirm_public_project
+          : archiveDecision?.kind === "end" ? t.archive.end_project_message
+            : archiveDecision?.kind === "pending" && archiveDecision.creating
+              ? t.archive_workspace.pending_cancel_create_confirm : t.archive_workspace.pending_cancel_edit_confirm}
+        confirmDisabled={decisionBusy}
+        cancelDisabled={decisionBusy}
+        danger={archiveDecision?.kind === "pending"}
+        onClose={() => setArchiveDecision(null)}
+        onConfirm={confirmArchiveDecision}
+      />
       <ConfirmDialog
         open={Boolean(deleteArchiveTarget)}
         title={t.archive_workspace.move_to_trash}
