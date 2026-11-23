@@ -57,7 +57,7 @@ function fakeModules(){
   buildApi.onLoad({filter:/.*/,namespace:"r22"},a=>({
    loader:"js",
    contents:a.path==="supabase"?"export const supabase = globalThis.__r22Mocks.supabase;":
-    a.path==="connectivity"?"export const isAndroidOnline = ()=>true;":
+    a.path==="connectivity"?"export const isAndroidOnline = ()=>true;export const getAndroidConnectivitySnapshot = () => ({transportStatus:'connected',serviceStatus:'reachable',status:'online',generation:0});export const recheckAndroidConnectivity = async () => true;":
     a.path==="media"?"export function isDefiniteStorageUploadRejection(statusCode){return Number.isInteger(statusCode)&&statusCode>=400&&statusCode<500&&![408,409,425,429,499].includes(statusCode)};export async function uploadMediaStorageObject(){throw Error('NO MEDIA MOCK UPLOAD PERMITTED')}":
     "export async function reserveStorageUpload(){throw Error('NO MEDIA RESERVATION PERMITTED')};export async function settleStorageUploadReservation(){throw Error('NO MEDIA SETTLEMENT PERMITTED')};export async function cancelStorageUploadReservation(){throw Error('NO MEDIA CANCEL PERMITTED')};export async function reconcileMediaUploadCommit(){throw Error('NO MEDIA RECONCILE PERMITTED')}",
   }));
