@@ -59,6 +59,7 @@ export default function AndroidProfileController({ snapshot, online, signedIn, o
     exportScope.current = { ownerId: snapshot.userId, online, signedIn, module, revision: exportScope.current.revision + 1 };
   }
   useEffect(() => { setExportConfirmation(null); }, [snapshot.userId, online, signedIn, module]);
+  useEffect(() => () => { exportScope.current.revision += 1; }, []);
   const currentExport = (ownerId: string, revision: number) => {
     const scope = exportScope.current;
     return scope.ownerId === ownerId && scope.revision === revision && scope.online && scope.signedIn && scope.module === "backup";
@@ -204,8 +205,8 @@ export default function AndroidProfileController({ snapshot, online, signedIn, o
     try {
       const identity = await supabase.auth.getUser();
       const session = await supabase.auth.getSession();
-      if (identity.error || identity.data.user?.id !== snapshot.userId ||
-          session.error || !session.data.session?.access_token) {
+      if (!currentExport(ownerId, revision) || identity.error || identity.data.user?.id !== ownerId ||
+          session.error || session.data.session?.user.id !== ownerId || !session.data.session.access_token) {
         throw new Error(language === "zh" ? "请重新登录后再导出。" : "Sign in again to export.");
       }
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -217,6 +218,7 @@ export default function AndroidProfileController({ snapshot, online, signedIn, o
         : `Export all your cloud projects: ${estimate.projects} projects, ${estimate.records} records and ${estimate.media} media files (about ${size}). Save the ZIP?`;
       if (currentExport(ownerId, revision)) setExportConfirmation({ ownerId, question, timeZone, revision });
     } catch (cause) {
+      if (!currentExport(ownerId, revision)) return;
       const unavailable = cause instanceof Error &&
         ["matching_export_service_required", "qa_export_to_production_rejected"].includes(cause.message);
       setExportStatus(unavailable
