@@ -91,7 +91,7 @@ test("local record composer accepts native gallery files while retaining the bro
   assert.match(handler, /<input[\s\S]*type="file"/);
 });
 
-test("the web UI states the standard and does not promise automatic system-album writes", async () => {
+test("the web UI shows optional photo controls and retains photo standardization and album-write rules", async () => {
   const [cloudComposer, localComposer, rules, zhCopy, enCopy] = await Promise.all([
     source("app/archive/[id]/AddRecord.tsx"),
     source("app/local/archive/[id]/page.tsx"),
@@ -100,7 +100,9 @@ test("the web UI states the standard and does not promise automatic system-album
     source("lib/i18n/en.ts"),
   ]);
 
-  assert.match(cloudComposer, /copy\.standard_photo_hint/);
+  assert.match(cloudComposer, /照片（选填，最多/);
+  assert.match(cloudComposer, /selectedQuality\(photo\.file, freshMembership\)/);
+  assert.match(cloudComposer, /photoQualities\.map/);
   assert.match(localComposer, /recordCopy\.local_standard_photo_hint/);
   assert.match(zhCopy, /最长边不超过 1800px、质量 82%/);
   assert.match(zhCopy, /小图不放大/);
