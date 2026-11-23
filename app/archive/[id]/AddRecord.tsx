@@ -1729,10 +1729,15 @@ export default function AddRecord({
         disabled={loading || membershipLoading || contentBlocked || uploadWouldExceedStorage || submissionNeedsReview}
         style={{
           marginTop: "12px",
+          minHeight: 44,
           padding: "10px 16px",
-          borderRadius: "8px",
-          border: "1px solid #ddd",
-          background: "#fff",
+          borderRadius: 12,
+          border: "1px solid #4f7b45",
+          background: "#4f7b45",
+          color: "#fff",
+          fontSize: 14,
+          fontWeight: 600,
+          opacity: loading || membershipLoading || contentBlocked || uploadWouldExceedStorage || submissionNeedsReview ? 0.55 : 1,
           cursor:
             loading || membershipLoading || contentBlocked || uploadWouldExceedStorage || submissionNeedsReview
               ? "not-allowed"
