@@ -149,11 +149,12 @@ test("private media denies B and anonymous before any R2 or Storage read", async
   assert.equal(state.legacyCalls.length, 0);
 });
 
-test("public record can be read anonymously, but existing link revokes when made private or trashed", async () => {
+test("registered users can read public records, but existing link revokes when made private or trashed", async () => {
   const { get, state } = setup({ isPublic: true });
-  assert.equal((await get(null)).status, 200);
-  state.public = false;
   assert.equal((await get(null)).status, 404);
+  assert.equal((await get(B)).status, 200);
+  state.public = false;
+  assert.equal((await get(B)).status, 404);
   state.trashed = true;
   assert.equal((await get(A)).status, 404);
 });

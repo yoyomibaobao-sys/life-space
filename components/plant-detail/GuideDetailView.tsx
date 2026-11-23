@@ -23,8 +23,7 @@ import type {
 } from "@/lib/experience-card-types";
 import { hydrateExperienceCardListItems } from "@/lib/experience-cards";
 import { guideAssociationPreview } from "@/lib/guide-association-limits";
-import { GUIDE_FREE_TARGET, scanGuidePages } from "@/lib/guide-association-pages";
-import { canAccessMembershipGuidance, normalizeMembershipRpcResult } from "@/lib/membership";
+import { scanGuidePages } from "@/lib/guide-association-pages";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import type { PlantRelatedArchiveItem } from "@/lib/plant-detail-types";
@@ -255,7 +254,6 @@ async function loadRelatedGuideContent(
   }
   const archiveIds = archiveRows.map((archive) => archive.id);
   const recordScan = await scanGuidePages<GuideRecordRow>({
-    target: fullAccess ? Infinity : GUIDE_FREE_TARGET,
     loadPage: async (from, to) => {
       const result = await (supabase as any).from("public_guide_record_projection")
         .select("id, archive_id, note, record_time, visibility, created_at")
@@ -269,7 +267,6 @@ async function loadRelatedGuideContent(
   const publicRecords = recordScan.items;
 
   const cardScan = await scanGuidePages<{ id: string }>({
-    target: fullAccess ? Infinity : GUIDE_FREE_TARGET,
     loadPage: async (from, to) => {
       const result = await supabase.from("experience_cards").select("id")
         .in("archive_id", archiveIds).eq("status", "published")
@@ -432,12 +429,8 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
       if (error || !row || cancelled) return;
       const authResult = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
       const user = authResult.data.user;
-      const membershipResult = user
-        ? await Promise.resolve(supabase.rpc("get_my_membership")).catch(() => ({ data: null, error: true }))
-        : { data: null, error: null };
-      const isPaidPlus = !membershipResult.error && canAccessMembershipGuidance(normalizeMembershipRpcResult(membershipResult.data));
       const [memberResult, interestResult] = await Promise.all([
-        user && isPaidPlus ? Promise.resolve(supabase.rpc("get_member_guide_content", { p_id: row.id, p_language: language }))
+        user ? Promise.resolve(supabase.rpc("get_member_guide_content", { p_id: row.id, p_language: language }))
           .catch((error: unknown) => ({ data: null, error })) : Promise.resolve({ data: null, error: null }),
         user ? Promise.resolve(supabase.from("user_guide_interests").select("guide_id").eq("user_id", user.id).eq("guide_id", row.id).maybeSingle())
           .catch(() => ({ data: null })) : Promise.resolve({ data: null }),
@@ -457,8 +450,8 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
         setMemberContent(fullContent);
       }
 
-      if (!error && row) {
-        const related = await loadRelatedGuideContent(row, user?.id || null, language, Boolean(fullContent));
+      if (!error && row && user) {
+        const related = await loadRelatedGuideContent(row, user?.id || null, language, true);
         if (!cancelled) {
           setRelatedArchives(related.relatedArchives);
           setExperienceCards(related.experienceCards);

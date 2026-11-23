@@ -9,6 +9,7 @@ import {
   type CSSProperties,
   type KeyboardEvent,
 } from "react";
+import { buildLoginHref } from "@/lib/auth-return";
 import { useRouter } from "next/navigation";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ExperienceCardEditWorkspace from "@/components/experience-card/ExperienceCardEditWorkspace";
@@ -97,6 +98,13 @@ export function ExperienceCardContent({ id, onBack, onDeleted, routerless, onMis
       data: { user },
     } = await supabase.auth.getUser();
     setViewerId(user?.id || null);
+    if (!user) {
+      setDetail(null);
+      setLoading(false);
+      if (onMissingUser) onMissingUser();
+      else window.location.replace(buildLoginHref("/experience-cards/" + id));
+      return;
+    }
     const nextDetail = await loadExperienceCard(id);
     setDetail(nextDetail);
     if (showLoading) setLoading(false);

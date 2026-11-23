@@ -10,12 +10,6 @@ import type {
   ExperienceCardCommentRow,
   ExperienceCardInteractionSummary,
 } from "@/lib/experience-card-types";
-import {
-  canCreateMembershipContent,
-  getCreateContentBlockedText,
-  normalizeMembershipRpcResult,
-  type MyMembership,
-} from "@/lib/membership";
 import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
@@ -54,7 +48,6 @@ export default function ExperienceCardInteractions({
   const { language, t } = useLanguage();
   const [summary, setSummary] = useState<Summary>(emptySummary);
   const [comments, setComments] = useState<CommentItem[]>([]);
-  const [membership, setMembership] = useState<MyMembership | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -64,7 +57,7 @@ export default function ExperienceCardInteractions({
 
   const isOwner = currentUserId === cardOwnerId;
   const canWrite = Boolean(
-    currentUserId && canCreateMembershipContent(membership) && isPublic
+    currentUserId && isPublic
   );
 
   async function loadSummary() {
@@ -117,19 +110,12 @@ export default function ExperienceCardInteractions({
 
   useEffect(() => {
     async function init() {
-      const membershipResult = currentUserId
-        ? await supabase.rpc("get_my_membership")
-        : { data: null, error: null };
-      setMembership(
-        membershipResult.error
-          ? null
-          : normalizeMembershipRpcResult(membershipResult.data)
-      );
+      if (!currentUserId || !isPublic) return;
       await Promise.all([loadSummary(), loadComments()]);
     }
     void init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardId, currentUserId, language]);
+  }, [cardId, currentUserId, language, isPublic]);
 
   function requireWritableAccount() {
     if (!available) {
@@ -138,10 +124,6 @@ export default function ExperienceCardInteractions({
     }
     if (!currentUserId) {
       showToast(t.experience.login_first);
-      return false;
-    }
-    if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership, language));
       return false;
     }
     if (!isPublic) {
@@ -364,19 +346,12 @@ export default function ExperienceCardInteractions({
               ) : (
                 <div className={styles.commentGate}>
                   <span>
-                    {currentUserId
-                      ? getCreateContentBlockedText(membership, language)
-                      : t.experience.login_to_comment}
+                    {t.experience.login_to_comment}
                   </span>
-                  <Link
-                    href={
-                      currentUserId
-                        ? "/membership"
-                        : buildLoginHref(getCurrentInternalPath())
-                    }
+                  <Link href={buildLoginHref(getCurrentInternalPath())}
                     className={styles.gateLink}
                   >
-                    {currentUserId ? t.experience.learn_membership : t.experience.go_login}
+                    {t.experience.go_login}
                   </Link>
                 </div>
               )}

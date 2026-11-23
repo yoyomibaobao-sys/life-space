@@ -379,17 +379,6 @@ export default function UserSpacePage() {
       return;
     }
 
-    const { data: membershipData, error: membershipError } =
-      await supabase.rpc("get_my_membership");
-    const membership = membershipError
-      ? null
-      : normalizeMembershipRpcResult(membershipData);
-    if (!canCreateMembershipContent(membership)) {
-      setFollowBusy(false);
-      showToast(getCreateContentBlockedText(membership, language));
-      return;
-    }
-
     const { error } = await supabase.from("follows").insert({
       follower_id: viewerId,
       following_id: userId,

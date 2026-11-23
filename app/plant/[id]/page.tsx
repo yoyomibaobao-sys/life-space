@@ -13,15 +13,11 @@ import { supabase } from "@/lib/supabase";
 import { formatCardDate } from "@/lib/date-time";
 import { hydrateExperienceCardListItems } from "@/lib/experience-cards";
 import { guideAssociationPreview } from "@/lib/guide-association-limits";
-import { GUIDE_FREE_TARGET, scanGuidePages } from "@/lib/guide-association-pages";
+import { scanGuidePages } from "@/lib/guide-association-pages";
 import type { ExperienceCardListItem, ExperienceCardRow } from "@/lib/experience-card-types";
 import { getEnvironmentDetailItems, getEnvironmentTags } from "@/lib/plant-env";
 import { getPlantGrowthTypeLabel } from "@/lib/plant-shared";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
-import {
-  canAccessMembershipGuidance,
-  normalizeMembershipRpcResult,
-} from "@/lib/membership";
 import {
   loadPlantBasicOverviewsCompat,
   loadPublicPlantCatalogDetail,
@@ -1356,17 +1352,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
       if (cancelled) return;
       setIsSignedIn(Boolean(user));
       setCurrentUserId(user?.id || null);
-      const membershipResult = user
-        ? await supabase.rpc("get_my_membership")
-        : { data: null, error: null };
-      const membership = membershipResult.error
-        ? null
-        : normalizeMembershipRpcResult(membershipResult.data);
-      if (cancelled) return;
-      const claimedPlus = canAccessMembershipGuidance(membership);
-      // No direct SELECT against complete plant tables. Keep the client closed
-      // until the audited server-side Plus RPC exists and authenticates this user.
-      const plusResult = claimedPlus
+      const plusResult = user
         ? await Promise.resolve(supabase.rpc("get_plus_plant_guide", {
             p_species_id: resolvedPlantId, p_language: language,
           })).catch(() => ({ data: null, error: true }))
@@ -1383,7 +1369,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
             care_guide?: PlantCareGuideRow | null;
           }
         : null;
-      const canReadFullGuide = claimedPlus && Boolean(plusDetail);
+      const canReadFullGuide = Boolean(plusDetail);
       setHasCloudAccess(canReadFullGuide);
 
       const [{ data: i18nData }, { data: aliasData }] = await Promise.all([
@@ -1463,9 +1449,9 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
         setOwnArchives([]);
       }
 
-      if (publicRows.length) {
+      if (user && publicRows.length) {
         const publicIds = publicRows.map((archive) => archive.id);
-        const target = canReadFullGuide ? Infinity : GUIDE_FREE_TARGET;
+        const target = Infinity;
         const records = await scanGuidePages<{ id: string; archive_id: string; note: string | null }>({
           target,
           loadPage: async (from, to) => {
@@ -1491,8 +1477,8 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
             return !error && Boolean(Array.isArray(data) ? data[0] : data);
           },
         });
-        const cardPreview = guideAssociationPreview(cards.items, canReadFullGuide);
-        const recordPreview = guideAssociationPreview(records.items, canReadFullGuide);
+        const cardPreview = guideAssociationPreview(cards.items, true);
+        const recordPreview = guideAssociationPreview(records.items, true);
         const publicCards: ExperienceCardRow[] = [];
         for (let offset = 0; offset < cardPreview.items.length; offset += RELATED_ARCHIVE_LIMIT) {
           const batchIds = cardPreview.items.slice(offset, offset + RELATED_ARCHIVE_LIMIT).map((card) => card.id);
@@ -2131,7 +2117,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
       ) : null}
 
       {activeTab === "experience" ? (
-        hasCloudAccess ? (
+        isSignedIn && !offline ? (
           <>
             <PlantExperienceCardsSection
               cards={relatedExperienceCards.slice(0, visibleCards)}
@@ -2152,7 +2138,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
       ) : null}
 
       {activeTab === "records" ? (
-        hasCloudAccess ? (
+        isSignedIn && !offline ? (
           <>
             <PlantRecordsSection parameters={parameters} ownArchives={ownArchives}
               publicArchives={relatedArchives.slice(0, visibleRecords)} isLoggedIn={isSignedIn} copy={copy} />

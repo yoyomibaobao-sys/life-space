@@ -358,28 +358,52 @@ const en = {
     trial_title: "Each formal account may claim one 30 MB cloud trial",
     trial_description: "Claim after confirming the registration email. The trial lasts 90 days, followed by a 30-day read-only period for upgrading, exporting, or saving data locally. When the period ends, trial cloud data not saved locally and not upgraded to Plus is removed from the cloud. Content already saved on the device remains available.",
     plans: [
-      {
-        title: "Visitor (not registered)",
-        price: "Free",
-        description: "Browse public content and keep records locally on this device.",
-        items: ["Browse public records and Market", "View the plant directory and basic guides", "Keep local offline projects, records, and photos", "Open a single public Experience Card by direct link", "Cannot read full guides or detailed parameters or take part in interactions"],
-        mobile_items: ["Browse public content", "Keep offline records", "View basic guides"],
-      },
-      {
-        title: "Registered user",
-        price: "Free",
-        description: "Register an account while keeping records only on this device.",
-        items: ["All visitor basic-guide and local-record features", "Contact Market publishers", "Projects, records, and photos stay in the app's private device storage", "No detailed parameters, complete guide, or aggregated growing experience", "No comments, adoptions, follows, or cloud publishing"],
-        mobile_items: ["Basic guides", "Contact Market publishers", "Records remain on this device"],
-      },
-      {
-        title: "Plus (launch price)",
-        price: "¥64 / year | US$8 / year",
-        description: "For ongoing cultivation records, long-term cloud storage, and your personal experience library.",
-        items: ["1 GB cloud storage", "Private cloud space and multi-device sync", "After membership ends, cloud content you have not deleted remains available read-only and can be saved to your devices at any time, as often as needed", "Records can stay private or be public", "Available parameters, guidance, and growing records, with practical content being improved", "Create Experience Cards and export MP4 videos", "Comments, replies, adoptions, and follows", "Up to 30 simultaneously active Market posts"],
-        mobile_items: ["1 GB cloud storage and sync", "Cloud content remains read-only after expiry and can be saved locally at any time", "Experience Cards, organized photos, and interactions", "Up to 30 active Market posts"],
-      },
+  {
+    "title": "Visitor",
+    "price": "Free",
+    "description": "Browse the plant directory, basic summaries and Market listings.",
+    "items": [
+      "Sign in to view full guides, public records and Experience Cards.",
+      "Sign in for community interactions."
     ],
+    "mobile_items": [
+      "Sign in to view full guides, public records and Experience Cards.",
+      "Sign in for community interactions."
+    ]
+  },
+  {
+    "title": "Free",
+    "price": "Free",
+    "description": "30 MB cloud storage and 5 active Market listings.",
+    "items": [
+      "All full guides, public records and Experience Cards",
+      "Follow users or records, comment, reply, bookmark cards and mark them helpful",
+      "Standard 1800px new record photos",
+      "Manage your existing Experience Cards"
+    ],
+    "mobile_items": [
+      "All full guides, public records and Experience Cards",
+      "Follow users or records, comment, reply, bookmark cards and mark them helpful",
+      "Standard 1800px new record photos",
+      "Manage your existing Experience Cards"
+    ]
+  },
+  {
+    "title": "Plus",
+    "price": "¥64 / year | US$8 / year",
+    "description": "1 GB cloud storage and 30 active Market listings.",
+    "items": [
+      "All Free reading and interaction permissions",
+      "Create Experience Cards",
+      "Choose standard 1800px, high 2400px or original dimensions for each photo"
+    ],
+    "mobile_items": [
+      "All Free reading and interaction permissions",
+      "Create Experience Cards",
+      "Choose standard 1800px, high 2400px or original dimensions for each photo"
+    ]
+  }
+],
     business_label: "Operations & collaboration · Coming later",
     business_title: "Business Membership",
     business_description: "For individual operators, nurseries, farms, studios, small businesses, and collaborative teams. An individual can join alone; when a team is involved, each member uses their own login to enter the same business space rather than sharing credentials.",
@@ -407,23 +431,8 @@ const en = {
     more_storage_label: "Need more storage? ",
     more_storage_text: "If you have many photos, long-term archives, or higher-capacity needs, contact the administrator for an individual assessment. Larger plans are not publicly listed and are confirmed case by case.",
     rules_title: "Usage rules",
-    rules: [
-      "Local offline use is free, and data stays in the app's private storage on this device.",
-      "Registration does not upload content. Each formal account may claim one 30 MB cloud trial for 90 days, followed by a 30-day read-only handling period; trial cloud data not saved locally and not upgraded to Plus is removed when the period ends, while local features remain free.",
-      "Uploading to the cloud does not make content public; records can stay private or be made public.",
-      "After opening Cloud Membership, existing local records sync as private cloud content and are not published automatically.",
-      "After Cloud Membership ends, cloud content you have not deleted remains available read-only and can be saved to your devices at any time, as often as needed. Renewing restores cloud editing and sync.",
-      "Cloud Membership includes 1 GB of cloud storage and up to 30 simultaneously active Market posts. No Market quota add-on is offered now.",
-      "The current launch price is ¥64/year or US$8/year, with no automatic renewal.",
-      "Payment and Cloud Membership opening are currently confirmed manually. Automated payment or app-store purchasing may be added later.",
-    ],
-    mobile_rules: [
-      "Local offline records always remain free.",
-      "Registration does not upload content, and cloud content is never published automatically.",
-      "After membership expires, cloud content remains read-only and can be saved locally at any time.",
-      "Cloud Membership includes 1 GB and up to 30 active Market posts.",
-      "The launch price is ¥64/year or US$8/year, without automatic renewal.",
-    ],
+    rules: ["Uploading and publishing are separate choices.", "Returning to Free preserves records, photos and Experience Cards.", "Main photos count toward storage. Thumbnails do not."],
+    mobile_rules: ["Uploading and publishing are separate choices.", "Returning to Free preserves records, photos and Experience Cards.", "Main photos count toward storage. Thumbnails do not."],
   },
 
   notifications: {
@@ -671,7 +680,7 @@ const en = {
     reading_project_records: "Loading project records...",
     cannot_edit: "Cannot edit Experience Card",
     membership_required: "Cloud Membership required",
-    membership_required_hint: "Experience Cards reference cloud projects and records. Only Cloud Members can create, edit, and publish them.",
+    membership_required_hint: "Plus is required to create an Experience Card. Owners can manage their existing cards.",
     back: "Back",
     remove_record_prefix: "Remove record ",
     remove_record_suffix: " from the Experience Card",
@@ -928,7 +937,7 @@ const en = {
       experience_cards: "Experience Cards",
       my_experience_cards: "My Experience Cards",
       others_experience_cards: "Other growers’ Experience Cards",
-      complete_content_suffix: " is part of the full guide available with Cloud Membership.",
+      complete_content_suffix: " is available when signed in online.",
       learn_membership: "Learn about Cloud Membership",
       default_title: "Plant Guide",
       trellis: "Trellis",
@@ -1004,9 +1013,9 @@ const en = {
       },
       english_name: "English name: ",
       visitor_detail_notice: "Visitors can read basic guides. Full content requires active cloud access.",
-      plus_visible: "Available to Plus cloud members",
+      plus_visible: "Sign in to view online",
       register_basic_summary: "Register for core parameters",
-      local_detail_notice: "As a local user, you can read the basic summary and a small set of core growing parameters. Complete parameters, growth cycles, full care guidance, the Experience Card library, and aggregate comparisons are available with Cloud Membership.",
+      local_detail_notice: "Available offline information is shown from this device.",
       new_cloud_project: "Create cloud growing project",
       new_local_project: "Create local growing project",
       plan_already_added: "Plan added",
@@ -1019,7 +1028,7 @@ const en = {
       guide_tab: "Overview & growing guide",
       summary: "Overview",
       basic_parameters: "Basic growing parameters",
-      local_parameter_notice: "Regional and seasonal fit, precise thresholds, complete care guidance, and multi-case comparisons are Cloud Membership benefits.",
+      local_parameter_notice: "Sign in online for full parameters and growing methods.",
       climate_environment: "Climate & environment",
       environment_setting: "Environment & setting",
       climate_timing: "Climate & timing",

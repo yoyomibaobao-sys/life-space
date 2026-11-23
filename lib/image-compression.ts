@@ -1,3 +1,4 @@
+import type { PhotoQuality } from "./record-photo-quality";
 export type CompressImageOptions = {
   maxWidthOrHeight?: number;
   quality?: number;
@@ -255,12 +256,12 @@ export async function compressImageFile(
 
 export async function standardizeRecordPhotoFile(
   file: File,
-  options: { requireSanitized?: boolean } = {}
+  options: { requireSanitized?: boolean; quality?: PhotoQuality } = {}
 ): Promise<CompressImageResult> {
   const originalSize = file.size;
   const standard = await renderImageVariant(file, {
-    maxWidthOrHeight: RECORD_PHOTO_MAX_EDGE,
-    quality: RECORD_PHOTO_QUALITY,
+    maxWidthOrHeight: options.quality === "original" ? Infinity : options.quality === "high" ? 2400 : RECORD_PHOTO_MAX_EDGE,
+    quality: options.quality === "original" ? 0.95 : options.quality === "high" ? 0.9 : RECORD_PHOTO_QUALITY,
   });
 
   if (options.requireSanitized && !standard.wasGenerated) {

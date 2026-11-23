@@ -2,6 +2,7 @@
 import { rememberDefaultPlantingRegion } from "@/lib/planting-region";
 import { rememberDefaultRecordLocation } from "@/lib/record-location";
 
+import { photoQualities, defaultPhotoQuality, saveDefaultPhotoQuality, photoQualityLabel, type PhotoQuality } from "@/lib/record-photo-quality";
 import Link from "next/link";
 import CloudTrialEntry from "@/components/CloudTrialEntry";
 import { formatAccountNumber } from "@/lib/account-number";
@@ -23,6 +24,7 @@ import { showToast } from "@/components/Toast";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
 import { formatStorage, loadUserProfileData, type UserProfileStats } from "@/lib/user-profile-shared";
 import {
+  hasActivePlus,
   formatMembershipDate,
   getDaysRemaining,
   getMembershipEndDate,
@@ -31,7 +33,6 @@ import {
   getMembershipStatusLabel,
   getMembershipSummary,
   normalizeMembershipRpcResult,
-  normalizeCloudTrialOfferRpcResult,
   type MyMembership,
 } from "@/lib/membership";
 import {
@@ -157,7 +158,6 @@ export default function ProfilePage() {
   const [profileStats, setProfileStats] = useState<UserProfileStats | null>(null);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [membershipError, setMembershipError] = useState("");
-  const [trialLifecycle, setTrialLifecycle] = useState<string | null>(null);
   const [paymentRows, setPaymentRows] = useState<MembershipPaymentRow[]>([]);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -275,12 +275,10 @@ export default function ProfilePage() {
 
       const [
         membershipResult,
-        trialOfferResult,
         adminResult,
         paymentsResult,
       ] = await Promise.all([
         supabase.rpc("get_my_membership"),
-        supabase.rpc("get_my_cloud_trial_offer"),
         supabase.rpc("is_app_admin", { p_user_id: user.id }),
         supabase
           .from("membership_payments")
@@ -299,9 +297,7 @@ export default function ProfilePage() {
         setMembershipError("");
       }
 
-      if (adminResult.error) {      setTrialLifecycle(trialOfferResult.error
-        ? null
-        : normalizeCloudTrialOfferRpcResult(trialOfferResult.data)?.lifecycle_status || null);
+      if (adminResult.error) {
 
 
         console.error("load admin status error:", adminResult.error);
@@ -385,7 +381,7 @@ export default function ProfilePage() {
       : "";
   const membershipStatusText = membershipError
     ? t.profile.membership_load_failed
-    : getMembershipSummary(membership, language, trialLifecycle);
+    : getMembershipSummary(membership, language);
   const visibleMobileProfileModules = mobileProfileNavigation({
     language, native: isNativeApp === true, admin: isAdmin,
     refundLabel: t.profile.refund_request_nav,
@@ -1370,6 +1366,16 @@ export default function ProfilePage() {
 
         <section aria-label={language === "en" ? "Preferences" : "常用设置"} style={isMobileViewport ? mobileProfileGroupStyle : { display: "contents" }}>
         {isNativeApp === true ? <AndroidAppVersionEntry /> : null}
+        {user && hasActivePlus(membership) && (
+          <label>{language === "zh" ? "本机默认记录画质 " : "Default record photo quality on this device "}
+            <select key={user.id} defaultValue={defaultPhotoQuality(user.id)} onChange={event => {
+              try { saveDefaultPhotoQuality(user.id, event.target.value as PhotoQuality); }
+              catch { showToast(language === "zh" ? "未能保存画质设置" : "Could not save quality preference"); }
+            }}>
+              {photoQualities.map(q => <option key={q} value={q}>{photoQualityLabel(q, language)}</option>)}
+            </select>
+          </label>
+        )}
         <section id="language-settings" style={{ ...languageInlineStyle, ...(isMobileViewport ? mobileGroupedRowStyle : {}) }}>
           <span style={{ color: "#334c32", fontSize: 15, fontWeight: 800 }}>
             {t.profile.language_setting}
