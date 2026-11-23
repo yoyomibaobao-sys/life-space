@@ -2927,11 +2927,11 @@ function App() {
             } catch (error) {
               const message = error instanceof Error ? error.message : "";
               if (message === "SAF revision conflict." || message === "SAF concurrent revision conflict.") {
-              console.error("SAF project committed; rereading the list after a revision conflict.", error);
-              try { await loadList(); }
-              catch (retryError) {
-                console.error("SAF project committed; opening it before the list refresh finishes.", retryError);
-              }
+                console.error("SAF project committed; rereading the list after a revision conflict.", error);
+                try { await loadList(); }
+                catch (retryError) {
+                  console.error("SAF project committed; opening it before the list refresh finishes.", retryError);
+                }
               } else { console.error("Project saved; list refresh failed.", error); }
             }
             showToast(
@@ -4228,7 +4228,7 @@ function ProjectForm({
   const [localTaxonomy, setLocalTaxonomy] = useState<ProjectTaxonomyEntry[]>([]);
   const [liveTaxonomy, setLiveTaxonomy] = useState<ProjectTaxonomyEntry[]>(cloudTaxonomy);
   const [liveDepths, setLiveDepths] = useState<ArchiveCategoryDepths>(cloudDepths);
-  
+
   useEffect(() => {
     let active = true;
     if (destination !== "local-only") return;

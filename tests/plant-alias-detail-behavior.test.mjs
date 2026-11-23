@@ -61,7 +61,7 @@ function fixture(status, catalogRows = [row]) {
         data: [{ status, plan: status === "active" ? "basic" : "free", can_create_content: false }], error: null,
       });
       if (name === "get_plus_plant_guide") {
-        assert.equal(status, "active", "only active paid Plus may request full guide RPC");
+        assert.notEqual(status, "guest", "full guide requires authentication");
         assert.equal(args.p_species_id, speciesId);
         return Promise.resolve({ data: {
           parameters: { sun_score: 8 },
@@ -133,7 +133,7 @@ function fixture(status, catalogRows = [row]) {
 }
 
 for (const [status, shouldBeFull] of [
-  ["guest", false], ["expired", false], ["trialing", false], ["active", true],
+  ["guest", false], ["expired", true], ["trialing", true], ["active", true],
 ]) {
   test(`${status} alias detail resolves the public summary and ${shouldBeFull ? "full member" : "basic"} content`, async () => {
     const scenario = fixture(status);
@@ -148,7 +148,7 @@ for (const [status, shouldBeFull] of [
       && ["plant_parameters", "plant_growth_cycle", "plant_care_guides"].includes(call.name));
     assert.deepEqual(memberTables, [], "the client must never SELECT full guide tables directly");
     assert.equal(scenario.calls.filter((call) => call.kind === "rpc" && call.name === "get_plus_plant_guide").length,
-      shouldBeFull ? 1 : 0, "the full guide RPC is paid-Plus-only");
+      shouldBeFull ? 1 : 0, "the full guide RPC is authenticated-only");
     if (shouldBeFull) {
       assert.equal(scenario.states[4]?.sun_score, 8);
       assert.equal(scenario.states[5]?.germination_days, 14);

@@ -13,28 +13,17 @@ const { canReadAndroidCloudWorkspace } = await load("lib/android-creation-capabi
 const trial = { user_id: "A", plan: "trial", status: "expired", trial_ends_at: "2026-09-01T00:00:00Z", can_create_content: false };
 const plus = { ...trial, plan: "basic", status: "expired" };
 
-test("trial summary distinguishes active 90 days, 30-day handling and completed cleanup", () => {
-  assert.match(getMembershipSummary({ ...trial, status: "trialing", can_create_content: true }, "zh"), /90天云体验/);
-  assert.match(getMembershipSummary(trial, "zh", "handling_period"), /30天只读处理期/);
-  assert.match(getMembershipSummary(trial, "en", "handling_period"), /30-day read-only handling period/);
-  assert.match(getMembershipSummary(trial, "zh", "cleanup_completed"), /不再可访问/);
-  assert.match(getMembershipSummary(null, "zh", "cleanup_completed"), /不再可访问/);
-  assert.match(getMembershipSummary(trial, "zh"), /请联网确认/);
-  assert.doesNotMatch(getMembershipSummary(trial, "zh"), /仍可查看/);
-});
-
-test("expired Plus keeps cloud data long-term read-only", () => {
-  assert.match(getMembershipSummary(plus, "zh"), /长期只读保留/);
-  assert.match(getMembershipSummary(plus, "en"), /read-only for the long term/);
-});
-
-test("membership and profile pages pass the verified lifecycle, and handle offer failures as unknown", () => {
-  const membershipPage = readFileSync(new URL("../app/membership/page.tsx", import.meta.url), "utf8");
-  const profilePage = readFileSync(new URL("../app/profile/page.tsx", import.meta.url), "utf8");
-  assert.match(membershipPage, /getMembershipSummary\(membership, language, trialOfferLoadFailed \? null : trialOffer\?\.lifecycle_status\)/);
-  assert.match(profilePage, /get_my_cloud_trial_offer/);
-  assert.match(profilePage, /trialOfferResult\.error[\s\S]*?\? null[\s\S]*?: normalizeCloudTrialOfferRpcResult/);
-  assert.match(profilePage, /getMembershipSummary\(membership, language, trialLifecycle\)/);
+test("retired trials and expired Plus return to Free while unresolved membership stays unknown", () => {
+  for (const membership of [trial, plus, { ...trial, status: "trialing" }]) {
+    assert.equal(getMembershipSummary(membership, "zh"), "Free · 永久 30MB");
+    assert.equal(getMembershipSummary(membership, "en"), "Free · 30 MB");
+  }
+  assert.equal(getMembershipSummary(null, "zh"), "暂时无法读取");
+  for (const path of ["app/membership/page.tsx", "app/profile/page.tsx"]) {
+    const page = readFileSync(new URL("../" + path, import.meta.url), "utf8");
+    assert.match(page, /getMembershipSummary\(membership, language\)/);
+    assert.doesNotMatch(page, /get_my_cloud_trial_offer/);
+  }
 });
 
 test("expired trial visibility needs an authenticated same-account server lifecycle, not the device clock", () => {

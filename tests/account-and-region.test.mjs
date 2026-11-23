@@ -39,16 +39,16 @@ test("old account numbers remain equivalent only for their exact year, class and
   assert.equal(numbers.matchesAccountConfirmation("same-uuid", "same-uuid"), true);
 });
 
-test("registered, visitor, trial, Plus, loading and failure are distinct states", () => {
+test("visitor, Free, expired memberships and unresolved states are distinct", () => {
   const label = (args) => memberships.getUserTypeLabel(args);
   assert.equal(label({signedIn:false}), "游客");
-  assert.equal(label({signedIn:true, membership:null}), "注册用户");
+  assert.equal(label({signedIn:true, membership:null}), "暂时无法读取");
   assert.equal(label({signedIn:true, membership:null, failed:true}), "暂时无法读取");
   assert.equal(label({signedIn:true, loading:true}), "读取中…");
-  assert.equal(label({signedIn:true, membership:{plan:"trial",can_create_content:true}}), "云体验");
-  assert.equal(label({signedIn:true, membership:{plan:"trial",can_create_content:false}}), "注册用户");
-  assert.equal(label({signedIn:true, membership:{plan:"basic",status:"expired"}}), "Plus");
-  assert.equal(label({signedIn:true, membership:{plan:"admin"}}), "注册用户");
+  assert.equal(label({signedIn:true, membership:{plan:"trial",can_create_content:true}}), "Free");
+  assert.equal(label({signedIn:true, membership:{plan:"trial",can_create_content:false}}), "Free");
+  assert.equal(label({signedIn:true, membership:{plan:"basic",status:"expired"}}), "Free");
+  assert.equal(label({signedIn:true, membership:{plan:"admin"}}), "Free");
 });
 
 test("email redirects always use the official domain with safe internal return paths", () => {

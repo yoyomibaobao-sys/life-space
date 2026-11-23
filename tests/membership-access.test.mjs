@@ -146,8 +146,8 @@ test("the launch cloud plan is fixed at 1 GB and 30 active market posts", async 
   assert.match(admin, /baseMarketPostLimit:\s*30/);
   assert.match(admin, /preset\.key !== "trial" \|\| selected\?\.plan === "trial"/);
   assert.match(membershipPage, /t\.membership_page/);
-  assert.match(zhCopy, /¥64 \/ 年｜US\$8 \/ year/);
-  assert.match(zhCopy, /暂不提供集市加量包/);
+  assert.match(zhCopy, /¥64 \/ 年 \| US\$8 \/ 年/);
+  assert.match(zhCopy, /集市同时发布 30 条/);
 });
 
 test("membership orders keep fixed prices, private Alipay proof, and transactional confirmation", async () => {
@@ -310,15 +310,15 @@ test("the plant pages request only data allowed for the current tier", async () 
   assert.doesNotMatch(detailPage, /loadPlantCoreParametersCompat\(resolvedPlantId\)/);
   assert.match(detailPage, /\.eq\("slug", id\)/);
   assert.match(detailPage, /\.eq\("common_name", id\)/);
-  assert.match(detailPage, /claimedPlus\s*\?\s*await Promise\.resolve\(supabase\.rpc\("get_plus_plant_guide"/);
-  assert.match(detailPage, /const canReadFullGuide = claimedPlus && Boolean\(plusDetail\)/);
+  assert.match(detailPage, /user\s*\?\s*await Promise\.resolve\(supabase\.rpc\("get_plus_plant_guide"/);
+  assert.match(detailPage, /const canReadFullGuide = Boolean\(plusDetail\)/);
   assert.doesNotMatch(detailPage, /\.from\("plant_parameters"\)|\.from\("plant_growth_cycle"\)|\.from\("plant_care_guides"\)/,
     "full plant-detail tables must be returned only by the protected server RPC");
   assert.doesNotMatch(detailPage, /from\("plant_related_archives_view"\)/);
   assert.match(detailPage, /copy\.plus_visible/);
   assert.match(zhCopy, /visitor_notice: "游客可以查看植物目录和简化版指引。"/);
   assert.match(zhCopy, /visitor_detail_notice: "游客可以阅读简化版指引/);
-  assert.match(zhCopy, /plus_visible: "Plus 云端用户可见"/);
+  assert.match(zhCopy, /plus_visible: "登录后在线查看"/);
 
   assert.match(guideCompat, /rpc\("get_plant_basic_overviews"/);
   assert.match(guideCompat, /rpc\("get_plant_core_parameters"/);
@@ -485,7 +485,7 @@ test("client-side entitlement checks fail closed when membership is absent", asy
     membership,
     /canCreateMembershipMarketPost[\s\S]*?can_create_market_post === true/
   );
-  assert.match(membership, /canAccessMembershipGuidance[\s\S]*?can_create_content !== true/);
+  assert.match(membership, /hasActivePlus[\s\S]*?can_create_content !== true/);
   assert.match(membership, /membership\.plan !== "basic" && membership\.plan !== "large"/);
   assert.match(membership, /membership\.status !== "active" && membership\.status !== "past_due"/);
   assert.match(membership, /!membership\.paid_until/);
@@ -545,7 +545,7 @@ test("the approved matrix and transition rules are documented", async () => {
   assert.match(docs, /禁止新增、编辑、上传、互动、重新发布以及私密转公开/);
 });
 
-test("Cloud Membership benefits promise durable read-only access after expiry", async () => {
+test("Plus expiry preserves existing records, photos and cards", async () => {
   const [zhCopy, enCopy] = await Promise.all([
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
@@ -553,15 +553,15 @@ test("Cloud Membership benefits promise durable read-only access after expiry", 
 
   assert.match(
     zhCopy,
-    /会员期满后，未主动删除的云端内容长期只读保留，可随时、多次保存到本机/
+    /Plus 到期回落 Free，保留历史记录、照片和经验卡/
   );
   assert.match(
     zhCopy,
-    /到期后云端内容只读保留，可随时保存到本机/
+    /主图计入容量，缩略图不计/
   );
   assert.match(
     enCopy,
-    /After membership ends, cloud content you have not deleted remains available read-only and can be saved to your devices at any time, as often as needed/
+    /Returning to Free preserves records, photos and Experience Cards/
   );
 });
 

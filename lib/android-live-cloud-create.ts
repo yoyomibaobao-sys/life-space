@@ -16,12 +16,12 @@ export async function createLiveCloudArchive(input: {
     supabase.auth.getUser(), supabase.rpc("get_my_membership"),
   ]);
   if (identity.error || identity.data.user?.id !== input.userId) throw new Error("请重新登录云账号。");
-  if (membership.error) throw membership.error;
+  if (membership.error) throw new Error(membership.error.message);
   if (!canCreateMembershipContent(normalizeMembershipRpcResult(membership.data))) {
     throw new Error("当前会员状态暂不能创建云端项目。");
   }
   const existing = await supabase.from("archives").select("id,user_id").eq("id", input.id).maybeSingle();
-  if (existing.error) throw existing.error;
+  if (existing.error) throw new Error(existing.error.message);
   if (existing.data) {
     if (existing.data.user_id !== input.userId) throw new Error("云端项目标识冲突。");
     return input.id;
