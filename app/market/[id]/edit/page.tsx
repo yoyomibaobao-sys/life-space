@@ -21,6 +21,7 @@ import type { SupabaseUser } from "@/lib/domain-types";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
 import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 import UiIcon from "@/components/ui/UiIcon";
+import AppConfirmDialog from "@/components/mobile/AppConfirmDialog";
 import {
   requestMarketMediaDeletion,
   rollbackReservedMarketImage,
@@ -86,6 +87,13 @@ export default function EditMarketPostPage() {
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [notOwner, setNotOwner] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ mediaId: string; postId: string; ownerId: string } | null>(null);
+  const confirmedMedia = deleteTarget && user && item && !notOwner && !loading && !workingMediaId &&
+    !saving && !uploading && item.id === id && item.user_id === user.id &&
+    deleteTarget.postId === id && deleteTarget.ownerId === user.id
+    ? marketMedia.find((media) => media.id === deleteTarget.mediaId && media.market_post_id === id && media.user_id === user.id)
+    : undefined;
+  useEffect(() => { setDeleteTarget(null); }, [id, user?.id]);
 
   useEffect(() => {
     async function init() {
@@ -418,8 +426,9 @@ export default function EditMarketPostPage() {
   async function handleDeleteMedia(media: MarketMediaRow) {
     if (!item || !user || workingMediaId) return;
 
-    const ok = window.confirm(t.market.delete_image_confirm);
-    if (!ok) return;
+    if (item.id !== id || item.user_id !== user.id || media.market_post_id !== id ||
+      media.user_id !== user.id || confirmedMedia?.id !== media.id) return;
+    setDeleteTarget(null);
 
     setWorkingMediaId(media.id);
     setErrorMsg("");
@@ -550,7 +559,12 @@ export default function EditMarketPostPage() {
 
                         <button
                           type="button"
-                          onClick={() => handleDeleteMedia(media)}
+                          onClick={() => {
+                            if (user && item.user_id === user.id && media.user_id === user.id &&
+                              media.market_post_id === id && !workingMediaId) {
+                              setDeleteTarget({ mediaId: media.id, postId: id, ownerId: user.id });
+                            }
+                          }}
                           disabled={isWorking}
                           style={smallDangerButtonStyle}
                         >
@@ -695,6 +709,16 @@ export default function EditMarketPostPage() {
           </div>
         </section>
       </div>
+      <AppConfirmDialog
+        open={Boolean(confirmedMedia)}
+        title={t.market.delete}
+        message={t.market.delete_image_confirm}
+        cancelLabel={t.market.cancel}
+        confirmLabel={t.market.delete}
+        destructive
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => { if (confirmedMedia) void handleDeleteMedia(confirmedMedia); }}
+      />
     </main>
   );
 }
