@@ -190,10 +190,10 @@ test("record ID in another archive or under another Owner cannot reserve or uplo
 });
 
 const composer = await readFile(new URL("../app/archive/[id]/AddRecord.tsx", import.meta.url), "utf8");
-const recoverSource = composer.slice(
-  composer.indexOf("  async function recoverConfirmedRecordPhoto()"),
-  composer.indexOf("  async function handleAdd()"),
-);
+const recoveryStart = composer.indexOf("  async function recoverConfirmedRecordPhoto()");
+const recoveryEnd = composer.indexOf("  const helpConfirmationCurrent", recoveryStart);
+assert.ok(recoveryStart >= 0 && recoveryEnd > recoveryStart, "Recovery extraction must not include the record composer JSX");
+const recoverSource = composer.slice(recoveryStart, recoveryEnd);
 const { code: recoverCode } = await transform(recoverSource, { loader: "ts" });
 
 for (const [title, journalType] of [
