@@ -225,7 +225,7 @@ test("guide changes bind the selected category and discard incompatible plant li
   assert.deepEqual([custom.name, custom.category, custom.candidate, custom.plantId], ["我的新试验", "system", null, null]);
 });
 
-test("the new project form puts the required linked guide before the required category without a default category", () => {
+test("the new project form puts category before project name and linked guide without a default category", () => {
   const copy = load("lib/i18n/zh.ts").default;
   const Form = createLoader({
     "@/lib/i18n/useLanguage": { useLanguage: () => ({ language: "zh", t: copy }) },
@@ -239,7 +239,7 @@ test("the new project form puts the required linked guide before the required ca
     submitText: "创建项目", loadingText: "保存中", onSubmit() {},
   }));
   assert.ok(html.indexOf("项目名称 *") < html.indexOf("关联指引 *"));
-  assert.ok(html.indexOf("关联指引 *") < html.indexOf("种类 *"));
+  assert.ok(html.indexOf("种类 *") < html.indexOf("项目名称 *"));
   assert.match(html, /role="radiogroup"[^>]*aria-required="true"/);
   assert.equal((html.match(/aria-checked="false"/g) || []).length, 4);
   assert.doesNotMatch(html, /aria-checked="true"/);
