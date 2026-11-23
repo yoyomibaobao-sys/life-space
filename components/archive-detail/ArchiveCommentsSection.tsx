@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import InternalLink from "@/components/navigation/InternalLink";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
+import AppConfirmDialog from "@/components/mobile/AppConfirmDialog";
 import {
   formatDateTime,
   smallActionButtonStyle,
@@ -49,6 +50,13 @@ export default function ArchiveCommentsSection({
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; scopeId: string; userId: string } | null>(null);
+  const confirmedComment = deleteTarget && currentUserId && !deletingCommentId &&
+    deleteTarget.scopeId === recordId && deleteTarget.userId === currentUserId
+    ? comments.find((comment) => comment.id === deleteTarget.id && comment.record_id === recordId &&
+        (comment.user_id === currentUserId || recordOwnerId === currentUserId))
+    : undefined;
+  useEffect(() => { setDeleteTarget(null); }, [recordId, currentUserId]);
   const canWrite = Boolean(currentUserId);
   const canAdoptSuggestions = Boolean(
     currentUserId &&
@@ -195,8 +203,7 @@ export default function ArchiveCommentsSection({
       return;
     }
 
-    const ok = window.confirm(t.archive_comments.delete_confirm);
-    if (!ok) return;
+    if (deletingCommentId || comment.record_id !== recordId) return;
 
     setDeletingCommentId(comment.id);
     const { error } = await supabase
@@ -455,7 +462,9 @@ export default function ArchiveCommentsSection({
                     {canDeleteComment ? (
                       <button
                         type="button"
-                        onClick={() => void handleDeleteComment(comment)}
+                        onClick={() => {
+                          if (currentUserId && !deletingCommentId) setDeleteTarget({ id: comment.id, scopeId: recordId, userId: currentUserId });
+                        }}
                         disabled={deletingCommentId === comment.id}
                         style={{
                           border: "none",
@@ -564,6 +573,20 @@ export default function ArchiveCommentsSection({
           ) : null}
         </div>
       ) : null}
+      <AppConfirmDialog
+        open={Boolean(confirmedComment)}
+        title={t.archive_comments.delete}
+        message={t.archive_comments.delete_confirm}
+        cancelLabel={t.cancel}
+        confirmLabel={t.archive_comments.delete}
+        destructive
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          const comment = confirmedComment;
+          setDeleteTarget(null);
+          if (comment) void handleDeleteComment(comment);
+        }}
+      />
     </section>
   );
 }
