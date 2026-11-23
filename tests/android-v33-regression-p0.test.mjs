@@ -133,3 +133,28 @@ test("Web and Android confirmation share one accessible and guarded dialog", () 
   assert.match(app, /disabled=\{cancelDisabled\}/);
   assert.match(app, /overflowY: "auto"/);
 });
+
+test("Cloud decisions retain verified owner, publication access and reconciliation", () => {
+  const cloud = read("components/archive-ui/CloudArchiveDetailController.tsx");
+  assert.doesNotMatch(cloud, /window\.(confirm|alert|prompt)\(/);
+  assert.match(cloud, /pendingDecision\.archiveId === archiveId && pendingDecision\.userId === userId/);
+  assert.match(cloud, /pendingDecision\.epoch === access\.current\.epoch/);
+  assert.match(cloud, /pendingDecision\.authority === getAndroidAuthSnapshot\(\)/);
+  assert.match(cloud, /pendingDecision\.readRevision === latestRead\.current/);
+  assert.match(cloud, /onToggleArchiveStatus=\{requestArchiveStatusChange\}/);
+  assert.match(cloud, /onToggleEnded=\{requestArchiveStatusChange\}/);
+  assert.match(cloud, /if \(publish && !approved\)/);
+  assert.match(cloud, /if \(!approved\) return;\s*retainCloudPublicationReconciliation\(userId, archiveId\)/);
+  assert.match(cloud, /<AppConfirmDialog\s+open=\{decisionCurrent\}/);
+});
+
+test("Android export asks for confirmation before acquiring a fresh owner token to save", () => {
+  const profile = read("components/profile/AndroidProfileController.tsx");
+  assert.doesNotMatch(profile, /window\.(confirm|alert|prompt)\(/);
+  assert.match(profile, /estimateAndroidCloudExport\(request\)[\s\S]*?setExportConfirmation\(\{ ownerId, question, timeZone, revision \}\)/);
+  assert.match(profile, /async function confirmCloudExport\(\)[\s\S]*?await supabase\.auth\.getUser\(\)[\s\S]*?await supabase\.auth\.getSession\(\)/);
+  assert.match(profile, /identity\.data\.user\?\.id !== target\.ownerId/);
+  assert.match(profile, /session\.data\.session\?\.user\.id !== target\.ownerId/);
+  assert.match(profile, /saveAndroidCloudExport\(cloudExportRequest\(session\.data\.session\.access_token, target\.timeZone\)\)/);
+  assert.match(profile, /onConfirm=\{\(\) => void confirmCloudExport\(\)\}/);
+});
