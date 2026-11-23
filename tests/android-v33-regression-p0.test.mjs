@@ -185,3 +185,39 @@ test("Unsaved experience editor, payment cancellation and refund use shared conf
   assert.match(refund, /identity\.data\.user\?\.id !== target\.ownerId/);
   assert.match(refund, /p_payment_id: target\.paymentId,\s*p_reason: target\.reason/);
 });
+
+test("Workspace renaming and deletion are scoped and no longer use native prompts", () => {
+  const archive = read("app/archive/page.tsx");
+  assert.doesNotMatch(archive, /(?:\bwindow\.)?\b(?:confirm|prompt|alert)\(/);
+  assert.match(archive, /taxonomyDecision\.epoch === ownerEpochRef\.current/);
+  assert.match(archive, /taxonomyDecision\.ownerId === sessionOwnerRef\.current/);
+  assert.match(archive, /taxonomyDecision\.category === activeCategory && taxonomyDecision\.subTag === activeSubTag/);
+  assert.match(archive, /row\.local_role !== "cloud-offline-cache"/);
+});
+
+test("Record publication and web export retain current authority before writing or downloading", () => {
+  const add = read("app/archive/[id]/AddRecord.tsx");
+  const detail = read("app/archive/[id]/page.tsx");
+  const profile = read("app/profile/page.tsx");
+  for (const source of [add, detail, profile]) {
+    assert.doesNotMatch(source, /(?:\bwindow\.)?\b(?:confirm|prompt|alert)\(/);
+    assert.match(source, /<ConfirmDialog/);
+  }
+  assert.match(add, /helpConfirmation\.epoch === membershipScope\.current\.epoch/);
+  assert.match(add, /if \(helpConfirmationCurrent\) void handleAdd\(true\)/);
+  assert.match(detail, /helpTarget\.ownerId === me/);
+  assert.match(profile, /identity\.data\.user\?\.id !== target\.ownerId/);
+  assert.match(profile, /if \(!exportOwnerCurrent\(target\.ownerId, target\.epoch\)\) return;/);
+});
+
+test("Membership admin decisions preserve submitted row, verified admin and refund amount", () => {
+  const admin = read("app/admin/memberships/page.tsx");
+  assert.doesNotMatch(admin, /window\.(confirm|alert|prompt)\(/);
+  assert.match(admin, /JSON\.stringify\(row\) === financeDecision\.key/);
+  assert.match(admin, /identity\.data\.user\?\.id !== target\.adminId/);
+  assert.match(admin, /Number\(amountText\) !== Number\(expectedAmount\)/);
+  assert.match(admin, /step: "confirm"/);
+  assert.match(admin, /p_refund_reference: refundReference,\s*p_confirmed_amount: Number\(expectedAmount\)/);
+  assert.match(admin, /financeDecision\.key !== manualPaymentKey\(finalPaymentReference\)/);
+  assert.match(admin, /financeLock\.current = true/);
+});
