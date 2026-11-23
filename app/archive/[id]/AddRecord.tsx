@@ -7,6 +7,7 @@ import InternalLink from "@/components/navigation/InternalLink";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getBehaviorRestrictionErrorText } from "@/lib/behavior-restriction-errors";
 import { showToast } from "@/components/Toast";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import {
@@ -131,6 +132,7 @@ export default function AddRecord({
   const [recordVisibility, setRecordVisibility] =
     useState<RecordVisibility>(archiveIsPublic ? "public" : "private");
   const [isHelpRecord, setIsHelpRecord] = useState(false);
+  const [helpConfirmation, setHelpConfirmation] = useState<{ archiveId: string; ownerId: string; epoch: number } | null>(null);
   const [selectedCycleId, setSelectedCycleId] = useState<string | undefined>(undefined);
   const [endSelectedCycleAfterSave, setEndSelectedCycleAfterSave] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -990,10 +992,27 @@ export default function AddRecord({
     }
   }
 
-  async function handleAdd() {
+  const helpConfirmationCurrent = Boolean(helpConfirmation && isHelpRecord &&
+    (!archiveIsPublic || recordVisibility !== "public") && helpConfirmation.archiveId === archiveId &&
+    helpConfirmation.ownerId === membershipScope.current.ownerId && helpConfirmation.epoch === membershipScope.current.epoch &&
+    membershipScope.current.live && !membershipScope.current.revoked && !membershipScope.current.paused &&
+    !loading && !membershipLoading && !contentBlocked && !submissionNeedsReview &&
+    (!publicationAccessRef.current || publicationAccessRef.current.isCurrent()));
+  useEffect(() => { setHelpConfirmation(null); }, [archiveId, archiveIsPublic, recordVisibility, isHelpRecord, text, files,
+    timeMode, customTime, splitByDate, selectedCycleId, endSelectedCycleAfterSave, publicationAccess?.scope]);
+
+  async function handleAdd(approvedHelp = false) {
     if (publicationBusy.current || loading || membershipLoading || contentBlocked || submissionNeedsReview || membershipScope.current.revoked || membershipScope.current.paused ||
         (publicationAccessRef.current && !publicationAccessRef.current.isCurrent())) return;
     if (!text.trim() && files.length === 0) return;
+    if (isHelpRecord && (!archiveIsPublic || recordVisibility !== "public")) {
+      if (!approvedHelp) {
+        setHelpConfirmation({ archiveId, ownerId: membershipScope.current.ownerId, epoch: membershipScope.current.epoch });
+        return;
+      }
+      if (!helpConfirmationCurrent) return;
+    }
+    setHelpConfirmation(null);
 
     // Fence same-render duplicate clicks while asynchronous permission checks run.
     publicationBusy.current = true;
@@ -1106,7 +1125,7 @@ export default function AddRecord({
       }
 
       if (finalStatusTag === "help" && finalVisibility !== "public" &&
-          !confirm(copy.help_public_confirm)) {
+          !approvedHelp) {
         setLoading(false);
         return;
       }
@@ -1711,7 +1730,7 @@ export default function AddRecord({
       ) : null}
 
       <button
-        onClick={handleAdd}
+        onClick={() => void handleAdd()}
         disabled={loading || membershipLoading || contentBlocked || uploadWouldExceedStorage || submissionNeedsReview}
         style={{
           marginTop: "12px",
@@ -1727,6 +1746,13 @@ export default function AddRecord({
       >
         {loading ? t.submitting : t.submit}
       </button>
+      <ConfirmDialog
+        open={helpConfirmationCurrent}
+        title={language === "zh" ? "公开求助" : "Publish help request"}
+        message={copy.help_public_confirm}
+        onClose={() => setHelpConfirmation(null)}
+        onConfirm={() => { if (helpConfirmationCurrent) void handleAdd(true); }}
+      />
     </div>
   );
 }
