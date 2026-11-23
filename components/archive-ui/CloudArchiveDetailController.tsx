@@ -75,7 +75,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
   const [experienceCardCount, setExperienceCardCount] = useState(0);
   const [trashConfirmOpen, setTrashConfirmOpen] = useState(false);
   const [pendingDecision, setPendingDecision] = useState<
-    ({ kind: "end" | "close-editor" } | { kind: "help"; recordId: string }) &
+    ({ kind: "end" } | { kind: "close-editor" } | { kind: "help"; recordId: string }) &
     { archiveId: string; userId: string; epoch: number; authority: ReturnType<typeof getAndroidAuthSnapshot>; readRevision: number }
     | null>(null);
   const lastAddRecordRequest = useRef(addRecordRequest);
