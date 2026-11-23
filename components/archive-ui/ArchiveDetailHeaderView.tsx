@@ -572,7 +572,7 @@ const titleTextDisplayStyle: CSSProperties = {
   minWidth: 0,
   color: "#1f2d1f",
   fontSize: 21,
-  fontWeight: 830,
+  fontWeight: 650,
   lineHeight: 1.2,
   overflowWrap: "anywhere",
 };
@@ -595,7 +595,7 @@ const eyebrowButtonStyle: CSSProperties = {
   background: "transparent",
   color: "#71826d",
   fontSize: 12,
-  fontWeight: 800,
+  fontWeight: 650,
   lineHeight: 1,
   marginRight: 10,
   cursor: "pointer",
@@ -685,7 +685,7 @@ function visibilityBadgeStyle(tone?: "public" | "private" | "neutral"): CSSPrope
       background: "#f4f5f2",
       color: "#6d7569",
       fontSize: 12,
-      fontWeight: 800,
+      fontWeight: 650,
       lineHeight: 1,
       padding: "5px 8px",
       whiteSpace: "nowrap",
@@ -698,7 +698,7 @@ function visibilityBadgeStyle(tone?: "public" | "private" | "neutral"): CSSPrope
     background: tone === "public" ? "#f1fff1" : "#fff",
     color: tone === "public" ? "#2f8f2f" : "#777",
     fontSize: 12,
-    fontWeight: 800,
+    fontWeight: 650,
     lineHeight: 1,
     padding: "5px 8px",
     whiteSpace: "nowrap",
@@ -913,7 +913,7 @@ const candidateNewButtonStyle: CSSProperties = {
   color: "#3f7d3d",
   cursor: "pointer",
   fontSize: 12,
-  fontWeight: 800,
+  fontWeight: 650,
 };
 
 const candidateEmptyStyle: CSSProperties = {
