@@ -196,6 +196,7 @@ export async function saveQuickCaptureAsFirstCloudRecord({
 }) {
   const capture = await getQuickCapture(quickCaptureId);
   if (!capture) throw new CloudQuickCaptureError("capture_missing");
+  if (Array.isArray(capture.photos) && capture.photos.length === 0) return null;
   if (await isStorageUploadMaintenance()) {
     throw new CloudQuickCaptureError("upload_maintenance");
   }

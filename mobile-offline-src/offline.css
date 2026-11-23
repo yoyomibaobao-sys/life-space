@@ -253,3 +253,5 @@ button:disabled { opacity: 0.55; }
 @media (max-width: 759px) {
   .ls-sticky-workspace-controls[data-includes-header="true"] { top: var(--app-safe-area-top, 0px); }
 }
+
+.project-form-compact :is(input, textarea):not(:focus)::placeholder { color: transparent; }

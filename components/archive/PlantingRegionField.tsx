@@ -30,14 +30,13 @@ export default function PlantingRegionField({ value, onChange, language, require
         </label>
         {draft.country_code === "OTHER" ? <label style={labelStyle}>{en ? "Country name" : "国家／地区名称"}<input required={required} maxLength={80} value={draft.country_name} onChange={(event) => onChange({ ...draft, country_name: event.target.value })} style={inputStyle} /></label> : null}
         <label style={labelStyle}>{en ? "State / province" : "省／州"}
-          <input value={draft.region_name} list={`${id}-regions`} maxLength={80} onChange={(event) => onChange({ ...draft, region_name: event.target.value })} style={inputStyle} />
+          <input value={draft.region_name} placeholder={en ? "State/province or city" : "省／州或城市至少填一项"} list={`${id}-regions`} maxLength={80} onChange={(event) => onChange({ ...draft, region_name: event.target.value })} style={inputStyle} />
           <datalist id={`${id}-regions`}>{getRegionOptions(draft.country_code, language).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</datalist>
         </label>
         <label style={{ ...labelStyle, gridColumn: "1 / -1" }}>{en ? "City / district" : "城市／区县"}
           <input value={draft.city_name} maxLength={80} onChange={(event) => onChange({ ...draft, city_name: event.target.value })} style={inputStyle} placeholder={en ? "Where this project is grown" : "填写项目实际种植的城市或区县"} />
         </label>
       </div>
-      <p style={{ margin: "8px 0 0", fontSize: 12, color: "#71806b", lineHeight: 1.6 }}>{en ? "Choose a country and fill in at least one locality (province/state or city/district). No street addresses." : "选择国家／地区后，省／州或城市／区县至少填写一项，不填写街道、门牌。"}</p>
     </fieldset>
   );
 }

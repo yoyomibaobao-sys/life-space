@@ -230,7 +230,7 @@ test("mobile archive creation and project controls stay compact without clipping
   assert.match(projectCard, /<InlineRecordSummary/);
   assert.match(projectCardStyles, /\.title \{[^}]*white-space: normal/);
   assert.match(await source("components/ui/InlineRecordSummary.module.css"), /-webkit-line-clamp: 2/);
-  assert.match(newProjectShell, /styles\.categoryDescription/);
+  assert.doesNotMatch(newProjectShell, /styles\.categoryDescription/);
   assert.doesNotMatch(newProjectShell, /selectedCategoryDescription/);
   assert.match(newProjectStyles, /@media \(max-width: 759px\)[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(newProjectStyles, /-webkit-line-clamp: 2/);

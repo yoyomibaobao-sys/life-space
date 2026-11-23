@@ -458,7 +458,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
           else if (phase !== "reconcile-only") clearCloudPickerResume(userId, archiveId);
           setAddOpen(false);
           onRecordCancelled?.();
-        }} onRecordCreated={async () => { if (!hasLiveAccess()) return; await reload(); if (!hasLiveAccess()) return; setAddOpen(false); onRecordCreated?.(); await onCacheChanged(); }} />}
+        }} onRecordCreated={async () => { if (!hasLiveAccess()) return; setAddOpen(false); onRecordCreated?.(); await Promise.allSettled([reload(), onCacheChanged()]); }} />}
       onFloatingAdd={showFloatingAdd ? () => setAddOpen(true) : undefined} floatingAddLabel={language === "zh" ? "添加记录" : "Add record"}
       emptyRecordsText={copy.no_records_owner}
       onStartCycle={(startedAt) => change(async () => {

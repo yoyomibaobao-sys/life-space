@@ -123,7 +123,7 @@ test("untouched visibility follows current Plus, while Free starts private and m
   assert.match(newPage, /checked=\{!archiveIsPublic\}/);
   assert.match(sharedShell, /visibilityControl\?: ReactNode/);
   assert.match(sharedShell, /\{visibilityControl\}/);
-  assert.match(newPage, /notice=\{publicNeedsPlus \? plusPublicNotice/);
+  assert.match(newPage, /notice=\{null\}/);
 });
 
 test("Free default creates private cloud project with private future records", async () => {

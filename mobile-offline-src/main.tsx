@@ -1009,12 +1009,6 @@ function App() {
     recordEditorOwnerRef.current?.ownerId === detail.archive.local_owner_user_id;
   const offlineCreatedProjects = useRef(new Set<string>());
 
-  useEffect(() => {
-    if (serviceConnectivity.status === "offline" && quickAddDraft && screen.kind === "cloud-detail") {
-      setScreen({ kind: "choose-project" });
-    }
-  }, [serviceConnectivity.status, quickAddDraft, screen.kind]);
-
   const showToast = useCallback((message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
@@ -4401,11 +4395,10 @@ function ProjectForm({
                 entry.parentId === subTagId).map((entry) =>
                 <option key={entry.id} value={entry.id}>{entry.label}</option>)}
             </select></div> : null}
-          <div className="field"><label>{copy.systemName} *</label><input value={systemName} onChange={(event) => { setSystemName(event.target.value); setSelectedGuide(undefined); }} maxLength={160} placeholder={copy.guideSearch} /><small>{copy.guideHint}</small>
-            {directory.some((candidate) => candidate.category === category) ? <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && (!systemName.trim() || candidate.label.toLowerCase().includes(systemName.trim().toLowerCase()))).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div> : null}
+          <div className="field"><label>{copy.systemName} *</label><input value={systemName} onChange={(event) => { setSystemName(event.target.value); setSelectedGuide(undefined); }} maxLength={160} placeholder={copy.guideHint} />
+            {systemName.trim() && !selectedGuide && directory.some((candidate) => candidate.category === category) ? <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && (!systemName.trim() || candidate.label.toLowerCase().includes(systemName.trim().toLowerCase()))).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div> : null}
           </div>
           {category === "plant" ? <PlantingRegionField value={plantingRegion} onChange={setPlantingRegion} language={language} required={!archive} /> : null}
-          {!archive && destination === "pending-cloud" && !cloudTaxonomy.length ? <small>联网后可设置云端分组；项目仍可保存为未分组。</small> : null}
           <div className="field"><label>{copy.source}</label><input value={source} onChange={(event) => setSource(event.target.value)} maxLength={240} /></div>
           {!archive && destination !== "local-only" ? <div className="field"><label>{copy.visibility}</label><SegmentedChoice label={copy.visibility} value={visibility} options={[{ value: "private", label: language === "zh" ? "仅自己可见" : "Only me" }, { value: "public", label: language === "zh" ? "公开" : "Public" }]} onChange={(value) => setVisibility(value as "public" | "private")} /></div> : null}
           <div className="field"><label>{copy.note}</label><textarea className="project-form-textarea" value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} /></div>

@@ -9,7 +9,6 @@ import { normalizePlantingRegion } from "@/lib/planting-region";
 import { useRouter, useSearchParams } from "next/navigation";
 import { showToast } from "@/components/Toast";
 import ArchiveNewProjectFormShell, {
-  archiveNewProjectHelperTextStyle,
   archiveNewProjectInputStyle,
   archiveNewProjectSuggestionButtonStyle,
   archiveNewProjectSuggestionPanelStyle,
@@ -354,12 +353,17 @@ function NewArchiveContent() {
 
     if (quickCaptureId && archiveId) {
       try {
-        await saveQuickCaptureAsFirstCloudRecord({
+        const result = await saveQuickCaptureAsFirstCloudRecord({
           archiveId,
           userId: user.id,
           quickCaptureId,
           visibility: recordVisibility,
         });
+        if (result === null) {
+          setLoading(false);
+          router.push(`/archive/${archiveId}?quickCapture=${encodeURIComponent(quickCaptureId)}#add-record`);
+          return;
+        }
       } catch (captureError) {
         setLoading(false);
         const code = captureError instanceof CloudQuickCaptureError ? captureError.code : "upload_failed";
@@ -461,7 +465,6 @@ function NewArchiveContent() {
             emptyText={copy.no_matching_name}
             customActionLabel={(inputValue) => `${copy.add_system_name}${inputValue}`}
           />
-          {!category ? <span style={archiveNewProjectHelperTextStyle}>{copy.guide_category_manual_hint}</span> : null}
         </>
       }
       plantingRegionControl={category === "plant" ? <PlantingRegionField value={plantingRegion} onChange={changePlantingRegion} language={language} required /> : null}
@@ -497,11 +500,7 @@ function NewArchiveContent() {
           {publicNeedsPlus ? <p role="alert" style={{ color: "#9b3c23", fontSize: 13 }}>{plusPublicNotice}</p> : null}
         </fieldset>
       }
-      notice={publicNeedsPlus ? plusPublicNotice : archiveIsPublic ? copy.cloud_notice : (
-        language === "en"
-          ? "Only you can view this cloud project and its future records; you can change visibility later."
-          : "此云端项目及今后新增记录仅自己可见；创建后仍可修改公开方式。"
-      )}
+      notice={null}
       submitText={copy.create_project}
       loadingText={copy.creating}
       submitting={loading}

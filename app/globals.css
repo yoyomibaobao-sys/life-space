@@ -451,3 +451,5 @@ html[data-native-window-insets="true"] .app-status-bar-surface {
   font: inherit;
 }
 [data-w5-pending-item] button:disabled { opacity: .55; }
+
+form[data-project-create] :is(input, textarea):not(:focus)::placeholder { color: transparent; }
