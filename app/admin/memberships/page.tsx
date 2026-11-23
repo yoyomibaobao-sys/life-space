@@ -1506,6 +1506,15 @@ export default function AdminMembershipsPage({ onBack }: { onBack?: () => void }
   const financeManualCurrent = financeOwnerCurrent && financeDecision?.kind === "manual" && Boolean(selected) &&
     financeDecision.key === manualPaymentKey();
   const financeCurrent = Boolean(financePaymentRow || financeRefundRow || financeManualCurrent);
+  // A refreshed queue or edited form may invalidate a captured action. Release
+  // the stale dialog so it cannot block the next valid administrator action.
+  useEffect(() => {
+    if (financeDecision && !financeCurrent && !financeBusy) {
+      setFinanceDecision(null);
+      setFinanceNote("");
+      setFinanceAmount("");
+    }
+  }, [financeDecision, financeCurrent, financeBusy]);
   const financeNeedsNote = financeDecision?.kind === "payment-update" || financeDecision?.kind === "refund-reject";
   const financeCompleteInput = financeDecision?.kind === "refund-complete" && financeDecision.step === "input";
   const financeInputsValid = financeNeedsNote ? Boolean(financeNote.trim())
