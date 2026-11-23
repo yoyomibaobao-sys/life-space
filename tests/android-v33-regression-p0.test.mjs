@@ -108,3 +108,28 @@ test("Comment and market deletion retain scoped confirmation and shared feedback
   assert.match(shell, /<Toast \/>/);
   assert.match(read("components/Toast.tsx"), /clearTimeout\(timer\)/);
 });
+
+test("Local delete uses one scoped UI confirmation and rejects stale owner or cache targets", () => {
+  const view = read("components/archive-ui/DeviceOwnedProjectDetail.tsx");
+  const shell = read("mobile-offline-src/main.tsx");
+  assert.match(view, /deleteArchiveTarget\?\.archiveId === archive\.id && deleteArchiveTarget\.ownerId === currentOwnerId/);
+  assert.match(view, /recordDeleteScope\?\.archiveId === archive\.id && recordDeleteScope\.ownerId === currentOwnerId/);
+  assert.match(view, /if \(target\) onDeleteRecord\(target\.id\)/);
+  assert.match(view, /if \(canConfirmArchiveDelete\) onDeleteArchive\(\)/);
+  assert.doesNotMatch(shell, /window\.(confirm|alert|prompt)\(/);
+  assert.match(shell, /resolveAndroidReadOwner\(getAndroidAuthSnapshot\(\)\)\?\.userId !== ownerId/);
+  assert.match(shell, /detail\.archive\.local_role === "cloud-offline-cache"/);
+  assert.match(shell, /detail\.records\.some\(\(record\) => record\.id === recordId && record\.archive_id === archiveId\)/);
+});
+
+test("Web and Android confirmation share one accessible and guarded dialog", () => {
+  const web = read("components/ConfirmDialog.tsx");
+  const app = read("components/mobile/AppConfirmDialog.tsx");
+  assert.match(web, /<AppConfirmDialog[\s\S]*?destructive=\{danger\}[\s\S]*?confirmDisabled=\{confirmDisabled\}[\s\S]*?cancelDisabled=\{cancelDisabled\}/);
+  assert.match(app, /aria-labelledby=\{titleId\}/);
+  assert.match(app, /aria-describedby=\{message \? messageId : undefined\}/);
+  assert.match(app, /if \(!cancelDisabled\) onCancel\(\)/);
+  assert.match(app, /disabled=\{confirmDisabled\}/);
+  assert.match(app, /disabled=\{cancelDisabled\}/);
+  assert.match(app, /overflowY: "auto"/);
+});
