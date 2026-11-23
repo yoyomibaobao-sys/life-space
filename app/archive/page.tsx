@@ -181,6 +181,14 @@ export default function ArchivePage() {
       { kind: "pending"; key: string; archiveId: string; creating: boolean }) &
     { ownerId: string; epoch: number } | null>(null);
   const [decisionBusy, setDecisionBusy] = useState(false);
+  const [taxonomyDecision, setTaxonomyDecision] = useState<{
+    kind: "cloud-sub" | "cloud-group" | "local-sub" | "local-group" | "local-project" | "rename-cloud" | "rename-local";
+    id: string; label: string; ownerId: string | null; epoch: number;
+    category: ArchiveCategory | null; subTag: string | null; source: ArchiveSourceFilter;
+  } | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [taxonomyBusy, setTaxonomyBusy] = useState(false);
+  useEffect(() => { setTaxonomyDecision(null); }, [activeCategory, activeSubTag, activeSource, currentOwnerContext?.userId]);
   const [w5FocusedPendingKey, setW5FocusedPendingKey] = useState<string | null>(null);
   const [w5CloudCaches, setW5CloudCaches] = useState<LocalArchiveSummary[]>([]);
   const [w5Online, setW5Online] = useState(true);
@@ -313,6 +321,7 @@ export default function ArchivePage() {
     setLocalError("");
     setDeleteArchiveTarget(null);
     setArchiveDecision(null);
+    setTaxonomyDecision(null);
     setEditingPlantArchiveId(null);
     setEditingSystemArchiveId(null);
     setEditingLocalSystemArchiveId(null);
@@ -883,9 +892,9 @@ export default function ArchivePage() {
     setSubTags((prev) => prev.map((item) => (item.id === tag.id ? { ...item, name: name.trim() } : item)));
   }
 
-  async function deleteSubTag(tag: SubTagItem) {
-    if (!requireCloudWriteAccess()) return;
-    if (!confirm(t.archive_workspace.delete_category_confirm)) return;
+  async function deleteSubTag(tag: SubTagItem, approved = false) {
+    if (!tag.user_id || !isVerifiedOwner(tag.user_id) || !requireCloudWriteAccess()) return;
+    if (!approved) { openTaxonomyDecision("cloud-sub", tag.id, tag.name); return; }
 
     await supabase.from("archives").update({ sub_tag_id: null, group_tag_id: null }).eq("sub_tag_id", tag.id);
     await supabase.from("group_tags").delete().eq("sub_tag_id", tag.id);
@@ -935,7 +944,7 @@ export default function ArchivePage() {
 
   async function renameGroupTag(tag: GroupTagItem, suppliedName?: string) {
     if (!requireCloudWriteAccess()) return;
-    const name = suppliedName ?? prompt(t.archive_workspace.rename_group_prompt, tag.name);
+    const name = suppliedName;
     if (!name?.trim() || name.trim() === tag.name) return;
 
     const { error } = await supabase.from("group_tags").update({ name: name.trim() }).eq("id", tag.id);
@@ -947,9 +956,9 @@ export default function ArchivePage() {
     setGroupTags((prev) => prev.map((item) => (item.id === tag.id ? { ...item, name: name.trim() } : item)));
   }
 
-  async function deleteGroupTag(tag: GroupTagItem) {
-    if (!requireCloudWriteAccess()) return;
-    if (!confirm(t.archive_workspace.delete_group_confirm)) return;
+  async function deleteGroupTag(tag: GroupTagItem, approved = false) {
+    if (!tag.user_id || !isVerifiedOwner(tag.user_id) || !requireCloudWriteAccess()) return;
+    if (!approved) { openTaxonomyDecision("cloud-group", tag.id, tag.name); return; }
 
     await supabase.from("archives").update({ group_tag_id: null }).eq("group_tag_id", tag.id);
     await supabase.from("group_tags").delete().eq("id", tag.id);
@@ -1160,14 +1169,14 @@ export default function ArchivePage() {
     }
   }
 
-  function renameArchiveTitle(item: ArchiveItem) {
-    if (!requireCloudWriteAccess()) return;
-    const name = prompt(t.archive_workspace.rename_project_prompt, item.title || "");
-    if (!name?.trim()) return;
-
-    supabase.from("archives").update({ title: name.trim() }).eq("id", item.id).then(() => {
-      loadData();
-    });
+  async function renameArchiveTitle(item: ArchiveItem, suppliedName?: string) {
+    if (!item.user_id || !isVerifiedOwner(item.user_id) || !requireCloudWriteAccess()) return;
+    if (suppliedName === undefined) { openTaxonomyDecision("rename-cloud", item.id, item.title || ""); return; }
+    const name = suppliedName.trim();
+    if (!name || name === item.title) return;
+    const { error } = await supabase.from("archives").update({ title: name }).eq("id", item.id).eq("user_id", item.user_id);
+    if (error) { showToast(language === "zh" ? "重命名失败" : "Rename failed"); return; }
+    await loadData();
   }
 
   useEffect(() => {
@@ -1700,9 +1709,9 @@ export default function ArchivePage() {
     }
   }
 
-  async function deleteLocalSubcategory(chip: ArchiveTaxonomyChip) {
+  async function deleteLocalSubcategory(chip: ArchiveTaxonomyChip, approved = false) {
     if (!activeCategory) return;
-    if (!confirm(t.archive_workspace.local_subcategory_delete_confirm)) return;
+    if (!approved) { openTaxonomyDecision("local-sub", chip.id, chip.label); return; }
 
     try {
       await deleteLocalTaxonomyItem(
@@ -1728,7 +1737,7 @@ export default function ArchivePage() {
 
   async function renameLocalSubcategory(chip: ArchiveTaxonomyChip, suppliedName?: string) {
     if (!activeCategory) return;
-    const name = suppliedName ?? prompt(t.archive_workspace.local_subcategory_rename_prompt, chip.label);
+    const name = suppliedName;
     const cleanName = name?.trim();
     if (!cleanName || cleanName === chip.label) return;
 
@@ -1783,9 +1792,9 @@ export default function ArchivePage() {
     }
   }
 
-  async function deleteLocalGroup(chip: ArchiveTaxonomyChip) {
+  async function deleteLocalGroup(chip: ArchiveTaxonomyChip, approved = false) {
     if (!activeCategory || !activeSubTag) return;
-    if (!confirm(t.archive_workspace.local_group_delete_confirm)) return;
+    if (!approved) { openTaxonomyDecision("local-group", chip.id, chip.label); return; }
 
     try {
       await deleteLocalTaxonomyItem(
@@ -1813,7 +1822,7 @@ export default function ArchivePage() {
 
   async function renameLocalGroup(chip: ArchiveTaxonomyChip, suppliedName?: string) {
     if (!activeCategory || !activeSubTag) return;
-    const name = suppliedName ?? prompt(t.archive_workspace.local_group_rename_prompt, chip.label);
+    const name = suppliedName;
     const cleanName = name?.trim();
     if (!cleanName || cleanName === chip.label) return;
 
@@ -1842,8 +1851,9 @@ export default function ArchivePage() {
     }
   }
 
-  async function renameLocalArchiveTitle(archive: LocalArchiveSummary) {
-    const name = prompt(t.archive_workspace.rename_local_project, archive.title || "");
+  async function renameLocalArchiveTitle(archive: LocalArchiveSummary, suppliedName?: string) {
+    if (suppliedName === undefined) { openTaxonomyDecision("rename-local", archive.id, archive.title || ""); return; }
+    const name = suppliedName;
     const cleanName = name?.trim();
     if (!cleanName || cleanName === archive.title) return;
 
@@ -1958,12 +1968,8 @@ export default function ArchivePage() {
     }
   }
 
-  async function deleteLocalArchiveFromList(archive: LocalArchiveSummary) {
-    if (
-      !confirm(t.archive_workspace.delete_local_confirm)
-    ) {
-      return;
-    }
+  async function deleteLocalArchiveFromList(archive: LocalArchiveSummary, approved = false) {
+    if (!approved) { openTaxonomyDecision("local-project", archive.id, archive.title || ""); return; }
 
     try {
       await deleteLocalArchive(archive.id);
@@ -2001,6 +2007,70 @@ export default function ArchivePage() {
           ? error.message
           : t.archive.local_update_failed,
       );
+    }
+  }
+
+  function openTaxonomyDecision(kind: NonNullable<typeof taxonomyDecision>["kind"], id: string, label: string) {
+    if (taxonomyBusy) return;
+    setRenameDraft(kind.startsWith("rename-") ? label : "");
+    setTaxonomyDecision({ kind, id, label, ownerId: currentOwnerContext?.userId || null,
+      epoch: ownerEpochRef.current, category: activeCategory, subTag: activeSubTag, source: activeSource });
+  }
+  const taxonomyScopeCurrent = Boolean(taxonomyDecision &&
+    taxonomyDecision.epoch === ownerEpochRef.current &&
+    taxonomyDecision.ownerId === (currentOwnerContext?.userId || null) &&
+    taxonomyDecision.ownerId === sessionOwnerRef.current &&
+    taxonomyDecision.category === activeCategory && taxonomyDecision.subTag === activeSubTag &&
+    taxonomyDecision.source === activeSource);
+  const taxonomyRename = taxonomyDecision?.kind === "rename-cloud" || taxonomyDecision?.kind === "rename-local";
+  const taxonomyCloud = taxonomyDecision?.kind === "cloud-sub" || taxonomyDecision?.kind === "cloud-group" || taxonomyDecision?.kind === "rename-cloud";
+  async function confirmTaxonomyDecision() {
+    const target = taxonomyDecision;
+    if (!target || !taxonomyScopeCurrent || taxonomyBusy ||
+        (taxonomyRename && (!renameDraft.trim() || renameDraft.trim() === target.label))) return;
+    if (taxonomyCloud && (!target.ownerId || !isVerifiedOwner(target.ownerId) || !requireCloudWriteAccess())) return;
+    setTaxonomyBusy(true);
+    try {
+      switch (target.kind) {
+        case "cloud-sub": {
+          const tag = subTags.find((row) => row.id === target.id && row.name === target.label && row.user_id === target.ownerId);
+          if (tag) await deleteSubTag(tag, true);
+          break;
+        }
+        case "cloud-group": {
+          const tag = groupTags.find((row) => row.id === target.id && row.name === target.label && row.user_id === target.ownerId);
+          if (tag) await deleteGroupTag(tag, true);
+          break;
+        }
+        case "local-sub": {
+          const chip = localSubTags.find((row) => row.id === target.id && row.label === target.label);
+          if (chip) await deleteLocalSubcategory(chip, true);
+          break;
+        }
+        case "local-group": {
+          const chip = localGroupTags.find((row) => row.id === target.id && row.label === target.label);
+          if (chip) await deleteLocalGroup(chip, true);
+          break;
+        }
+        case "local-project":
+        case "rename-local": {
+          const item = localArchives.find((row) => row.id === target.id && (row.title || "") === target.label &&
+            (row.local_owner_user_id || null) === target.ownerId && row.local_role !== "cloud-offline-cache");
+          if (item && target.kind === "local-project") await deleteLocalArchiveFromList(item, true);
+          if (item && target.kind === "rename-local") await renameLocalArchiveTitle(item, renameDraft);
+          break;
+        }
+        case "rename-cloud": {
+          const item = archives.find((row) => row.id === target.id && (row.title || "") === target.label && row.user_id === target.ownerId);
+          if (item) await renameArchiveTitle(item, renameDraft);
+          break;
+        }
+      }
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : (language === "zh" ? "操作失败" : "Operation failed"));
+    } finally {
+      setTaxonomyDecision(null);
+      setTaxonomyBusy(false);
     }
   }
 
@@ -2629,6 +2699,31 @@ export default function ArchivePage() {
           </section>
         ) : null}
       </ArchiveWorkspaceTemplate>
+      <ConfirmDialog
+        open={taxonomyScopeCurrent}
+        title={taxonomyRename ? (language === "zh" ? "重命名项目" : "Rename project") : t.archive_workspace.delete}
+        message={taxonomyDecision?.kind === "cloud-sub" ? t.archive_workspace.delete_category_confirm
+          : taxonomyDecision?.kind === "cloud-group" ? t.archive_workspace.delete_group_confirm
+          : taxonomyDecision?.kind === "local-sub" ? t.archive_workspace.local_subcategory_delete_confirm
+          : taxonomyDecision?.kind === "local-group" ? t.archive_workspace.local_group_delete_confirm
+          : taxonomyDecision?.kind === "local-project" ? t.archive_workspace.delete_local_confirm : ""}
+        danger={!taxonomyRename}
+        confirmText={taxonomyRename ? t.confirm : t.archive_workspace.delete}
+        confirmDisabled={taxonomyBusy || (taxonomyRename && (!renameDraft.trim() || renameDraft.trim() === taxonomyDecision?.label))}
+        cancelDisabled={taxonomyBusy}
+        onClose={() => setTaxonomyDecision(null)}
+        onConfirm={confirmTaxonomyDecision}
+      >
+        {taxonomyRename ? <input
+          aria-label={language === "zh" ? "项目名称" : "Project name"}
+          placeholder={language === "zh" ? "输入项目名称" : "Enter project name"}
+          value={renameDraft}
+          onChange={(event) => setRenameDraft(event.target.value)}
+          disabled={taxonomyBusy}
+          autoFocus
+          style={{ width: "100%", boxSizing: "border-box", padding: "11px 12px", border: "1px solid #d9e2d5", borderRadius: 10, fontSize: 14 }}
+        /> : null}
+      </ConfirmDialog>
       <ConfirmDialog
         open={Boolean(decisionArchive || decisionPending)}
         title={archiveDecision?.kind === "pending" ? t.archive_workspace.pending_cancel_action : t.confirm}
