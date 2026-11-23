@@ -104,6 +104,7 @@ import MobileBottomNavigationView, {
 import AndroidQuickCamera from "@/components/mobile/AndroidQuickCamera";
 import AndroidPendingRecordReview from "@/components/mobile/AndroidPendingRecordReview";
 import AppConfirmDialog from "@/components/mobile/AppConfirmDialog";
+import Toast, { showToast } from "@/components/Toast";
 import { getMobilePrimaryNavigationDescriptors } from "@/components/mobile/mobilePrimaryNavigation";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import HomeSectionTabs, { type HomeSection } from "@/components/home/HomeSectionTabs";
@@ -914,7 +915,6 @@ function App() {
   const safConnectRunning = useRef(false);
   const [safRegrantRunning, setSafRegrantRunning] = useState(false);
   const [safRegrantError, setSafRegrantError] = useState("");
-  const [toast, setToast] = useState("");
   const serviceConnectivity = useAndroidConnectivityStatus();
   const online = serviceConnectivity.status === "online";
   const auth = useAndroidAuthState();
@@ -1008,11 +1008,6 @@ function App() {
     recordEditorOwnerRef.current?.archiveId === detail.archive.id &&
     recordEditorOwnerRef.current?.ownerId === detail.archive.local_owner_user_id;
   const offlineCreatedProjects = useRef(new Set<string>());
-
-  const showToast = useCallback((message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(""), 2600);
-  }, []);
 
   const loadShellIdentity = useCallback(async (userId: string) => {
     const authority = getAndroidAuthSnapshot();
@@ -3666,7 +3661,7 @@ function App() {
           pending?.action();
         }}
       />
-      {toast ? <div className="toast" role="status">{toast}</div> : null}
+      <Toast />
     </main>
     </InternalNavigationProvider>
   );
