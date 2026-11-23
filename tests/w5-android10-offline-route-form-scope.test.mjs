@@ -67,7 +67,9 @@ test("cached/bundled offline guide names are presented and the mandatory name re
   assert.match(guide,/return mergeEntries\(\[\.\.\.BUNDLED_GUIDE_DIRECTORY, \.\.\.cached\]\)/);
   assert.match(form,/setDirectory\(loadOfflineGuideDirectory\(\)\)/);
   assert.match(form,/lifespace-guide-directory-updated/);
-  assert.match(form,/directory\.some\(\(candidate\) => candidate\.category === category\)/);
+  assert.match(form,/inferProjectGuide\(directory, title, category\)/);
+  assert.match(form,/guideInputActive && systemName\.trim\(\) && !selectedGuide/);
+  assert.match(form,/directory\.filter\(\(candidate\) => candidate\.category === category/);
   assert.match(form,/setSelectedGuide\(candidate\)/);
   assert.match(form,/if \(!systemName\.trim\(\)\)/);
 });
