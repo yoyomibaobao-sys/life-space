@@ -40,6 +40,11 @@ test("a guest can render an ordinary guide's basic detail while Android auth loo
       return [state[index], (value) => { state[index] = typeof value === "function" ? value(state[index]) : value; }];
     },
     useMemo: (compute) => compute(),
+    useRef(initial) {
+      const index = slot++;
+      if (!(index in state)) state[index] = { current: initial };
+      return state[index];
+    },
     useEffect: (effect) => { effects.push(effect); },
   };
   const row = { id: guideId, category: "system", source: "preset", name: "堆肥",
@@ -57,7 +62,7 @@ test("a guest can render an ordinary guide's basic detail while Android auth loo
   const guideHelpers = {
     publicGuideCopy: { zh: { publicLibrary: "指引", overviewPractice: "概要与实操",
       experienceCards: "经验卡", relatedProjects: "关联项目", newProject: "新建项目",
-      membershipForFull: "Plus 云端用户可见" } },
+      membershipForFull: "Plus 云端用户可见", loading: "加载中" } },
     getPublicGuideName: (entry) => entry.name,
     getPublicGuideSummary: (entry) => entry.summary,
     getPublicGuideSectionName: () => "",
@@ -91,7 +96,8 @@ test("a guest can render an ordinary guide's basic detail while Android auth loo
   }
   const viewText = texts(rendered).join(" ");
   assert.match(viewText, /把材料分层放入堆肥箱/);
-  assert.doesNotMatch(viewText, /完整栽培秘密/);
+  assert.match(viewText, /加载中/);
+  assert.doesNotMatch(viewText, /完整栽培秘密|Plus 云端用户可见/);
   assert.deepEqual(rpcCalls, ["get_public_guide_catalog"]);
 });
 
