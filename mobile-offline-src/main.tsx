@@ -705,6 +705,7 @@ function App() {
   const [detailAddRecordRequest, setDetailAddRecordRequest] = useState<{ archiveId: string; nonce: number } | null>(null);
   const [chooseProjectExpanded, setChooseProjectExpanded] = useState<{ cloud: boolean; local: boolean }>({ cloud: false, local: false });
   const [trashMoveConfirm, setTrashMoveConfirm] = useState<null | { message: string; action: () => void }>(null);
+  const [pendingCancelTarget, setPendingCancelTarget] = useState<null | { key: string; archiveId: string; ownerId: string; screen: Screen }>(null);
   const [taxonomySyncWarning, setTaxonomySyncWarning] = useState<string | null>(null);
   const quickGallery = useRef<HTMLInputElement>(null);
   async function acceptQuickAddImageFiles(images: File[], source: QuickAddSource) {
@@ -2075,6 +2076,14 @@ function App() {
         row.local_owner_user_id === readOwnerContext.userId)) : [],
     preferLive: liveCloudWorkspace,
   });
+  const confirmedPendingProject = pendingCancelTarget && authenticatedOwnerContext?.userId &&
+    pendingCancelTarget.ownerId === authenticatedOwnerContext.userId &&
+    pendingCancelTarget.ownerId === cloudUserId && pendingCancelTarget.screen === screen && !syncingArchiveId
+    ? workspace.pending.find((item) => item.key === pendingCancelTarget.key && item.creating &&
+        item.summaries.length === 1 && item.summaries[0].local_archive_id === pendingCancelTarget.archiveId &&
+        item.local?.local_owner_user_id === pendingCancelTarget.ownerId)
+    : undefined;
+  useEffect(() => { setPendingCancelTarget(null); }, [screen, authenticatedOwnerContext?.userId, cloudUserId]);
   useEffect(() => {
     if (screen.kind !== "cloud-detail" || !readOwnerContext?.userId) {
       setCloudPendingDetail(null);
@@ -2333,7 +2342,8 @@ function App() {
   }
   async function cancelPendingCreatedProject(item: PendingCloudProject<LocalArchiveSummary, CloudArchiveSummary>) {
     if (!authenticatedOwnerContext?.userId || syncingArchiveId || !item.creating || item.summaries.length !== 1) return;
-    if (!window.confirm(language === "zh" ? "确认取消尚未上传的项目及其记录与照片？不能恢复。" : "Cancel the never-uploaded project and its records/photos permanently?")) return;
+    if (confirmedPendingProject !== item || !pendingCancelTarget || authenticatedOwnerContext.userId !== pendingCancelTarget.ownerId) return;
+    setPendingCancelTarget(null);
     setSyncingArchiveId(item.key);
     try {
       await cancelNeverUploadedCloudArchive(item.summaries[0].local_archive_id, authenticatedOwnerContext);
@@ -2383,7 +2393,12 @@ function App() {
         <button type="button" className="secondary-button compact-card-action"
           disabled={!item.creating || item.summaries.length !== 1 || Boolean(syncingArchiveId)}
           title={!item.creating ? (language === "zh" ? "远端或修改状态未知，不能安全取消" : "Cannot safely cancel remote edits") : undefined}
-          onClick={() => void cancelPendingCreatedProject(item)}>{language === "zh" ? "取消待上传" : "Cancel pending"}</button>
+          onClick={() => {
+            if (authenticatedOwnerContext?.userId && !syncingArchiveId && item.creating && item.summaries.length === 1 &&
+              item.local?.local_owner_user_id === authenticatedOwnerContext.userId) {
+              setPendingCancelTarget({ key: item.key, archiveId: item.summaries[0].local_archive_id, ownerId: authenticatedOwnerContext.userId, screen });
+            }
+          }}>{language === "zh" ? "取消待上传" : "Cancel pending"}</button>
       </div> : null}
     </div>;
   }
@@ -3660,6 +3675,16 @@ function App() {
           setTrashMoveConfirm(null);
           pending?.action();
         }}
+      />
+      <AppConfirmDialog
+        open={Boolean(confirmedPendingProject)}
+        title={language === "zh" ? "取消待上传" : "Cancel pending upload"}
+        message={language === "zh" ? "确认取消尚未上传的项目及其记录与照片？不能恢复。" : "Cancel the never-uploaded project and its records/photos permanently?"}
+        cancelLabel={language === "zh" ? "返回" : "Back"}
+        confirmLabel={language === "zh" ? "确认取消" : "Confirm cancellation"}
+        destructive
+        onCancel={() => setPendingCancelTarget(null)}
+        onConfirm={() => { if (confirmedPendingProject) void cancelPendingCreatedProject(confirmedPendingProject); }}
       />
       <Toast />
     </main>
