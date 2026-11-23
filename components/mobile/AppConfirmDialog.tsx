@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useId, type CSSProperties, type ReactNode } from "react";
 
 export default function AppConfirmDialog({
   open,
@@ -9,6 +9,9 @@ export default function AppConfirmDialog({
   cancelLabel,
   confirmLabel,
   destructive = false,
+  children,
+  confirmDisabled = false,
+  cancelDisabled = false,
   onCancel,
   onConfirm,
 }: {
@@ -18,27 +21,42 @@ export default function AppConfirmDialog({
   cancelLabel: string;
   confirmLabel: string;
   destructive?: boolean;
+  children?: ReactNode;
+  confirmDisabled?: boolean;
+  cancelDisabled?: boolean;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
 }) {
+  const titleId = useId();
+  const messageId = useId();
   if (!open) return null;
   return (
-    <div style={overlayStyle} role="presentation" onClick={onCancel}>
+    <div style={overlayStyle} role="presentation" onClick={() => { if (!cancelDisabled) onCancel(); }}>
       <section
         role="dialog"
         aria-modal="true"
-        aria-labelledby="app-confirm-title"
+        aria-labelledby={titleId}
+        aria-describedby={message ? messageId : undefined}
         style={dialogStyle}
         onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && !cancelDisabled) {
+            event.preventDefault();
+            event.stopPropagation();
+            onCancel();
+          }
+        }}
       >
-        <h2 id="app-confirm-title" style={titleStyle}>{title}</h2>
-        {message ? <p style={messageStyle}>{message}</p> : null}
+        <h2 id={titleId} style={titleStyle}>{title}</h2>
+        {message ? <p id={messageId} style={messageStyle}>{message}</p> : null}
+        {children ? <div style={{ marginTop: 12 }}>{children}</div> : null}
         <div style={actionsStyle}>
-          <button type="button" style={cancelStyle} onClick={onCancel}>{cancelLabel}</button>
+          <button type="button" disabled={cancelDisabled} style={{ ...cancelStyle, opacity: cancelDisabled ? 0.5 : 1, cursor: cancelDisabled ? "not-allowed" : "pointer" }} onClick={onCancel}>{cancelLabel}</button>
           <button
             type="button"
-            style={destructive ? destructiveStyle : confirmStyle}
-            onClick={onConfirm}
+            disabled={confirmDisabled}
+            style={{ ...(destructive ? destructiveStyle : confirmStyle), opacity: confirmDisabled ? 0.5 : 1, cursor: confirmDisabled ? "not-allowed" : "pointer" }}
+            onClick={() => void onConfirm()}
           >
             {confirmLabel}
           </button>
@@ -61,7 +79,10 @@ const overlayStyle: CSSProperties = {
 const dialogStyle: CSSProperties = {
   width: "min(360px, calc(100vw - 40px))",
   boxSizing: "border-box",
-  borderRadius: 18,
+  maxHeight: "calc(100vh - 40px)",
+  overflowY: "auto",
+  overflowWrap: "anywhere",
+  borderRadius: 16,
   background: "#fff",
   boxShadow: "0 18px 50px rgba(20, 34, 19, .22)",
   padding: "18px 18px 14px",
@@ -72,7 +93,7 @@ const titleStyle: CSSProperties = {
   color: "#283a27",
   fontSize: 18,
   lineHeight: 1.4,
-  fontWeight: 850,
+  fontWeight: 700,
 };
 
 const messageStyle: CSSProperties = {
@@ -80,6 +101,7 @@ const messageStyle: CSSProperties = {
   color: "#667163",
   fontSize: 14,
   lineHeight: 1.6,
+  whiteSpace: "pre-line",
 };
 
 const actionsStyle: CSSProperties = {
@@ -93,7 +115,7 @@ const baseButtonStyle: CSSProperties = {
   minHeight: 42,
   borderRadius: 12,
   fontSize: 14,
-  fontWeight: 800,
+  fontWeight: 600,
   cursor: "pointer",
 };
 
