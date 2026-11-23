@@ -1004,7 +1004,7 @@ export default function AddRecord({
   async function handleAdd(approvedHelp = false) {
     if (publicationBusy.current || loading || membershipLoading || contentBlocked || submissionNeedsReview || membershipScope.current.revoked || membershipScope.current.paused ||
         (publicationAccessRef.current && !publicationAccessRef.current.isCurrent())) return;
-    if (!text.trim() && files.length === 0) return;
+    if (!text.trim() && files.length === 0) { showToast(language === "zh" ? "请填写记录内容或添加照片。" : "Enter notes or add photos."); return; }
     if (isHelpRecord && (!archiveIsPublic || recordVisibility !== "public")) {
       if (!approvedHelp) {
         setHelpConfirmation({ archiveId, ownerId: membershipScope.current.ownerId, epoch: membershipScope.current.epoch });
@@ -1431,7 +1431,7 @@ export default function AddRecord({
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={placeholder || t.add_record_placeholder}
+            placeholder={placeholder || (language === "zh" ? "填写记录内容（照片选填）" : "Write a note (photos optional)") }
             rows={5}
             style={mobileTextAreaStyle}
           />
@@ -1440,7 +1440,7 @@ export default function AddRecord({
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={placeholder || t.add_record_placeholder}
+          placeholder={placeholder || (language === "zh" ? "填写记录内容（照片选填）" : "Write a note (photos optional)") }
           style={{ padding: "10px", width: "100%", boxSizing: "border-box" }}
         />
       )}
@@ -1539,8 +1539,8 @@ export default function AddRecord({
         {mobileMode ? (
           <div style={mobilePhotoSectionStyle}>
             <div style={mobilePhotoHeadingStyle}>
-              <strong>{language === "zh" ? `照片（最多 ${MAX_RECORD_PHOTOS_PER_ADD} 张）` : `Photos (max ${MAX_RECORD_PHOTOS_PER_ADD})`}</strong>
-              <span>{files.length} {language === "zh" ? "张照片" : "photos"}</span>
+              <strong>{language === "zh" ? `照片（选填，最多 ${MAX_RECORD_PHOTOS_PER_ADD} 张）` : `Photos (optional, max ${MAX_RECORD_PHOTOS_PER_ADD})`}</strong>
+              {files.length > 0 ? <span>{files.length} {language === "zh" ? "张照片" : "photos"}</span> : null}
             </div>
             <div style={mobilePhotoActionsStyle}>
               <button type="button" onClick={() => cameraInputRef.current?.click()} disabled={loading || membershipLoading || contentBlocked} style={mobilePhotoButtonStyle}>
@@ -1609,11 +1609,6 @@ export default function AddRecord({
           style={{ display: "none" }}
         />
 
-        <div style={{ marginTop: 6, fontSize: 12, color: "#777", lineHeight: 1.55 }}>
-          {copy.photo_limit_prefix} {MAX_RECORD_PHOTOS_PER_ADD} {copy.photo_limit_suffix}
-          <br />
-          {!hasActivePlus(membership) && copy.standard_photo_hint}
-        </div>
 
         {hasActivePlus(membership) && files.length > 1 && (
           <label>{language === "zh" ? "批量设置画质 " : "Set quality for all "}
