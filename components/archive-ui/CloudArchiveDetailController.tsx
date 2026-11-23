@@ -74,6 +74,10 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
   const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number; record: RecordItem } | null>(null);
   const [experienceCardCount, setExperienceCardCount] = useState(0);
   const [trashConfirmOpen, setTrashConfirmOpen] = useState(false);
+  const [pendingDecision, setPendingDecision] = useState<
+    ({ kind: "end" | "close-editor" } | { kind: "help"; recordId: string }) &
+    { archiveId: string; userId: string; epoch: number; authority: ReturnType<typeof getAndroidAuthSnapshot>; readRevision: number }
+    | null>(null);
   const lastAddRecordRequest = useRef(addRecordRequest);
   const [membershipState, setMembershipState] = useState<"checking" | "allowed" | "unknown" | "denied">("checking");
   const editorAuthorized = useRef(false);
@@ -94,6 +98,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
     access.current = { archiveId, userId, suspended, authority: auth, epoch: access.current.epoch + 1 };
   }
   const latestRead = useRef(0);
+  useEffect(() => { setPendingDecision(null); }, [archiveId, userId, suspended, auth]);
   const rejectedOwner = useRef(false);
   const [identityRevoked, setIdentityRevoked] = useState(false);
   const [authInterruption, setAuthInterruption] = useState(0);
@@ -334,6 +339,98 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
     ? `/plant/${encodeURIComponent(archive.species_id)}`
     : null;
 
+  const decisionScope = () => ({
+    archiveId, userId, epoch: access.current.epoch, authority: getAndroidAuthSnapshot(), readRevision: latestRead.current,
+  });
+  const decisionCurrent = Boolean(pendingDecision && !quarantined && !busy &&
+    pendingDecision.archiveId === archiveId && pendingDecision.userId === userId &&
+    pendingDecision.epoch === access.current.epoch &&
+    pendingDecision.authority === getAndroidAuthSnapshot() &&
+    pendingDecision.readRevision === latestRead.current &&
+    hasVerifiedOwner() &&
+    (pendingDecision.kind === "close-editor"
+      ? addOpen && peekCloudPickerResume(userId, archiveId)?.phase === "submitting-unknown"
+      : hasPublicationAccess() && (pendingDecision.kind === "end"
+        ? archive.status !== "ended"
+        : records.some((record) => record.id === pendingDecision.recordId))));
+  function requestArchiveStatusChange() {
+    if (!hasPublicationAccess() || busy) return;
+    if (archive.status !== "ended") {
+      setPendingDecision({ kind: "end", ...decisionScope() });
+      return;
+    }
+    void change(async () => {
+      const result = await supabase.rpc("restore_archive_active", { p_archive_id: archiveId });
+      if (result.error) throw result.error;
+    });
+  }
+  function finishEditorClose(approved = false) {
+    if (!hasVerifiedOwner() || !addOpen) return;
+    const phase = peekCloudPickerResume(userId, archiveId)?.phase;
+    if (phase === "submitting-unknown") {
+      if (!approved) return;
+      retainCloudPublicationReconciliation(userId, archiveId);
+    } else if (phase !== "reconcile-only") clearCloudPickerResume(userId, archiveId);
+    setAddOpen(false);
+    onRecordCancelled?.();
+  }
+  function requestEditorClose() {
+    if (!hasVerifiedOwner()) return;
+    if (peekCloudPickerResume(userId, archiveId)?.phase === "submitting-unknown") {
+      setPendingDecision({ kind: "close-editor", ...decisionScope() });
+      return;
+    }
+    finishEditorClose();
+  }
+  async function applyHelpStatus(recordId: string, status: "help" | "resolved" | null, approved = false) {
+    if (!hasPublicationAccess() || busy) return;
+    const target = records.find((record) => record.id === recordId);
+    if (!target) return;
+    const publish = status === "help" && (!archive.is_public || target.visibility !== "public");
+    if (publish && !approved) {
+      setPendingDecision({ kind: "help", recordId, ...decisionScope() });
+      return;
+    }
+    await change(async () => {
+          if (publish && !archive.is_public) {
+            const madePublic = await supabase.rpc("make_my_archive_public", { p_archive_id: archiveId });
+            if (madePublic.error || madePublic.data !== true) throw madePublic.error || new Error(recordCopy.publish_shell_failed);
+          }
+          const result = await supabase.from("records")
+            .update({ status_tag: status, ...(publish ? { visibility: "public" } : {}) })
+            .eq("id", recordId).eq("archive_id", archiveId);
+          if (result.error) throw result.error;
+          const updated = records.map((record) => record.id === recordId ? { ...record, status_tag: status } : record);
+          const aggregate = updated.some((record) => record.status_tag === "help") ? "open"
+            : updated.some((record) => record.status_tag === "resolved") ? "resolved" : "none";
+          const now = new Date().toISOString();
+          const archiveResult = await supabase.from("archives").update({
+            help_status: aggregate, help_updated_at: now,
+            ...(aggregate === "open" ? { help_opened_at: archive.help_opened_at || now, help_resolved_at: null }
+              : aggregate === "resolved" ? { help_resolved_at: now }
+                : { help_opened_at: null, help_resolved_at: null }),
+          }).eq("id", archiveId).eq("user_id", userId);
+          if (archiveResult.error) throw archiveResult.error;
+    });
+  }
+
+  function confirmDecision() {
+    const decision = pendingDecision;
+    setPendingDecision(null);
+    if (!decision || !decisionCurrent || !hasVerifiedOwner()) return;
+    if (decision.kind === "close-editor") {
+      if (peekCloudPickerResume(userId, archiveId)?.phase === "submitting-unknown") finishEditorClose(true);
+    } else if (decision.kind === "end") {
+      if (archive.status === "ended") return;
+      void change(async () => {
+        const result = await supabase.rpc("mark_archive_ended", { p_archive_id: archiveId });
+        if (result.error) throw result.error;
+      });
+    } else {
+      void applyHelpStatus(decision.recordId, "help", true);
+    }
+  }
+
   return <><fieldset disabled={quarantined} hidden={quarantined}
     aria-hidden={quarantined || undefined}
     data-cloud-owner-quarantined={quarantined ? "true" : "false"}
@@ -389,11 +486,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
         const result = await supabase.rpc(archive.is_public ? "make_my_archive_private" : "make_my_archive_public", { p_archive_id: archiveId });
         if (result.error || result.data !== true) throw result.error || new Error(recordCopy.visibility_update_failed);
       })}
-      onToggleArchiveStatus={() => void change(async () => {
-        if (archive.status !== "ended" && !window.confirm(copy.end_project_message)) return;
-        const result = await supabase.rpc(archive.status === "ended" ? "restore_archive_active" : "mark_archive_ended", { p_archive_id: archiveId });
-        if (result.error) throw result.error;
-      })}
+      onToggleArchiveStatus={requestArchiveStatusChange}
       onSaveToLocal={() => { if (canCopy && !busy && isAndroidOnline()) setCopyConfirmOpen(true); }}
       saveToLocalLabel={savedCopyId
         ? (language === "zh" ? "已保存到本机 · 打开" : "Saved locally · Open")
@@ -431,11 +524,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
           ended={archive.status === "ended"} isPublic={archive.is_public} canWrite={canWrite} busy={busy}
           onChangeSubcategory={(id) => void patchArchive({ sub_tag_id: id || null, group_tag_id: null })}
           onChangeGroup={(id) => void patchArchive({ group_tag_id: id || null })}
-          onToggleEnded={() => void change(async () => {
-            if (archive.status !== "ended" && !window.confirm(copy.end_project_message)) return;
-            const result = await supabase.rpc(archive.status === "ended" ? "restore_archive_active" : "mark_archive_ended", { p_archive_id: archiveId });
-            if (result.error) throw result.error;
-          })}
+          onToggleEnded={requestArchiveStatusChange}
           onTogglePublic={() => void change(async () => {
             const result = await supabase.rpc(archive.is_public ? "make_my_archive_private" : "make_my_archive_public", { p_archive_id: archiveId });
             if (result.error || result.data !== true) throw result.error || new Error(recordCopy.visibility_update_failed);
@@ -448,17 +537,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
         initialFiles={initialFiles} initialCapturedAt={initialCapturedAt} initialNote={initialNote}
         publicationAccess={{ ownerId: userId, scope: access.current, state: quarantined ? "checking" : membershipState,
           isCurrent: hasPublicationAccess, revalidate: revalidateRecordPublication }}
-        onClose={() => {
-          if (!hasVerifiedOwner()) return;
-          const phase = peekCloudPickerResume(userId, archiveId)?.phase;
-          if (phase === "submitting-unknown" && !window.confirm(language === "zh"
-            ? "发布结果尚未确认。仅放弃编辑显示，仍会保留防重复提交的核账标记。确定关闭？"
-            : "Publication is unconfirmed. The reconciliation guard will remain after closing. Close editor?")) return;
-          if (phase === "submitting-unknown") retainCloudPublicationReconciliation(userId, archiveId);
-          else if (phase !== "reconcile-only") clearCloudPickerResume(userId, archiveId);
-          setAddOpen(false);
-          onRecordCancelled?.();
-        }} onRecordCreated={async () => { if (!hasLiveAccess()) return; setAddOpen(false); onRecordCreated?.(); await Promise.allSettled([reload(), onCacheChanged()]); }} />}
+        onClose={requestEditorClose} onRecordCreated={async () => { if (!hasLiveAccess()) return; setAddOpen(false); onRecordCreated?.(); await Promise.allSettled([reload(), onCacheChanged()]); }} />}
       onFloatingAdd={showFloatingAdd ? () => setAddOpen(true) : undefined} floatingAddLabel={language === "zh" ? "添加记录" : "Add record"}
       emptyRecordsText={copy.no_records_owner}
       onStartCycle={(startedAt) => change(async () => {
@@ -501,30 +580,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
             : await supabase.from("records").update({ visibility }).eq("id", recordId).eq("archive_id", archiveId);
           if (result.error) throw result.error;
         })}
-        onSetHelpStatus={(recordId, status) => change(async () => {
-          const target = records.find((record) => record.id === recordId);
-          const publish = status === "help" && (!archive.is_public || target?.visibility !== "public");
-          if (publish && !window.confirm(recordCopy.help_public_confirm)) return;
-          if (publish && !archive.is_public) {
-            const madePublic = await supabase.rpc("make_my_archive_public", { p_archive_id: archiveId });
-            if (madePublic.error || madePublic.data !== true) throw madePublic.error || new Error(recordCopy.publish_shell_failed);
-          }
-          const result = await supabase.from("records")
-            .update({ status_tag: status, ...(publish ? { visibility: "public" } : {}) })
-            .eq("id", recordId).eq("archive_id", archiveId);
-          if (result.error) throw result.error;
-          const updated = records.map((record) => record.id === recordId ? { ...record, status_tag: status } : record);
-          const aggregate = updated.some((record) => record.status_tag === "help") ? "open"
-            : updated.some((record) => record.status_tag === "resolved") ? "resolved" : "none";
-          const now = new Date().toISOString();
-          const archiveResult = await supabase.from("archives").update({
-            help_status: aggregate, help_updated_at: now,
-            ...(aggregate === "open" ? { help_opened_at: archive.help_opened_at || now, help_resolved_at: null }
-              : aggregate === "resolved" ? { help_resolved_at: now }
-                : { help_opened_at: null, help_resolved_at: null }),
-          }).eq("id", archiveId).eq("user_id", userId);
-          if (archiveResult.error) throw archiveResult.error;
-        })}
+        onSetHelpStatus={(recordId, status) => applyHelpStatus(recordId, status)}
         onRemoveTag={(recordId, tag) => void change(async () => {
           const result = await supabase.from("record_tags").update({ is_active: false })
             .eq("record_id", recordId).eq("tag", tag).eq("tag_type", "behavior");
@@ -556,6 +612,21 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
         },
         onChange: (index) => setLightbox((current) => current ? { ...current, index } : null),
         onClose: () => setLightbox(null) } : null}
+    />
+    <AppConfirmDialog
+      open={decisionCurrent}
+      title={pendingDecision?.kind === "end" ? (language === "zh" ? "结束项目" : "End project")
+        : pendingDecision?.kind === "help" ? (language === "zh" ? "公开求助" : "Publish help request")
+          : (language === "zh" ? "关闭编辑" : "Close editor")}
+      message={pendingDecision?.kind === "end" ? copy.end_project_message
+        : pendingDecision?.kind === "help" ? recordCopy.help_public_confirm
+          : (language === "zh"
+            ? "发布结果尚未确认。仅放弃编辑显示，仍会保留防重复提交的核账标记。确定关闭？"
+            : "Publication is unconfirmed. The reconciliation guard will remain after closing. Close editor?")}
+      cancelLabel={t.cancel}
+      confirmLabel={t.confirm}
+      onCancel={() => setPendingDecision(null)}
+      onConfirm={confirmDecision}
     />
     <AppConfirmDialog
       open={copyConfirmOpen}
