@@ -332,7 +332,7 @@
   }
 
   .hero {
-    padding: 16px;
+    padding: 12px;
     border-color: #dfe8dc;
     border-radius: 16px;
     box-shadow: 0 8px 24px rgba(40, 66, 37, 0.04);
@@ -341,7 +341,8 @@
   .heroTitle {
     min-width: 0;
     overflow: hidden;
-    font-size: 25px;
+    font-size: 21px;
+    font-weight: 650;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -351,9 +352,9 @@
   }
 
   .heroMeta {
-    margin-top: 12px;
+    margin-top: 8px;
     font-size: 13px;
-    line-height: 1.65;
+    line-height: 1.55;
   }
 
   .environmentTagList {
@@ -403,8 +404,9 @@
   }
 
   .sectionTitle {
-    margin-bottom: 10px;
-    font-size: 18px;
+    margin-bottom: 8px;
+    font-size: 16px;
+    font-weight: 650;
   }
 
   .subsection {
