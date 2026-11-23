@@ -2023,19 +2023,38 @@ function App() {
     showToast(copy.updateSuccess);
   }
 
+  // DeviceOwnedProjectDetail already requires an explicit, target-bound confirmation.
+  // Recheck the current owner and project before the existing storage deletion.
   async function handleDeleteArchive(archiveId: string) {
-    if (!window.confirm(copy.deleteProjectConfirm)) return;
-    await deleteLocalArchive(archiveId);
-    showToast(copy.deleted);
-    goList();
+    const ownerId = readOwnerContext?.userId;
+    if (!ownerId || resolveAndroidReadOwner(getAndroidAuthSnapshot())?.userId !== ownerId ||
+        screen.kind !== "detail" || screen.archiveId !== archiveId ||
+        detail?.archive.id !== archiveId || detail.archive.local_owner_user_id !== ownerId ||
+        detail.archive.local_role === "cloud-offline-cache") return;
+    try {
+      await deleteLocalArchive(archiveId);
+      showToast(copy.deleted);
+      goList();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : copy.readFailed);
+    }
   }
 
   async function handleDeleteRecord(recordId: string, archiveId: string) {
-    if (!window.confirm(copy.deleteRecordConfirm)) return;
-    await deleteLocalRecord(recordId);
-    await loadDetail(archiveId);
-    await loadList();
-    showToast(copy.deleted);
+    const ownerId = readOwnerContext?.userId;
+    if (!ownerId || resolveAndroidReadOwner(getAndroidAuthSnapshot())?.userId !== ownerId ||
+        screen.kind !== "detail" || screen.archiveId !== archiveId ||
+        detail?.archive.id !== archiveId || detail.archive.local_owner_user_id !== ownerId ||
+        detail.archive.local_role === "cloud-offline-cache" ||
+        !detail.records.some((record) => record.id === recordId && record.archive_id === archiveId)) return;
+    try {
+      await deleteLocalRecord(recordId);
+      await loadDetail(archiveId);
+      await loadList();
+      showToast(copy.deleted);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : copy.readFailed);
+    }
   }
 
   function toggleLanguage(next?: Language) {
