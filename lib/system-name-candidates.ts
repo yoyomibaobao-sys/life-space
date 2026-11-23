@@ -341,6 +341,28 @@ export function resolveExactSystemNameCandidate<T extends GuideCandidateIdentity
   return unique.size === 1 ? Array.from(unique.values())[0] : null;
 }
 
+// Project titles may contain a guide name (e.g. 阳台番茄). Only associate a
+// unique known guide in the chosen category; ambiguous titles remain editable.
+export function inferProjectGuide<T extends GuideCandidateIdentity>(
+  candidates: readonly T[], title: string, category: ArchiveCategory | null,
+): T | null {
+  if (!category) return null;
+  const known = candidates.filter((candidate) => candidate.category === category &&
+    ["plant_species", "public_guide", "builtin"].includes(candidate.source || ""));
+  const exact = resolveExactSystemNameCandidate(known, title);
+  if (exact) return exact;
+  const key = getCandidateKey(title);
+  if (!key) return null;
+  const matches = known.filter((candidate) => {
+    const name = getCandidateKey(candidate.label);
+    return /[\u3400-\u9fff]/.test(name)
+      ? name.length >= 2 && key.includes(name)
+      : name.length >= 3 && (" " + key.replace(/[^\p{L}\p{N}]+/gu, " ") + " ").includes(" " + name + " ");
+  });
+  const distinct = new Map(matches.map((candidate) => [getCandidateKey(candidate.label), candidate]));
+  return distinct.size === 1 ? Array.from(distinct.values())[0] : null;
+}
+
 export function filterSystemNameCandidates<T extends SearchableSystemNameCandidate>(
   candidates: readonly T[],
   query: string,
