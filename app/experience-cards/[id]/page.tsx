@@ -86,6 +86,7 @@ export function ExperienceCardContent({ id, onBack, onDeleted, routerless, onMis
   const [descriptionSaving, setDescriptionSaving] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorDirty, setEditorDirty] = useState(false);
+  const [collapseTarget, setCollapseTarget] = useState<{ cardId: string; ownerId: string; revision: number } | null>(null);
   const [editorRevision, setEditorRevision] = useState(0);
   const [videoStatus, setVideoStatus] =
     useState<ExperienceCardVideoPanelStatus>(initialVideoStatus);
@@ -116,6 +117,10 @@ export function ExperienceCardContent({ id, onBack, onDeleted, routerless, onMis
   }, [id]);
 
   const isOwner = Boolean(detail && viewerId === detail.card.user_id);
+  const collapseCurrent = Boolean(collapseTarget && isOwner && editorOpen && editorDirty &&
+    collapseTarget.cardId === id && collapseTarget.cardId === detail?.card.id &&
+    collapseTarget.ownerId === viewerId && collapseTarget.revision === editorRevision);
+  useEffect(() => { setCollapseTarget(null); }, [id, viewerId, editorRevision, editorOpen]);
 
   useEffect(() => {
     if (!detail || !isOwner) return;
@@ -750,11 +755,10 @@ export function ExperienceCardContent({ id, onBack, onDeleted, routerless, onMis
               type="button"
               aria-expanded={editorOpen}
               onClick={() => {
-                if (
-                  editorOpen &&
-                  editorDirty &&
-                  !window.confirm(t.experience.unsaved_collapse_confirm)
-                ) {
+                if (editorOpen && editorDirty) {
+                  if (isOwner && viewerId && detail.card.id === id) {
+                    setCollapseTarget({ cardId: detail.card.id, ownerId: viewerId, revision: editorRevision });
+                  }
                   return;
                 }
                 setEditorOpen((value) => !value);
@@ -799,6 +803,20 @@ export function ExperienceCardContent({ id, onBack, onDeleted, routerless, onMis
         </section>
       ) : null}
 
+      <ConfirmDialog
+        open={collapseCurrent}
+        title={t.experience.collapse_editor}
+        message={t.experience.unsaved_collapse_confirm}
+        confirmText={t.experience.collapse_editor}
+        cancelText={t.experience.cancel}
+        onClose={() => setCollapseTarget(null)}
+        onConfirm={() => {
+          setCollapseTarget(null);
+          if (!collapseCurrent) return;
+          setEditorOpen(false);
+          setEditorDirty(false);
+        }}
+      />
       <ConfirmDialog
         open={pendingAction === "publish"}
         title={t.experience.publish_title}
