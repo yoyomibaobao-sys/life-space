@@ -158,3 +158,30 @@ test("Android export asks for confirmation before acquiring a fresh owner token 
   assert.match(profile, /saveAndroidCloudExport\(cloudExportRequest\(session\.data\.session\.access_token, target\.timeZone\)\)/);
   assert.match(profile, /onConfirm=\{\(\) => void confirmCloudExport\(\)\}/);
 });
+
+test("Website project decisions retain owner epoch and pending queue safety", () => {
+  const archive = read("app/archive/page.tsx");
+  assert.match(archive, /archiveDecision\.epoch === ownerEpochRef\.current/);
+  assert.match(archive, /archiveDecision\.ownerId === sessionOwnerRef\.current/);
+  assert.match(archive, /item\.summaries\[0\]\.local_archive_id === archiveDecision\.archiveId/);
+  assert.match(archive, /await cancelNeverUploadedCloudArchive\(summary\.local_archive_id, currentOwnerContext\)/);
+  assert.match(archive, /await discardUnattemptedPendingArchiveEdit\(summary\.local_archive_id, currentOwnerContext\)/);
+  assert.doesNotMatch(archive, /window\.confirm\(/);
+});
+
+test("Unsaved experience editor, payment cancellation and refund use shared confirmation", () => {
+  const experience = read("app/experience-cards/[id]/page.tsx");
+  const payment = read("app/membership/payment/page.tsx");
+  const refund = read("app/membership/refund/page.tsx");
+  for (const source of [experience, payment, refund]) {
+    assert.doesNotMatch(source, /window\.(confirm|alert|prompt)\(/);
+    assert.match(source, /<ConfirmDialog/);
+  }
+  assert.match(experience, /collapseTarget\.ownerId === viewerId && collapseTarget\.revision === editorRevision/);
+  assert.match(payment, /order\?\.id === cancelTarget\.orderId && order\.status === "pending_payment"/);
+  assert.match(payment, /identity\.data\.user\?\.id !== target\.ownerId/);
+  assert.match(payment, /p_order_id: target\.orderId/);
+  assert.match(refund, /String\(item\.quoted_refund_amount\) === refundTarget\.amount/);
+  assert.match(refund, /identity\.data\.user\?\.id !== target\.ownerId/);
+  assert.match(refund, /p_payment_id: target\.paymentId,\s*p_reason: target\.reason/);
+});
