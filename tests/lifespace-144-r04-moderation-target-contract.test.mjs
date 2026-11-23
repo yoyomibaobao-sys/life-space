@@ -12,9 +12,15 @@ test("144 R04 action_taken uses only the actionable submission, never the histor
   assert.match(page, /p_submission_id: group\.representative_id, p_status: nextStatus/);
   assert.match(page, /disabled=\{saving \|\| !resolution \|\| \(resolution === "action_taken" && !canTakeReportAction\)\}/);
   const guard = page.indexOf('resolution === "action_taken" && !canTakeReportAction');
-  const confirm = page.indexOf("window.confirm(copy.confirmGroup)");
+  const confirm = page.indexOf('if (nextStatus === "resolved" && (!decisionCurrent || decision?.action !== "resolve")) return;');
   const send = page.indexOf('await moderateRecord("hide", group.actionable_submission_id)');
   assert.ok(guard > 0 && guard < confirm && confirm < send);
+  assert.match(page, /setDecision\(\{ action: "resolve", key: decisionKey \}\);\s*return;/);
+  assert.match(page, /decisionCurrent = Boolean\(decision && expanded && !loading && decision.key === decisionKey\)/);
+  assert.match(page, /if \(!decisionCurrent \|\| !decision \|\| saving\) return;/);
+  assert.match(page, /if \(decision.action === "resolve"\) await update\("resolved", true\)/);
+  assert.match(page, /p_expected_version: moderation.version/);
+  assert.doesNotMatch(page, /window\.(confirm|alert|prompt)\(/);
 });
 
 test("144 R04 moderation action guard fails closed for invalid target and unsafe UI states", () => {
