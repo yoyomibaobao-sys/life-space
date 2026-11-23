@@ -76,3 +76,35 @@ test("Pending record cancellation uses the app dialog and rechecks the selected 
   assert.match(view, /data\.user\?\.id !== owner\.userId/);
   assert.match(view, /await cancelNeverUploadedCloudRecord\(record\.id, owner\)/);
 });
+
+test("Pending project cancellation uses current owner, screen and queue identity", () => {
+  const shell = read("mobile-offline-src/main.tsx");
+  assert.match(shell, /pendingCancelTarget\.ownerId === authenticatedOwnerContext\.userId/);
+  assert.match(shell, /pendingCancelTarget\.ownerId === cloudUserId && pendingCancelTarget\.screen === screen/);
+  assert.match(shell, /item\.summaries\[0\]\.local_archive_id === pendingCancelTarget\.archiveId/);
+  assert.match(shell, /item\.local\?\.local_owner_user_id === pendingCancelTarget\.ownerId/);
+  assert.match(shell, /<AppConfirmDialog\s+open=\{Boolean\(confirmedPendingProject\)\}/);
+  assert.match(shell, /await cancelNeverUploadedCloudArchive\(item\.summaries\[0\]\.local_archive_id, authenticatedOwnerContext\)/);
+  assert.doesNotMatch(shell, /window\.confirm\(language === "zh" \? "确认取消尚未上传/);
+});
+
+test("Comment and market deletion retain scoped confirmation and shared feedback", () => {
+  const archive = read("components/archive-detail/ArchiveCommentsSection.tsx");
+  const market = read("components/market/MarketCommentsSection.tsx");
+  const detail = read("components/market/MarketDetailController.tsx");
+  const edit = read("app/market/[id]/edit/page.tsx");
+  for (const source of [archive, market, detail, edit]) {
+    assert.doesNotMatch(source, /window\.(confirm|alert)\(/);
+    assert.match(source, /<AppConfirmDialog[\s\S]*?destructive/);
+  }
+  assert.match(archive, /comment\.record_id === recordId/);
+  assert.match(market, /comment\.market_post_id === marketPostId/);
+  assert.match(detail, /payload\.item\.user_id === deleteTarget\.ownerId && payload\.currentUserId === deleteTarget\.ownerId/);
+  assert.match(detail, /await requestMarketPostDeletion\(item\.id\)/);
+  assert.match(edit, /media\.market_post_id === id && media\.user_id === user\.id/);
+  assert.match(edit, /await requestMarketMediaDeletion\(media\.id\)/);
+  const shell = read("mobile-offline-src/main.tsx");
+  assert.match(shell, /import Toast, \{ showToast \} from "@\/components\/Toast"/);
+  assert.match(shell, /<Toast \/>/);
+  assert.match(read("components/Toast.tsx"), /clearTimeout\(timer\)/);
+});
