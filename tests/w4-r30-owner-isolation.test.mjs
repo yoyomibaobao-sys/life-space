@@ -42,7 +42,10 @@ test("cloud writes and destructive controls require a verified current owner", (
   assert.match(source, /function requireCloudWriteAccess\(\) \{[\s\S]{0,100}!isVerifiedOwner\(\)/);
   assert.match(source, /async function deleteArchive\(item: ArchiveItem\) \{\s*if \(!isVerifiedOwner\(item\.user_id\)\) return;/);
   assert.match(source, /!isVerifiedOwner\(deleteArchiveTarget\.user_id\)/);
-  assert.match(source, /async function toggleArchivePublic\(item: ArchiveItem\) \{\s*if \(!isVerifiedOwner\(item\.user_id\)\) return;/);
+  assert.match(source, /async function toggleArchivePublic\(item: ArchiveItem, approved = false\) \{\s*if \(!item\.user_id \|\| !isVerifiedOwner\(item\.user_id\)\) return;/);
+  assert.match(source, /archiveDecision\.epoch === ownerEpochRef\.current/);
+  assert.match(source, /archiveDecision\.ownerId === sessionOwnerRef\.current/);
+  assert.match(source, /target\.kind === "public" && decisionArchive\) await toggleArchivePublic\(decisionArchive, true\)/);
 });
 
 test("Android pending workspace still reuses its original pending queue", () => {
