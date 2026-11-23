@@ -214,3 +214,47 @@ test("plant cycles support days, years, and omitting misleading fixed cycles", a
   assert.match(zh, /year_unit: " 年"/);
   assert.match(en, /year_unit: " years"/);
 });
+
+test("project title associates a unique guide in the selected category, without inventing IDs", async () => {
+  const { build } = await import("esbuild");
+  const { fileURLToPath } = await import("node:url");
+  const { outputFiles } = await build({
+    entryPoints: [fileURLToPath(new URL("../lib/system-name-candidates.ts", import.meta.url))],
+    bundle: true, write: false, platform: "node", format: "esm",
+    alias: { "@": fileURLToPath(new URL("../", import.meta.url)) },
+  });
+  const { inferProjectGuide } = await import("data:text/javascript;base64," + Buffer.from(outputFiles[0].contents).toString("base64"));
+  const tomato = { label: "番茄", category: "plant", source: "plant_species", plantId: "tomato", aliases: ["西红柿"] };
+  const pepper = { label: "辣椒", category: "plant", source: "plant_species", plantId: "pepper" };
+  const butterfly = { label: "蝴蝶", category: "insect_fish", source: "public_guide", id: "butterfly" };
+  const rows = [tomato, pepper, butterfly];
+  assert.equal(inferProjectGuide(rows, "阳台番茄", "plant"), tomato);
+  assert.equal(inferProjectGuide(rows, "西红柿", "plant"), tomato);
+  assert.equal(inferProjectGuide(rows, "观察蝴蝶", "insect_fish"), butterfly);
+  assert.equal(inferProjectGuide(rows, "番茄与辣椒", "plant"), null);
+  assert.equal(inferProjectGuide(rows, "蝴蝶", "plant"), null);
+  assert.equal(inferProjectGuide(rows, "自定义项目", "plant"), null);
+});
+
+test("project forms put category first and keep guide suggestions collapsed until input", async () => {
+  const native = await source("mobile-offline-src/main.tsx");
+  const form = native.slice(native.indexOf("function ProjectForm("), native.indexOf("function FilePreview("));
+  const web = await source("components/archive-ui/ArchiveNewProjectFormShell.tsx");
+  assert.ok(form.indexOf("{copy.category} *") < form.indexOf("{copy.title} *"));
+  assert.ok(form.indexOf("{copy.title} *") < form.indexOf("{copy.systemName} *"));
+  assert.match(form, /inferProjectGuide\(directory, title, category\)/);
+  assert.match(form, /guideInputActive && systemName\.trim\(\) && !selectedGuide/);
+  assert.ok(web.indexOf("label={copy.category_required}") < web.indexOf("label={copy.project_name_required}"));
+  assert.ok(web.indexOf("label={copy.project_name_required}") < web.indexOf("label={systemNameLabel}"));
+});
+
+test("offline and online record creation permit a note without photos", async () => {
+  const native = await source("mobile-offline-src/main.tsx");
+  const form = native.slice(native.indexOf("function RecordForm("));
+  const cloud = await source("app/archive/[id]/AddRecord.tsx");
+  assert.match(form, /if \(!note\.trim\(\) && !files\.length && !record\?\.images\.length\)/);
+  assert.match(form, /note,\s*record_time: isoTime,[\s\S]*?image_files: \[\]/);
+  assert.match(form, /照片（选填，最多 10 张）/);
+  assert.match(cloud, /if \(!text\.trim\(\) && files\.length === 0\)/);
+  assert.match(cloud, /照片（选填，最多/);
+});
