@@ -108,7 +108,7 @@ const mobileBottomNavStyle: CSSProperties = {
   gap: 4,
   borderTop: "1px solid #dfe8da",
   background: "rgba(255,255,255,0.98)",
-  boxShadow: "0 -8px 22px rgba(40, 62, 34, 0.08)",
+  boxShadow: "0 -3px 12px rgba(40, 62, 34, 0.05)",
   boxSizing: "border-box",
   transform: "translateZ(0)",
   backfaceVisibility: "hidden",
@@ -130,7 +130,7 @@ function mobileBottomNavItemStyle(active: boolean): CSSProperties {
     background: active ? "#edf6e8" : "transparent",
     borderRadius: 12,
     fontSize: 12,
-    fontWeight: active ? 800 : 650,
+    fontWeight: active ? 650 : 500,
     lineHeight: 1,
   };
 }
