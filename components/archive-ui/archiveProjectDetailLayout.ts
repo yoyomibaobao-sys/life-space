@@ -25,7 +25,7 @@ export const archiveProjectDetailHeaderProjectStyle: CSSProperties = {
   overflow: "hidden",
   color: "#243424",
   fontSize: 16,
-  fontWeight: 850,
+  fontWeight: 650,
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 };
@@ -100,7 +100,7 @@ export function archiveProjectDetailTabButtonStyle(active: boolean): CSSProperti
     color: active ? "#2f6a31" : "#40583a",
     background: active ? "#e3f1dd" : "transparent",
     fontSize: "clamp(14px, 3.6vw, 16px)",
-    fontWeight: 800,
+    fontWeight: 650,
     whiteSpace: "nowrap",
     cursor: "pointer",
   };
@@ -147,7 +147,7 @@ export const archiveProjectDetailFloatingAddStyle: CSSProperties = {
   background: "#3f7d3d",
   color: "#fff",
   fontSize: 14,
-  fontWeight: 800,
+  fontWeight: 650,
   boxShadow: "0 12px 28px rgba(49, 90, 45, 0.22)",
 };
 
