@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-let globalShow: (msg: string) => void;
+let globalShow: ((msg: string) => void) | undefined;
 
 // 供页面统一调用的提示函数。
 export function showToast(msg: string) {
@@ -15,13 +15,20 @@ export default function Toast() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    globalShow = (msg: string) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const show = (msg: string) => {
+      if (timer !== undefined) clearTimeout(timer);
       setMessage(msg);
       setVisible(true);
-
-      setTimeout(() => {
+      timer = setTimeout(() => {
         setVisible(false);
-      }, 2000);
+        timer = undefined;
+      }, 2600);
+    };
+    globalShow = show;
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+      if (globalShow === show) globalShow = undefined;
     };
   }, []);
 
@@ -29,6 +36,8 @@ export default function Toast() {
 
   return (
     <div
+      role="status"
+      aria-live="polite"
       style={{
         position: "fixed",
         bottom: "80px",
