@@ -274,8 +274,9 @@ const eyebrowStyle: CSSProperties = {
 
 const titleStyle: CSSProperties = {
   margin: "4px 0 8px",
-  fontSize: 26,
-  lineHeight: 1.2,
+  fontSize: 22,
+  fontWeight: 650,
+  lineHeight: 1.25,
 };
 
 const subtitleStyle: CSSProperties = {
@@ -298,13 +299,13 @@ const disabledNoticeStyle: CSSProperties = {
 
 const fieldStyle: CSSProperties = {
   display: "grid",
-  gap: 8,
+  gap: 5,
 };
 
 const labelStyle: CSSProperties = {
   color: "#334033",
   fontSize: 14,
-  fontWeight: 700,
+  fontWeight: 600,
 };
 
 const helperTextStyle: CSSProperties = {
