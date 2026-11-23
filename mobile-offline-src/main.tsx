@@ -3500,11 +3500,11 @@ function App() {
         ) : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />
       ) : null}
       {screen.kind === "plant-detail" ? (
-        <PlantDetailContent id={screen.id} offline={!online || offlineOwnerRead}
+        <PlantDetailContent key={screen.id} id={screen.id} offline={!online || offlineOwnerRead}
           offlineGuide={findOfflineGuideEntry(directory, screen.id)}
           onBack={() => goBackInShell({ kind: "guides" })} />
       ) : null}
-      {screen.kind === "guide-detail" ? <GuideDetailView id={screen.guideId || screen.guideKey} offline={!online || offlineOwnerRead} offlineGuide={activeGuide} offlineSignedIn={auth.status === "signed-in"} onBack={() => goBackInShell({ kind: "guides" })} onCreate={(guide) => readOwnerContext
+      {screen.kind === "guide-detail" ? <GuideDetailView key={screen.guideId || screen.guideKey} id={activeGuide?.source === "public_guide" && activeGuide.id ? activeGuide.id : screen.guideId || screen.guideKey} offline={!online || offlineOwnerRead} offlineGuide={activeGuide} offlineSignedIn={Boolean(readOwnerContext?.userId)} onBack={() => goBackInShell({ kind: "guides" })} onCreate={(guide) => readOwnerContext
         ? setScreen({ kind: "new-project", guide, destination: online ? "live-cloud" : "pending-cloud" })
         : openCloudLogin("list-cloud")} /> : null}
       {screen.kind === "cloud-login" ? <CloudLogin copy={copy} online={online} onBack={() => goBackInShell({ kind: "list" })}
