@@ -1386,7 +1386,9 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
         : null;
       const canReadFullGuide = Boolean(plusDetail);
       setHasCloudAccess(canReadFullGuide);
-      setGuideReadState(canReadFullGuide ? "ready" : user || authResult.error ? "unavailable" : "guest");
+      const missingSession = typeof authResult.error === "object" && authResult.error !== null &&
+        "name" in authResult.error && authResult.error.name === "AuthSessionMissingError";
+      setGuideReadState(canReadFullGuide ? "ready" : user || (authResult.error && !missingSession) ? "unavailable" : "guest");
 
       const [{ data: i18nData }, { data: aliasData }] = await Promise.all([
         catalogAvailable ? Promise.resolve({ data: catalogRow?.translations || [] }) : supabase
