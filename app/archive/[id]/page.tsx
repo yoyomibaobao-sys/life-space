@@ -217,6 +217,9 @@ function Content({ id }: { id: string }) {
   const archiveProfileSavingRef = useRef(false);
   const [deleteArchiveDialogOpen, setDeleteArchiveDialogOpen] = useState(false);
   const [archiveStatusConfirmOpen, setArchiveStatusConfirmOpen] = useState(false);
+  const [helpTarget, setHelpTarget] = useState<{ archiveId: string; recordId: string; ownerId: string; reloadKey: number } | null>(null);
+  const [helpBusy, setHelpBusy] = useState(false);
+  useEffect(() => { setHelpTarget(null); }, [id, me, reloadKey]);
   const [isDeletingArchive, setIsDeletingArchive] = useState(false);
   const [localCopyId, setLocalCopyId] = useState<string | null>(null);
   const [saveToLocalConfirmOpen, setSaveToLocalConfirmOpen] = useState(false);
@@ -826,19 +829,25 @@ saveRecentArchiveBrowse({
     setArchive((prev) => (prev ? { ...prev, ...patch } : prev));
   }
 
-  async function setRecordHelpStatus(recordId: string, nextStatus: "help" | "resolved" | null) {
-    if (!requireCloudWriteAccess()) return;
+  const helpTargetCurrent = Boolean(helpTarget && canWriteCloud && me && helpTarget.ownerId === me &&
+    helpTarget.archiveId === id && helpTarget.archiveId === activeArchive.id &&
+    helpTarget.reloadKey === reloadKey && records.some((record) => record.id === helpTarget.recordId));
+  async function setRecordHelpStatus(recordId: string, nextStatus: "help" | "resolved" | null, approved = false) {
+    if (!requireCloudWriteAccess() || !me || activeArchive.user_id !== me || activeArchive.id !== id) return;
     const targetRecord = records.find((record) => record.id === recordId);
+    if (!targetRecord) return;
     const shouldPublishForHelp =
       nextStatus === "help" &&
       (!activeArchive.is_public || targetRecord?.visibility !== "public");
 
     if (shouldPublishForHelp) {
-      const confirmed = confirm(
-        recordCopy.help_public_confirm
-      );
-
-      if (!confirmed) return;
+      if (!approved) {
+        setHelpTarget({ archiveId: activeArchive.id, recordId, ownerId: me, reloadKey });
+        return;
+      }
+      if (!helpTargetCurrent || helpTarget?.recordId !== recordId) return;
+      const identity = await supabase.auth.getUser();
+      if (identity.error || identity.data.user?.id !== me) return;
 
       if (!activeArchive.is_public) {
         const { data: publicationResult, error: archiveError } = await supabase.rpc(
@@ -2417,6 +2426,20 @@ saveRecentArchiveBrowse({
             }}
             onConfirm={confirmDeleteArchive}
             danger
+          />
+          <ConfirmDialog
+            open={helpTargetCurrent}
+            title={language === "zh" ? "公开求助" : "Publish help request"}
+            message={recordCopy.help_public_confirm}
+            confirmDisabled={helpBusy}
+            cancelDisabled={helpBusy}
+            onClose={() => setHelpTarget(null)}
+            onConfirm={async () => {
+              if (!helpTargetCurrent || !helpTarget || helpBusy) return;
+              setHelpBusy(true);
+              try { await setRecordHelpStatus(helpTarget.recordId, "help", true); }
+              finally { setHelpTarget(null); setHelpBusy(false); }
+            }}
           />
           <ConfirmDialog
             open={archiveStatusConfirmOpen}
