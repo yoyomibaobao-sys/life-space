@@ -47,14 +47,16 @@ test("Guide list and detail change data within the same formal presentation", ()
   assert.match(directory, /offlineDirectory/);
   assert.match(directory, /<HomeSectionTabs\s+active="guide"/);
   assert.match(web, /<GuideDetailView id=\{params\.id\}/);
-  assert.match(shell, /<GuideDetailView id=\{screen\.guideId \|\| screen\.guideKey\} offline=\{!online \|\| offlineOwnerRead\}/);
+  assert.match(shell, /<GuideDetailView key=\{screen\.guideId \|\| screen\.guideKey\} id=\{activeGuide\?\.source === "public_guide" && activeGuide\.id \? activeGuide\.id : screen\.guideId \|\| screen\.guideKey\} offline=\{!online \|\| offlineOwnerRead\}/);
+  assert.match(shell, /offlineGuide=\{activeGuide\} offlineSignedIn=\{Boolean\(readOwnerContext\?\.userId\)\}/);
   assert.match(shell, /offlineSignedIn=\{auth\.status === "signed-in"\}/);
   assert.doesNotMatch(shell, /function OfflineGuideDetail/);
   assert.match(detail, /getOfflineGuideOverview\(offlineGuide/);
   assert.match(detail, /getOfflineGuideParameters\(offlineGuide/);
   assert.match(detail, /activeTab === "guide"/);
   assert.match(detail, /activeTab === "experience"/);
-  assert.match(detail, /<section className=\{styles\.accessNotice\}>\{copy\.membershipForFull\}/);
+  assert.match(detail, /memberState === "loading"[\s\S]*?memberState === "guest" \? <AccessNotice/);
+  assert.match(detail, /offline \? <section className=\{styles\.accessNotice\}>/);
 });
 
 test("My Space cards share MobileArchiveActions with source-specific write capability", () => {
