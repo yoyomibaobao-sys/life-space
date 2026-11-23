@@ -19,8 +19,8 @@ export default function PlantingRegionField({ value, onChange, language, require
   const options = getLocalizedCountryOptions(language);
   return (
     <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-      {hideLegend ? <legend style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>{en ? "Planting region" : "种植地区"}{required ? " *" : ""}</legend> : <legend style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>{en ? "Planting region" : "种植地区"}{required ? " *" : ""}</legend>}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+      {hideLegend ? <legend style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>{en ? "Planting region" : "种植地区"}{required ? " *" : ""}</legend> : <legend style={{ fontSize: 14, fontWeight: 600, marginBottom: 5 }}>{en ? "Planting region" : "种植地区"}{required ? " *" : ""}</legend>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
         <label style={labelStyle}>{en ? "Country / region" : "国家／地区"}
           <select required={required} value={draft.country_code} onChange={(event) => onChange({ ...draft, country_code: event.target.value, country_name: getCountryName(event.target.value, "", language), region_name: "", city_name: "" })} style={inputStyle}>
             <option value="">{en ? "Select" : "请选择"}</option>
@@ -41,5 +41,5 @@ export default function PlantingRegionField({ value, onChange, language, require
   );
 }
 
-const labelStyle = { display: "grid", gap: 6, minWidth: 0, fontSize: 13, color: "#60735c" };
-const inputStyle = { boxSizing: "border-box" as const, width: "100%", minWidth: 0, padding: "10px 12px", border: "1px solid #d9e2d4", borderRadius: 12, background: "#fff", color: "#263a28", fontSize: 15 };
+const labelStyle = { display: "grid", gap: 4, minWidth: 0, fontSize: 13, color: "#60735c" };
+const inputStyle = { boxSizing: "border-box" as const, width: "100%", minWidth: 0, minHeight: 44, padding: "8px 10px", border: "1px solid #d9e2d4", borderRadius: 10, background: "#fff", color: "#263a28", fontSize: 15 };
