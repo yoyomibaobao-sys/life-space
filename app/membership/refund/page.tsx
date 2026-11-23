@@ -7,6 +7,7 @@ import { formatPreciseDateTime } from "@/lib/date-time";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import styles from "./refund.module.css";
 
 type RefundPolicyBand = "full_7d" | "half_180d" | "unused_renewal_full";
@@ -79,10 +80,19 @@ export default function MembershipRefundPage() {
   const copy = t.refund_request_page;
   const [loading, setLoading] = useState(true);
   const [signedIn, setSignedIn] = useState(false);
+  const [ownerId, setOwnerId] = useState<string | null>(null);
   const [items, setItems] = useState<RefundPaymentItem[]>([]);
   const [reasonByPayment, setReasonByPayment] = useState<Record<string, string>>({});
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [refundTarget, setRefundTarget] = useState<{ paymentId: string; ownerId: string; amount: string; currency: string; band: RefundPolicyBand; reason: string } | null>(null);
+  const confirmedRefund = refundTarget && signedIn && ownerId === refundTarget.ownerId && !loading
+    ? items.find((item) => item.payment_id === refundTarget.paymentId && item.eligible && !item.refund_request &&
+        String(item.quoted_refund_amount) === refundTarget.amount && item.currency === refundTarget.currency &&
+        item.quoted_policy_band === refundTarget.band &&
+        (reasonByPayment[item.payment_id]?.trim() || "") === refundTarget.reason)
+    : undefined;
+  useEffect(() => { setRefundTarget(null); }, [ownerId]);
 
   const loadRefunds = useCallback(async () => {
     const {
@@ -92,12 +102,14 @@ export default function MembershipRefundPage() {
 
     if (userError || !user) {
       setSignedIn(false);
+      setOwnerId(null);
       setItems([]);
       setLoading(false);
       return;
     }
 
     setSignedIn(true);
+    setOwnerId(user.id);
     const { data, error } = await supabase.rpc("get_my_membership_refunds_json");
     const result = firstRpcObject<RefundListResult>(data);
 
@@ -140,18 +152,29 @@ export default function MembershipRefundPage() {
     return copy.not_eligible;
   }
 
-  async function requestRefund(item: RefundPaymentItem) {
-    if (submittingId || !item.eligible) return;
+  function requestRefund(item: RefundPaymentItem) {
+    if (submittingId || !ownerId || !signedIn || loading || !item.eligible || item.refund_request) return;
+    setRefundTarget({ paymentId: item.payment_id, ownerId, amount: String(item.quoted_refund_amount),
+      currency: item.currency, band: item.quoted_policy_band, reason: reasonByPayment[item.payment_id]?.trim() || "" });
+  }
 
-    const refundAmount = formatAmount(item.quoted_refund_amount, item.currency);
-    if (!window.confirm(`${copy.confirm_prefix}${refundAmount}${copy.confirm_suffix}`)) return;
-
-    setSubmittingId(item.payment_id);
+  async function confirmRefund() {
+    const target = refundTarget;
+    if (!target || !confirmedRefund || submittingId) return;
+    setSubmittingId(target.paymentId);
     setErrorMessage("");
+    const identity = await supabase.auth.getUser();
+    if (identity.error || identity.data.user?.id !== target.ownerId) {
+      setRefundTarget(null);
+      setSubmittingId(null);
+      showToast(copy.submit_failed);
+      return;
+    }
     const { data, error } = await supabase.rpc("request_membership_refund_json", {
-      p_payment_id: item.payment_id,
-      p_reason: reasonByPayment[item.payment_id]?.trim() || null,
+      p_payment_id: target.paymentId,
+      p_reason: target.reason || null,
     });
+    setRefundTarget(null);
     const result = firstRpcObject<RefundRequestResult>(data);
 
     if (error || !result?.ok) {
@@ -276,6 +299,17 @@ export default function MembershipRefundPage() {
         </section>
       )}
 
+      <ConfirmDialog
+        open={Boolean(confirmedRefund)}
+        title={copy.submit_action}
+        message={refundTarget ? `${copy.confirm_prefix}${formatAmount(refundTarget.amount, refundTarget.currency)}${copy.confirm_suffix}` : ""}
+        confirmText={submittingId ? copy.submitting : copy.submit_action}
+        cancelText={t.cancel}
+        confirmDisabled={Boolean(submittingId)}
+        cancelDisabled={Boolean(submittingId)}
+        onClose={() => setRefundTarget(null)}
+        onConfirm={confirmRefund}
+      />
     </main>
   );
 }
