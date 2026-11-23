@@ -235,7 +235,8 @@ test("main-branch signed builds publish and verify the R2 release", () => {
 
   assert.match(worker, /url\.pathname === "\/download\/android"/);
   assert.match(worker, /source", "official_download"/);
-  assert.match(updatePage, /api\/download\/android\?source=app_update_fallback/);
+  assert.match(updatePage, /openAndroidOfficialDownload/);
+  assert.match(updatePage, /OFFICIAL_DOWNLOAD_PAGE = "https:\/\/life-space\.uk\/download\/android"/);
   assert.match(workflow, /Verify permanent release signature/);
   assert.match(workflow, /ccc03e33fed7ce95dd4d203aa3451a08cdc175874e4a6ae159b81c367164635d/);
   assert.match(workflow, /write-android-release-manifest\.mjs/);

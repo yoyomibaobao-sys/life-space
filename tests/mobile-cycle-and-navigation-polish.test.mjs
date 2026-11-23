@@ -110,6 +110,7 @@ test("User Information edits in place and dedicated pages return consistently", 
     payment,
     benefits,
     feedback,
+    supportCenter,
     recent,
     followers,
     trash,
@@ -120,6 +121,7 @@ test("User Information edits in place and dedicated pages return consistently", 
     source("app/membership/payment/page.tsx"),
     source("app/membership/benefits/page.tsx"),
     source("app/feedback/page.tsx"),
+    source("components/support/SupportCenter.tsx"),
     source("app/profile/recent/page.tsx"),
     source("app/profile/followers/page.tsx"),
     source("app/profile/trash/page.tsx"),
@@ -133,7 +135,8 @@ test("User Information edits in place and dedicated pages return consistently", 
   assert.match(profile, /role="switch"/);
   assert.match(profile, /languageSwitchThumbStyle/);
   assert.match(profile, /scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
-  for (const page of [payment, benefits, feedback, recent, followers, trash]) {
+  assert.match(feedback, /<SupportCenter kind="feedback"/);
+  for (const page of [payment, benefits, supportCenter, recent, followers, trash]) {
     assert.match(page, /href="\/profile"/);
   }
   assert.ok(
