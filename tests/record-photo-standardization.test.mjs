@@ -23,7 +23,7 @@ test("new local and cloud record photos share the 1800px quality-82 standard", a
   assert.match(compression, /RECORD_PHOTO_QUALITY = 0\.82/);
   assert.match(
     compression,
-    /standardizeRecordPhotoFile[\s\S]*maxWidthOrHeight: RECORD_PHOTO_MAX_EDGE[\s\S]*quality: RECORD_PHOTO_QUALITY/,
+    /standardizeRecordPhotoFile[\s\S]*maxWidthOrHeight: [^\n]*RECORD_PHOTO_MAX_EDGE[\s\S]*quality: [^\n]*RECORD_PHOTO_QUALITY/,
   );
 
   for (const file of [localDb, addRecord, archiveDetail]) {
@@ -107,7 +107,7 @@ test("the web UI states the standard and does not promise automatic system-album
   assert.match(enCopy, /maximum 1800 px edge at 82% quality/);
   assert.match(enCopy, /smaller images are not enlarged/);
 
-  assert.match(rules, /同时保存原图到系统相册/);
+  assert.match(rules, /同时保存到系统相册/);
   assert.match(rules, /默认关闭/);
-  assert.match(rules, /网页 \/ PWA 不能可靠控制系统相册/);
+  assert.match(rules, /网页／PWA 不能显示无法兑现的自动保存开关/);
 });

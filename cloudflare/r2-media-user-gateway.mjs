@@ -135,6 +135,7 @@ function ownerReadable(viewerId, ownerId, isPublic) {
 
 async function resolveBusinessMedia(admin, input, viewerId) {
   const { businessType, businessId, variant } = input;
+  if (!viewerId && (businessType === "media" || businessType === "record")) return null;
   let ownerId = null;
   let recordId = null;
   let path = null;

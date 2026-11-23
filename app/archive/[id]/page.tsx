@@ -1340,17 +1340,6 @@ saveRecentArchiveBrowse({
       return;
     }
 
-    const { data: membershipData, error: membershipError } =
-      await supabase.rpc("get_my_membership");
-    const membership = membershipError
-      ? null
-      : normalizeMembershipRpcResult(membershipData);
-
-    if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership, language));
-      return;
-    }
-
     setProjectFollowSubmitting(true);
     const { error } = await supabase.from("archive_follows").insert([
       {

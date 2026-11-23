@@ -10,10 +10,6 @@ import {
   matchesEnvironmentFilters,
 } from "@/lib/plant-env";
 import {
-  canAccessMembershipGuidance,
-  normalizeMembershipRpcResult,
-} from "@/lib/membership";
-import {
   loadPlantBasicOverviewsCompat,
   loadPublicPlantCatalogPage,
   type PlantBasicOverviewCompatRow,
@@ -492,15 +488,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
 
       setIsSignedIn(Boolean(user));
 
-      const membershipResult = user
-        ? await withGuideRemoteTimeout(supabase.rpc("get_my_membership"))
-        : null;
-      const membership = !membershipResult || membershipResult.error
-        ? null
-        : normalizeMembershipRpcResult(membershipResult.data);
-      if (cancelled) return;
-      const canReadFullGuide = canAccessMembershipGuidance(membership);
-
+      const canReadFullGuide = Boolean(user);
       setHasCloudAccess(canReadFullGuide);
 
       const catalogResult = await catalogRequest;

@@ -13,28 +13,28 @@ async function load(name) {
   bundle:true,platform:"node",format:"esm",write:false,alias:{"@":root}});
  return import("data:text/javascript;base64,"+Buffer.from(result.outputFiles[0].text).toString("base64"));
 }
-test("every guide separately caps Free guest cards and records at 0/1/2/2; Plus unchanged",async()=>{
+test("guest sees no records or cards; registered users see every entry",async()=>{
  const {guideAssociationPreview}=await load("lib/guide-association-limits.ts");
  for (const quantity of [0,1,2,3]) for (const category of ["records","cards"]){
   const rows=Array.from({length:quantity},(_,i)=>({id:category+"-"+i}));
   const guest=guideAssociationPreview(rows,false);
-  assert.equal(guest.items.length,Math.min(quantity,2));
-  assert.equal(guest.hasMore,quantity>2);
-  const free=guideAssociationPreview(rows,false);
-  assert.deepEqual(free,guest);
+  assert.equal(guest.items.length,0);
+  assert.equal(guest.hasMore,false);
+  const free=guideAssociationPreview(rows,true);
+  assert.equal(free.items.length,quantity);
   const plus=guideAssociationPreview(rows,true);
   assert.equal(plus.items.length,quantity);
   assert.equal(plus.hasMore,false);
  }
 });
 test("Plus entitlement is paid, active and unexpired; Trial Free expired refund cannot unlock",async()=>{
- const {canAccessMembershipGuidance}=await load("lib/membership.ts");
+ const {hasActivePlus}=await load("lib/membership.ts");
  const base={plan:"basic",status:"active",can_create_content:true,paid_until:"2050-01-01T00:00:00Z"};
- assert.equal(canAccessMembershipGuidance(base),true);
+ assert.equal(hasActivePlus(base),true);
  for(const membership of [null,{...base,plan:"trial"},{...base,plan:"admin"},
   {...base,status:"trialing"},{...base,status:"canceled"},
   {...base,paid_until:"2026-01-01T00:00:00Z"},{...base,paid_until:null}]){
-  assert.equal(canAccessMembershipGuidance(membership),false);
+  assert.equal(hasActivePlus(membership),false);
  }
 });
 test("v2 legacy cache migration removes member-generated full overviews, preserving names",async()=>{
@@ -86,8 +86,8 @@ test("ordinary/plant guide Free rows are scoped to already public archives; offl
  assert.match(ordinary,/\.eq\("visibility", "public"\)/);
  assert.match(ordinary,/\.eq\("status", "published"\)/);
  assert.match(ordinary,/guideAssociationPreview\(publicRecords, fullAccess\)/);
- assert.match(plant,/guideAssociationPreview\(cards\.items, canReadFullGuide\)/);
- assert.match(plant,/guideAssociationPreview\(records\.items, canReadFullGuide\)/);
+ assert.match(plant,/guideAssociationPreview\(cards\.items, true\)/);
+ assert.match(plant,/guideAssociationPreview\(records\.items, true\)/);
  assert.match(ordinary,/if \(offline\) \{/);
  assert.match(ordinary,/setRelatedRecords\(\[\]\)/);
  assert.match(offline,/const KEY = "lifespace:guide-directory:v3"/);

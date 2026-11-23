@@ -1,3 +1,4 @@
+import type { PhotoQuality } from "./record-photo-quality";
 import { supabase } from "@/lib/supabase";
 import { standardizeRecordPhotoFile, createImageThumbnailFile } from "@/lib/image-compression";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
@@ -100,14 +101,14 @@ async function digest(blob: Blob) {
 }
 
 export async function stageRecovery(params: {
-  ownerId: string; archiveId: string; requestId: string; note: string; files: File[];
+  ownerId: string; archiveId: string; requestId: string; note: string; files: File[]; quality?: PhotoQuality;
 }) {
   const key = entryKey(params.ownerId, params.archiveId, params.requestId);
   if (await readRecovery(params.ownerId, params.archiveId, params.requestId))
     throw new Error("recovery_operation_already_exists");
   const photos: RecoveryPhoto[] = [];
   for (const [index, original] of params.files.entries()) {
-    const standardized = await standardizeRecordPhotoFile(original, { requireSanitized: true });
+    const standardized = await standardizeRecordPhotoFile(original, { requireSanitized: true, quality: params.quality });
     const thumbnail = await createImageThumbnailFile(standardized.file);
     const safe = standardized.file.name.replace(/[^\w.\-]+/g, "_");
     const temporary = params.ownerId + "/pending/" + params.requestId + "-" + index + "-";
