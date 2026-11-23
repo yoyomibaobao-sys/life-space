@@ -987,7 +987,7 @@ function App() {
     const trusted = resolveAndroidReadOwner(auth);
     return trusted ? { ...trusted, snapshotOnly: true } : null;
   }, [auth]);
-  const offlineOwnerRead = auth.status === "offline-owner-read";
+  const offlineOwnerRead = !auth.explicitSignedOut && auth.status !== "signed-in" && Boolean(readOwnerContext?.userId) && (auth.status === "offline-owner-read" || auth.status === "checking");
   // A checking transition may keep an already mounted editor in quarantine.
   // This memory-only marker grants NO Owner, DB access or online permission.
   const recordEditorOwnerRef = useRef<{ ownerId: string; archiveId: string } | null>(null);
@@ -1008,12 +1008,6 @@ function App() {
     recordEditorOwnerRef.current?.archiveId === detail.archive.id &&
     recordEditorOwnerRef.current?.ownerId === detail.archive.local_owner_user_id;
   const offlineCreatedProjects = useRef(new Set<string>());
-
-  useEffect(() => {
-    if (serviceConnectivity.status === "offline" && quickAddDraft && screen.kind === "cloud-detail") {
-      setScreen({ kind: "choose-project" });
-    }
-  }, [serviceConnectivity.status, quickAddDraft, screen.kind]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -1329,7 +1323,8 @@ function App() {
   }, [online]);
 
   useEffect(() => {
-    if (auth.status === "checking") {
+    const retainedOfflineOwner = !auth.explicitSignedOut ? resolveAndroidReadOwner(auth) : null;
+    if (auth.status === "checking" && !retainedOfflineOwner) {
       listRequestRef.current += 1;
       cloudListRequestRef.current += 1;
       setCloudLoading(false);
@@ -1337,13 +1332,13 @@ function App() {
       if (!retainCheckingEditor) setDetail(null);
       return;
     }
-    if (auth.status === "offline-owner-read" && auth.offlineReadOwner) {
-      const identity = readShellIdentityCache(auth.offlineReadOwner.userId);
+    if ((auth.status === "offline-owner-read" || auth.status === "checking") && retainedOfflineOwner?.userId) {
+      const identity = readShellIdentityCache(retainedOfflineOwner.userId);
       setSpaceProfile(identity?.profile || null);
       setMembership(identity?.membership || null);
       setExperienceCardCount(identity?.experienceCardCount || 0);
-      setOwner(auth.offlineReadOwner);
-      refreshListSafely({ ...auth.offlineReadOwner, snapshotOnly: true });
+      setOwner(retainedOfflineOwner);
+      refreshListSafely({ ...retainedOfflineOwner, snapshotOnly: true });
       return;
     }
     if (auth.status === "signed-in" && auth.sessionUserId) {
@@ -1378,6 +1373,7 @@ function App() {
     refreshListSafely(ownerContext);
   }, [
     auth.email,
+    auth.explicitSignedOut,
     auth.offlineReadOwner,
     auth.rememberedOwner,
     auth.sessionUserId,
@@ -2102,22 +2098,22 @@ function App() {
   // Preserve the saved preference and all underlying local/SAF data untouched.
   const localSpaceEnabled = false;
   const cloudReadable = canReadAndroidCloudWorkspace({
-    auth: auth.status,
+    auth: offlineOwnerRead ? "offline-owner-read" : auth.status,
     userId: readOwnerContext?.userId || null,
     offlineOwnerId: offlineOwnerRead ? readOwnerContext?.userId : null,
     membership,
     trialAccess: cloudTrialAccess,
   });
   useEffect(() => {
-    if (auth.status === "checking") return;
-    const available = w5WorkspaceSources(auth.status);
+    if (auth.status === "checking" && !offlineOwnerRead) return;
+    const available = w5WorkspaceSources(offlineOwnerRead ? "offline-owner-read" : auth.status);
     if (!available.length || available.includes(sourceFilter)) return;
     setSourceFilter(available[0]);
     setSubcategoryFilter(null);
     setGroupFilter(null);
-  }, [auth.status, localSpaceEnabled, cloudReadable, sourceFilter]);
+  }, [auth.status, offlineOwnerRead, localSpaceEnabled, cloudReadable, sourceFilter]);
   function openNewProjectEntry() {
-    if (auth.status === "checking") {
+    if (auth.status === "checking" && !offlineOwnerRead) {
       showToast(language === "zh"
         ? "正在核验云端身份，请先点“重新检查云端”；本机记录保持不变。"
         : "Cloud identity is being verified. Recheck connection; local records are preserved.");
@@ -2139,6 +2135,7 @@ function App() {
   // Old links can omit a destination; the online App must never create local-only.
   const newProjectDestination: CreationDestination | null = screen.kind === "new-project"
     ? (screen.destination === "pending-cloud" || !online || offlineOwnerRead ? "pending-cloud" : "live-cloud") : null;
+  const canCreatePendingCloud = newProjectDestination === "pending-cloud" && offlineOwnerRead && Boolean(readOwnerContext?.userId);
   const filteredLocalArchives = workspace.localOnly.filter((archive) => filterCategory(archive) &&
     (!subcategoryFilter || archive.subcategory === subcategoryLabel) &&
     (!groupFilter || archive.group_name === groupLabel));
@@ -2382,7 +2379,8 @@ function App() {
       project={{ ...base, href: undefined, visibilityLabel: badge, visibilityTone: "neutral", latestText: counts }}
       onClick={() => { if (sourceFilter === "pending" || item.creating) { setSourceFilter("pending"); setFocusedPendingKey(item.key); } else if (local) openDetail(local.id); else if (item.cloud) setScreen({ kind: "cloud-detail", archiveId: item.cloud.id }); }}
       mobileMode mobileShowCategoryBadge={false}
-      actionSlot={authenticatedOwnerContext ? <div className="action-row">
+    />}
+    {!focused && authenticatedOwnerContext ? <div className="action-row pending-project-actions">
         {online ? <button type="button" className="secondary-button compact-card-action"
           disabled={Boolean(syncingArchiveId)} onClick={() => void uploadPendingProject(item)}>
           {syncingArchiveId === item.key || syncingArchiveId === item.summaries[0]?.local_archive_id ? (language === "zh" ? "上传中…" : "Uploading…") : item.failed ? (language === "zh" ? "重试" : "Retry") : (language === "zh" ? "上传" : "Upload")}
@@ -2392,7 +2390,6 @@ function App() {
           title={!item.creating ? (language === "zh" ? "远端或修改状态未知，不能安全取消" : "Cannot safely cancel remote edits") : undefined}
           onClick={() => void cancelPendingCreatedProject(item)}>{language === "zh" ? "取消待上传" : "Cancel pending"}</button>
       </div> : null}
-    />}
     </div>;
   }
   function renderProjectActions(archive: CloudArchiveSummary | LocalArchiveSummary, source: "cloud" | "local" | "cache") {
@@ -2558,7 +2555,7 @@ function App() {
   const storageTotalLabel = storageLimitBytes > 0
     ? formatStorage(storageLimitBytes)
     : "—";
-  const hasAuthenticatedIdentity = auth.status === "signed-in" && Boolean(authenticatedOwnerContext);
+  const hasAuthenticatedIdentity = Boolean(readOwnerContext?.userId);
   const membershipLabel = offlineOwnerRead ? (language === "zh" ? "离线访问" : "Offline access") : getUserTypeLabel(
     { signedIn: hasAuthenticatedIdentity, membership: hasAuthenticatedIdentity ? membership : null },
     language,
@@ -2627,30 +2624,7 @@ function App() {
         onLocalUse={undefined}
         onBrowseHome={screen.kind === "about" ? () => setScreen({ kind: "activity" }) : undefined}
       /> : null}
-      {screen.kind === "list" ? (
-        <PersonalSpaceMobileIdentity
-          avatarUrl={hasAuthenticatedIdentity ? spaceProfile?.avatar_url : null}
-          username={
-            hasAuthenticatedIdentity
-              ? spaceProfile?.username || auth.email || (language === "zh" ? "我的空间" : "My space")
-              : language === "zh" ? "我的空间" : "My space"
-          }
-          membershipLabel={membershipLabel}
-          storageUsagePercent={hasAuthenticatedIdentity ? storageUsagePercent : null}
-          storageTotalLabel={hasAuthenticatedIdentity ? storageTotalLabel : null}
-          experienceLabel={hasAuthenticatedIdentity ? (language === "zh" ? "经验卡" : "Experience") : null}
-          experienceCardCount={hasAuthenticatedIdentity ? experienceCardCount : null}
-          experienceHref={hasAuthenticatedIdentity && online ? "/experience-cards" : null}
-          onExperienceClick={hasAuthenticatedIdentity && !online ? () => showToast(language === "zh" ? "需联网查看经验卡" : "Connect to view experience cards") : undefined}
-          language={language}
-          profileHref="/profile"
-          notificationSlot={!hasAuthenticatedIdentity && online ? (
-            <button type="button" className="secondary-button" onClick={() => openCloudLogin("profile")}>
-              {copy.login}
-            </button>
-          ) : null}
-        />
-      ) : null}
+
 
 
       {/* Online Android has no independent SAF folder connection action.
@@ -2663,9 +2637,33 @@ function App() {
       {screen.kind === "list" ? (
         <div data-android-shell-page="personal-space">
         <ArchiveWorkspaceTemplate<ShellSourceFilter>
+          headerSlot={
+            <PersonalSpaceMobileIdentity
+              avatarUrl={hasAuthenticatedIdentity ? spaceProfile?.avatar_url : null}
+              username={
+                hasAuthenticatedIdentity
+                  ? spaceProfile?.username || auth.email || (language === "zh" ? "我的空间" : "My space")
+                  : language === "zh" ? "我的空间" : "My space"
+              }
+              membershipLabel={membershipLabel}
+              storageUsagePercent={hasAuthenticatedIdentity ? storageUsagePercent : null}
+              storageTotalLabel={hasAuthenticatedIdentity ? storageTotalLabel : null}
+              experienceLabel={hasAuthenticatedIdentity ? (language === "zh" ? "经验卡" : "Experience") : null}
+              experienceCardCount={hasAuthenticatedIdentity ? experienceCardCount : null}
+              experienceHref={hasAuthenticatedIdentity && online ? "/experience-cards" : null}
+              onExperienceClick={hasAuthenticatedIdentity && !online ? () => showToast(language === "zh" ? "需联网查看经验卡" : "Connect to view experience cards") : undefined}
+              language={language}
+              profileHref="/profile"
+              notificationSlot={!hasAuthenticatedIdentity && online ? (
+                <button type="button" className="secondary-button" onClick={() => openCloudLogin("profile")}>
+                  {copy.login}
+                </button>
+              ) : null}
+            />
+          }
           online={online}
           showConnectivityNotice={false}
-          sourceOptions={w5WorkspaceSources(auth.status).map((value) => ({
+          sourceOptions={w5WorkspaceSources(offlineOwnerRead ? "offline-owner-read" : auth.status).map((value) => ({
             value,
             ...(value === "all"
               ? { label: copy.all, count: workspace.counts.all }
@@ -2723,7 +2721,7 @@ function App() {
             />
             </>
           )}
-          noticeSlot={auth.status === "checking" && auth.verification === "service-unavailable" ? (
+          noticeSlot={auth.status === "checking" && !offlineOwnerRead && auth.verification === "service-unavailable" ? (
             <section className="notice warning" data-w5-offline-owner-needs-verification="true">
               <p>{language === "zh"
                 ? "请联网核验身份后读取本机缓存与待上传资料。原资料已保留。"
@@ -2886,17 +2884,17 @@ function App() {
       ) : null}
 
       {screen.kind === "new-project" ? (
-        auth.status !== "signed-in" ? (
+        auth.status !== "signed-in" && !canCreatePendingCloud ? (
           <div data-android-shell-page="s6-local-create-deferred" className="panel">
             <p>{language === "zh"
-              ? "独立本地项目已延期至S6，原有本地资料仍被保留。请从云空间新建项目。"
-              : "Independent local projects are deferred to S6. Existing local data is preserved; create new projects in Cloud Space."}</p>
+              ? "离线新建需要已验证的云端账号，才能暂存为待上传项目。请先联网登录；已有缓存和待上传记录会保留。"
+              : "Creating an offline pending-cloud project requires a previously verified cloud account. Connect and sign in first; cached and pending data will be preserved."}</p>
             <button type="button" onClick={() => auth.status === "signed-in"
               ? setScreen({ kind: "new-project", destination: online ? "live-cloud" : "pending-cloud" })
-              : openCloudLogin("list-cloud")}>{copy.newProject}</button>
+              : openCloudLogin("list-cloud")}>{copy.login}</button>
           </div>
         ) : (newProjectDestination === "live-cloud" || newProjectDestination === "pending-cloud") &&
-        !canCreateMembershipContent(membership) ? (
+        !canCreatePendingCloud && !canCreateMembershipContent(membership) ? (
           <div data-android-shell-page="cloud-create-access">
             <MobilePageHeaderView
               title={copy.newProject}
@@ -2922,12 +2920,13 @@ function App() {
               await loadList();
             } catch (error) {
               const message = error instanceof Error ? error.message : "";
-              if (message !== "SAF revision conflict." && message !== "SAF concurrent revision conflict.") throw error;
-              console.error("SAF project committed; rereading the list after a revision conflict.", error);
-              try { await loadList(); }
-              catch (retryError) {
-                console.error("SAF project committed; opening it before the list refresh finishes.", retryError);
-              }
+              if (message === "SAF revision conflict." || message === "SAF concurrent revision conflict.") {
+                console.error("SAF project committed; rereading the list after a revision conflict.", error);
+                try { await loadList(); }
+                catch (retryError) {
+                  console.error("SAF project committed; opening it before the list refresh finishes.", retryError);
+                }
+              } else { console.error("Project saved; list refresh failed.", error); }
             }
             showToast(
               archive.sync?.operation_kind === "create-archive"
@@ -2948,7 +2947,7 @@ function App() {
             }
           }}
           onLiveSaved={async (id) => {
-            await loadCloudList(authenticatedOwnerContext?.userId);
+            void loadCloudList(authenticatedOwnerContext?.userId).catch((error) => console.error("Project saved; list refresh failed.", error));
             finishCompletedFlow(COMPLETED_PROJECT_FLOW_KINDS, "cloud-detail", () => {
               setScreen({ kind: "cloud-detail", archiveId: id });
             });
@@ -3564,7 +3563,7 @@ function App() {
           .map((archive) => ({ id: archive.id, title: archive.title, open: () => setScreen({ kind: "new-record", archiveId: archive.id }) }));
         const visibleCloud = chooseProjectExpanded.cloud ? cloudOptions : cloudOptions.slice(0, 4);
         const visibleLocal = chooseProjectExpanded.local ? localOptions : localOptions.slice(0, 4);
-        const chooseSources = auth.status === "checking"
+        const chooseSources = auth.status === "checking" && !offlineOwnerRead
           ? (localSpaceEnabled ? ["local" as const] : [])
           : chooseProjectSources(Boolean(readOwnerContext), localSpaceEnabled);
         const localSpaceClosed = !readOwnerContext && auth.status === "signed-out" && !localSpaceEnabled;
@@ -3591,7 +3590,7 @@ function App() {
             </div>
             ) : null}
             <div className="choose-project-create-actions">
-              {localSpaceClosed ? null : (auth.status === "signed-out" ? ["login" as const] : projectCreationDestinations(online, auth.status === "signed-in", localSpaceEnabled, offlineOwnerRead).filter((destination) => destination !== "local-only")).map((destination) => <div key={destination} className="choose-project-create-item"><button type="button" className="primary-button" onClick={() => destination === "login" ? openCloudLogin("choose-project") : setScreen({ kind: "new-project", destination })}>{destination === "login" ? copy.cloudSignIn : copy.newProject}</button>{!online && destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</div>)}
+              {(auth.status === "signed-out" ? ["login" as const] : projectCreationDestinations(online, auth.status === "signed-in", localSpaceEnabled, offlineOwnerRead).filter((destination) => destination !== "local-only")).map((destination) => <div key={destination} className="choose-project-create-item"><button type="button" className="primary-button" onClick={() => destination === "login" ? openCloudLogin("choose-project") : setScreen({ kind: "new-project", destination })}>{destination === "login" ? copy.cloudSignIn : copy.newProject}</button>{!online && destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</div>)}
               <button type="button" className="secondary-button choose-project-cancel" onClick={() => { setQuickAddDraft(null); goList(); }}>{copy.cancel}</button>
             </div>
           </section>
@@ -4223,18 +4222,19 @@ function ProjectForm({
   const [localTaxonomy, setLocalTaxonomy] = useState<ProjectTaxonomyEntry[]>([]);
   const [liveTaxonomy, setLiveTaxonomy] = useState<ProjectTaxonomyEntry[]>(cloudTaxonomy);
   const [liveDepths, setLiveDepths] = useState<ArchiveCategoryDepths>(cloudDepths);
-  const [liveTaxonomyReady, setLiveTaxonomyReady] = useState(destination !== "live-cloud");
+
   useEffect(() => {
     let active = true;
+    if (destination !== "local-only") return;
     void listVisibleLocalTaxonomyItems(owner ? { userId: owner.userId, email: owner.email, snapshotOnly: true } : null)
-      .then((rows) => { if (active) setLocalTaxonomy(mapLocalProjectTaxonomy(rows)); });
+      .then((rows) => { if (active) setLocalTaxonomy(mapLocalProjectTaxonomy(rows)); }).catch(() => { if (active) setError(copy.readFailed); });
     return () => { active = false; };
-  }, [owner]);
+  }, [destination, owner, copy.readFailed]);
   useEffect(() => {
     if (destination !== "live-cloud" || !owner?.userId) return;
     let active = true;
     void Promise.all([loadCloudProjectTaxonomy(owner.userId), getCloudArchiveCategoryDepths(owner.userId)]).then(([entries, depths]) => {
-      if (active) { setLiveTaxonomy(entries); setLiveDepths(depths); setLiveTaxonomyReady(true); }
+      if (active) { setLiveTaxonomy(entries); setLiveDepths(depths); }
     }).catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : copy.cloudLoadFailed); });
     return () => { active = false; };
   }, [destination, owner?.userId, copy.cloudLoadFailed]);
@@ -4278,9 +4278,6 @@ function ProjectForm({
     if (!systemName.trim()) {
       setError(language === "zh" ? "请选择或填写关联指引。" : "Choose or enter an associated guide.");
       return;
-    }
-    if (destination === "live-cloud" && !liveTaxonomyReady) {
-      setError(copy.cloudLoading); return;
     }
     const normalizedRegion = normalizePlantingRegion(plantingRegion);
     const hasRegionDraft = plantingRegion && Object.values(plantingRegion).some((value) => value.trim());
@@ -4398,11 +4395,10 @@ function ProjectForm({
                 entry.parentId === subTagId).map((entry) =>
                 <option key={entry.id} value={entry.id}>{entry.label}</option>)}
             </select></div> : null}
-          <div className="field"><label>{copy.systemName} *</label><input value={systemName} onChange={(event) => { setSystemName(event.target.value); setSelectedGuide(undefined); }} maxLength={160} placeholder={copy.guideSearch} /><small>{copy.guideHint}</small>
-            {directory.some((candidate) => candidate.category === category) ? <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && (!systemName.trim() || candidate.label.toLowerCase().includes(systemName.trim().toLowerCase()))).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div> : null}
+          <div className="field"><label>{copy.systemName} *</label><input value={systemName} onChange={(event) => { setSystemName(event.target.value); setSelectedGuide(undefined); }} maxLength={160} placeholder={copy.guideHint} />
+            {systemName.trim() && !selectedGuide && directory.some((candidate) => candidate.category === category) ? <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && (!systemName.trim() || candidate.label.toLowerCase().includes(systemName.trim().toLowerCase()))).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div> : null}
           </div>
           {category === "plant" ? <PlantingRegionField value={plantingRegion} onChange={setPlantingRegion} language={language} required={!archive} /> : null}
-          {!archive && destination === "pending-cloud" && !cloudTaxonomy.length ? <small>联网后可设置云端分组；项目仍可保存为未分组。</small> : null}
           <div className="field"><label>{copy.source}</label><input value={source} onChange={(event) => setSource(event.target.value)} maxLength={240} /></div>
           {!archive && destination !== "local-only" ? <div className="field"><label>{copy.visibility}</label><SegmentedChoice label={copy.visibility} value={visibility} options={[{ value: "private", label: language === "zh" ? "仅自己可见" : "Only me" }, { value: "public", label: language === "zh" ? "公开" : "Public" }]} onChange={(value) => setVisibility(value as "public" | "private")} /></div> : null}
           <div className="field"><label>{copy.note}</label><textarea className="project-form-textarea" value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} /></div>
@@ -4412,7 +4408,7 @@ function ProjectForm({
           {error ? <section className="notice warning"><p>{error}</p></section> : null}
           <div className="submit-row">
             <button className="secondary-button" type="button" onClick={onCancel}>{copy.cancel}</button>
-            <button className="primary-button" type="submit" disabled={busy || !liveTaxonomyReady}>{busy ? copy.saving : copy.save}</button>
+            <button className="primary-button" type="submit" disabled={busy}>{busy ? copy.saving : copy.save}</button>
           </div>
         </form>
       </section>

@@ -11,7 +11,7 @@ const legacyLocalCreatePage = fs.readFileSync(new URL("../app/local/archive/new/
 test("installed Android runtime hides all/local source tabs but preserves cloud and pending", () => {
   assert.match(androidShell, /function w5WorkspaceSources\(/);
   assert.match(androidShell, /auth === "checking" \? \[\] : auth === "signed-in" \|\| auth === "offline-owner-read"\s*\? \["cloud", "pending"\] : \["cloud"\]/);
-  assert.match(androidShell, /sourceOptions=\{w5WorkspaceSources\(auth\.status\)\.map/);
+  assert.ok(androidShell.includes('sourceOptions={w5WorkspaceSources(offlineOwnerRead ? "offline-owner-read" : auth.status).map'));
   assert.match(androidShell, /const localSpaceEnabled = false;/);
   assert.doesNotMatch(androidShell, /onLocalSpaceVisibilityChange=\{updateLocalSpaceVisibility\}/);
 });

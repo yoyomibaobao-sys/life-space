@@ -198,5 +198,5 @@ test("a saved cloud record refreshes the project list without letting an older s
   assert.match(detail, /await loadList\(authenticatedOwnerContext\)/);
   assert.match(detail, /if \(!authenticatedOwnerContext\) return;[\s\S]*await loadCloudList\(authenticatedOwnerContext\.userId\)/);
   const controller = readFileSync(new URL("../components/archive-ui/CloudArchiveDetailController.tsx", import.meta.url), "utf8");
-  assert.match(controller, /onRecordCreated=\{async \(\) => \{ if \(!hasLiveAccess\(\)\) return; await reload\(\); if \(!hasLiveAccess\(\)\) return; setAddOpen\(false\); onRecordCreated\?\.\(\); await onCacheChanged\(\); \}\}/);
+  assert.match(controller, /onRecordCreated=\{async \(\) => \{ if \(!hasLiveAccess\(\)\) return; setAddOpen\(false\); onRecordCreated\?\.\(\); await Promise\.allSettled\(\[reload\(\), onCacheChanged\(\)\]\); \}\}/);
 });

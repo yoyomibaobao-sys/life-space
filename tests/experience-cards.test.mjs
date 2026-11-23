@@ -517,7 +517,7 @@ test("experience card interactions use private collections and restrained helpfu
   assert.match(interactions, /experience_card_comments/);
   assert.match(interactions, /id="experience-card-interactions"/);
   assert.match(interactions, /\{t\.experience\.write_comment\}/);
-  assert.match(interactions, /href=\{\s*currentUserId[\s\S]*?buildLoginHref\(getCurrentInternalPath\(\)\)/);
+  assert.match(interactions, /href=\{buildLoginHref\(getCurrentInternalPath\(\)\)/);
   assert.doesNotMatch(interactions, /if \(!available\) return null/);
   assert.match(detail, /<ExperienceCardInteractions/);
   assert.doesNotMatch(detail, /<ExperienceCardEditor/);

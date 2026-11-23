@@ -43,11 +43,12 @@ test("mobile Guide keeps one compact row and clears advanced filters when collap
 });
 
 test("plant detail uses the unified mobile header and opens the cloud-first project form", async () => {
-  const [detail, styles, zhCopy, projectForm] = await Promise.all([
+  const [detail, styles, zhCopy, projectForm, newProjectPage] = await Promise.all([
     source("app/plant/[id]/page.tsx"),
     source("app/plant/[id]/page.module.css"),
     source("lib/i18n/zh.ts"),
     source("components/archive-ui/ArchiveNewProjectFormShell.tsx"),
+    source("app/archive/new/page.tsx"),
   ]);
 
   assert.match(detail, /<MobilePageHeader[\s\S]*?title=\{displayName\}/);
@@ -57,7 +58,7 @@ test("plant detail uses the unified mobile header and opens the cloud-first proj
   assert.match(detail, /className=\{`\$\{styles\.heroHeadingRow\} mobile-app-desktop-only`\}/);
   assert.match(detail, /href=\{createProjectHref\}/);
   assert.doesNotMatch(detail, /projectChooserOpen|setProjectChooserOpen/);
-  assert.match(projectForm, /storageMode === "cloud"/);
+  assert.match(newProjectPage, /<ArchiveNewProjectFormShell[\s\S]*?storageMode="cloud"/);
   assert.match(projectForm, /localHref/);
   assert.match(styles, /\.backLink \{[\s\S]*?text-decoration: underline/);
   assert.doesNotMatch(detail, /styles\.mobileActions|styles\.mobileSavedAction/);

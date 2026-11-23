@@ -65,7 +65,7 @@ test("ordinary guide and plant guide both use the shared pagination, public-firs
   assert.match(s,/\.eq\("visibility", "public"\)/);
   assert.match(s,/\.eq\("status", "published"\)/);
   assert.match(s,/is_experience_card_public/);
-  assert.match(s,/GUIDE_FREE_TARGET/);
+  assert.doesNotMatch(s,/GUIDE_FREE_TARGET/);
   assert.doesNotMatch(s,/\.limit\(RELATED_LIMIT\)|\.limit\(RELATED_ARCHIVE_LIMIT\)/);
  }
 });
@@ -82,7 +82,7 @@ test("Plus RPC client is server-gated, never falls back to old full-table SELECT
  assert.doesNotMatch(plant,/supabase\.from\("plant_care_guides"\)/);
  assert.doesNotMatch(plant,/supabase\.from\("plant_growth_cycle"\)/);
  assert.match(ordinary,/get_member_guide_content/);
- assert.match(ordinary,/isPaidPlus/);
+ assert.match(ordinary,/user \? Promise\.resolve\(supabase\.rpc\("get_member_guide_content"/);
  assert.match(ordinary,/Array\.isArray\(\(rawFull as PublicGuideContent\)\.parameters\)/);
  assert.match(sql,/p_species_id uuid, p_language text default 'zh'/);
  assert.match(sql,/'parameters'/);assert.match(sql,/'growth_cycle'/);assert.match(sql,/'care_guide'/);

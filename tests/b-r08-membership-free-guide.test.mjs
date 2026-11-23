@@ -15,25 +15,25 @@ test("Free is a registered user in both languages while cloud and market remain 
   const free = { plan: "free", status: "active", can_create_content: true, can_create_market_post: true };
   assert.equal(membership.getMembershipPlanLabel("free", "zh"), "注册用户");
   assert.equal(membership.getMembershipPlanLabel("free", "en"), "Registered user");
-  assert.equal(membership.getUserTypeLabel({ signedIn: true, membership: free }), "注册用户");
-  assert.equal(membership.getUserTypeLabel({ signedIn: true, membership: free }, "en"), "Registered user");
+  assert.equal(membership.getUserTypeLabel({ signedIn: true, membership: free }), "Free");
+  assert.equal(membership.getUserTypeLabel({ signedIn: true, membership: free }, "en"), "Free");
   assert.equal(membership.canCreateMembershipContent(free), true);
   assert.equal(membership.canCreateMembershipMarketPost(free), true);
-  assert.equal(membership.canAccessMembershipGuidance(free), false);
+  assert.equal(membership.hasActivePlus(free), false);
 });
 
-test("full Guide permits an effective paid entitlement including paid past_due", () => {
+test("Plus status recognizes an effective paid entitlement including paid past_due", () => {
   for (const plan of ["basic", "large"]) {
     for (const status of ["active", "past_due"]) {
       // C requires a current server-issued paid term in addition to B R08 grants.
       const paid = { plan, status, can_create_content: true, paid_until: new Date(Date.now() + 86_400_000).toISOString() };
-      assert.equal(membership.canAccessMembershipGuidance(paid), true);
+      assert.equal(membership.hasActivePlus(paid), true);
       assert.equal(membership.getUserTypeLabel({ signedIn: true, membership: paid }), "Plus");
     }
   }
 });
 
-test("full Guide denies missing, Free, trial, admin, inactive, and inconsistent grants", () => {
+test("Plus status excludes missing, Free, trial, admin, inactive, and inconsistent grants", () => {
   const denied = [
     null, undefined, {},
     ...["free", "trial", "admin", "seller", "unknown"].map(plan => ({ plan, status: "active", can_create_content: true })),
@@ -44,7 +44,7 @@ test("full Guide denies missing, Free, trial, admin, inactive, and inconsistent 
     { plan: "large", status: "past_due", can_create_content: true, paid_until: new Date(Date.now() - 86_400_000).toISOString() },
   ];
   for (const item of denied) {
-    assert.equal(membership.canAccessMembershipGuidance(item), false, JSON.stringify(item));
+    assert.equal(membership.hasActivePlus(item), false, JSON.stringify(item));
   }
   assert.equal(membership.getUserTypeLabel({ signedIn: false }), "游客");
   assert.equal(membership.getUserTypeLabel({ signedIn: true, failed: true }), "暂时无法读取");

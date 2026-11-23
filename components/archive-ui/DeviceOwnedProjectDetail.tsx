@@ -384,6 +384,7 @@ export default function DeviceOwnedProjectDetail({
           <ArchiveRecordCard
             key={record.id}
             variant="local"
+            showLocalStatus={!isCloudCache && archive.sync?.operation_kind !== "create-archive"}
             archive={localArchiveRecordShell}
             item={record}
             index={index}

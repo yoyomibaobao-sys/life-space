@@ -431,8 +431,25 @@ html[data-native-window-insets="true"] .app-status-bar-surface {
     position: sticky;
     top: calc(50px + var(--app-safe-area-top, 0px));
     z-index: 84;
-    padding: 2px 0;
+    padding: 1px 0 2px;
     background: #f7faf5;
     isolation: isolate;
   }
 }
+
+@media (max-width: 759px) {
+  .ls-sticky-workspace-controls[data-includes-header="true"] { top: var(--app-safe-area-top, 0px); }
+}
+
+[data-w5-pending-item] { background: #fff; }
+[data-w5-pending-item] button, [data-w5-pending-only-detail] > button {
+  border: 1px solid #dbe0d8;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: #f6f9f3;
+  color: #355a34;
+  font: inherit;
+}
+[data-w5-pending-item] button:disabled { opacity: .55; }
+
+form[data-project-create] :is(input, textarea):not(:focus)::placeholder { color: transparent; }

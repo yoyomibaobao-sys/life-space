@@ -111,10 +111,10 @@ function scenario({ visible, member = plus, freshMember, membershipFailure = fal
   return { state, invoke: () => fn({ preventDefault() {} }), projectId };
 }
 
-test("untouched visibility follows current Plus, while Free starts private and manual choice persists", () => {
+test("untouched visibility follows current Plus, for Free and Plus and manual choice persists", () => {
   assert.match(newPage, /useState<boolean \| null>\(null\)/);
   assert.equal(resolveCloudProjectVisibility(null, canCreatePublicCloudProject(plus)), true);
-  assert.equal(resolveCloudProjectVisibility(null, canCreatePublicCloudProject(free)), false);
+  assert.equal(resolveCloudProjectVisibility(null, canCreatePublicCloudProject(free)), true);
   assert.equal(resolveCloudProjectVisibility(false, canCreatePublicCloudProject(plus)), false);
   assert.equal(resolveCloudProjectVisibility(true, canCreatePublicCloudProject(free)), true);
   assert.match(newPage, /name="cloud-project-visibility" value="public"/);
@@ -123,52 +123,29 @@ test("untouched visibility follows current Plus, while Free starts private and m
   assert.match(newPage, /checked=\{!archiveIsPublic\}/);
   assert.match(sharedShell, /visibilityControl\?: ReactNode/);
   assert.match(sharedShell, /\{visibilityControl\}/);
-  assert.match(newPage, /notice=\{publicNeedsPlus \? plusPublicNotice/);
+  assert.match(newPage, /notice=\{null\}/);
 });
 
-test("Free default creates private cloud project with private future records", async () => {
+test("Free defaults to a public project and public future records", async () => {
   const { state, invoke, projectId } = scenario({ member: free });
   await invoke();
   assert.equal(state.creating, 1);
-  assert.deepEqual(state.projects.map(p => [p.is_public, p.default_record_visibility]), [[false, "private"]]);
+  assert.deepEqual(state.projects.map(p => [p.is_public, p.default_record_visibility]), [[true, "public"]]);
   assert.deepEqual(state.pushed, ["/archive/" + projectId]);
   assert.equal(state.toasts.length, 0);
 });
 
-test("Free manual public choice shows Plus restriction and cannot create", async () => {
-  const { state, invoke } = scenario({ member: free, visible: true });
-  await invoke();
-  assert.equal(state.creating, 0);
-  assert.deepEqual(state.pushed, []);
-  assert.match(state.toasts[0], /Plus会员/);
-  assert.match(newPage, /disabled=\{membershipLoading \|\| contentBlocked \|\| publicNeedsPlus\}/);
-  assert.match(newPage, /role="alert"/);
-});
-
-test("expired/refunded Plus defaults private unless the user deliberately selected public", async () => {
-  for (const status of ["expired", "canceled", "past_due"]) {
-    const expired = { ...plus, status, can_create_content: true };
-    assert.equal(canCreatePublicCloudProject(expired), false);
-    const { state, invoke } = scenario({ member: expired });
-    await invoke();
-    assert.equal(state.projects[0].is_public, false);
-    const selected = scenario({ member: expired, visible: true });
-    await selected.invoke();
-    assert.equal(selected.state.creating, 0);
-  }
-  assert.equal(canCreatePublicCloudProject({ ...plus, paid_until: "2020-01-01" }), false);
-  assert.equal(canCreatePublicCloudProject({ ...plus, can_create_content: false }), false);
-  assert.equal(canCreatePublicCloudProject({ ...plus, user_id: "another" }, "user-a"), false);
-});
-
-test("refund or expiry between first load and submit rejects stale public choice", async () => {
-  for (const freshMember of [free, { ...plus, status: "canceled" }, { ...plus, paid_until: "2020-01-01" }]) {
+test("Free can choose private and a downgrade preserves creation within the account grant", async () => {
+  const privateChoice = scenario({ member: free, visible: false });
+  await privateChoice.invoke();
+  assert.equal(privateChoice.state.projects[0].is_public, false);
+  for (const freshMember of [free, { ...plus, status: "expired" }]) {
     const { state, invoke } = scenario({ member: plus, freshMember });
     await invoke();
-    assert.equal(state.creating, 0);
-    assert.deepEqual(state.pushed, []);
-    assert.match(state.toasts[0], /Plus会员/);
+    assert.equal(state.projects[0].is_public, true);
   }
+  assert.equal(canCreatePublicCloudProject({ ...plus, can_create_content: false }), false);
+  assert.equal(canCreatePublicCloudProject(plus, "other-owner"), false);
 });
 
 test("membership still loading, RPC failure and auth owner switch fail closed", async () => {

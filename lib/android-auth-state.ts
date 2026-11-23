@@ -59,8 +59,12 @@ export function resolveAndroidReadOwner(auth: AndroidAuthSnapshot): StoredLocalO
   if (auth.status === "signed-in" && auth.sessionUserId) {
     return { userId: auth.sessionUserId, email: auth.email };
   }
-  return auth.status === "offline-owner-read" && auth.verification === "offline-owner-read"
-    ? auth.offlineReadOwner || null : null;
+  const verifiedOfflineRead = auth.status === "offline-owner-read" &&
+    auth.verification === "offline-owner-read";
+  const retainedOfflineReadDuringRevalidation = auth.status === "checking" &&
+    (auth.verification === "verifying" || auth.verification === "service-unavailable");
+  return (verifiedOfflineRead || retainedOfflineReadDuringRevalidation) && auth.offlineReadOwner?.userId
+    ? auth.offlineReadOwner : null;
 }
 
 type AuthUser = { id: string; email?: string | null };
@@ -156,11 +160,16 @@ export function createAndroidAuthController(options: AndroidAuthControllerOption
 
   function publishChecking(
     verification: "initializing" | "verifying" | "service-unavailable",
+    preserveOfflineReadOwner = true,
   ) {
+    const explicitSignedOut = options.isExplicitlySignedOut();
+    const offlineReadOwner = preserveOfflineReadOwner && !explicitSignedOut && snapshot.offlineReadOwner?.userId &&
+      (!pendingSessionUserId || pendingSessionUserId === snapshot.offlineReadOwner.userId)
+      ? snapshot.offlineReadOwner : null;
     publish({
       status: "checking", sessionUserId: null, email: null,
       rememberedOwner: options.loadRememberedOwner(),
-      explicitSignedOut: options.isExplicitlySignedOut(), verification,
+      explicitSignedOut, verification, offlineReadOwner,
     });
   }
 
@@ -183,7 +192,16 @@ export function createAndroidAuthController(options: AndroidAuthControllerOption
 
   async function restoreOfflineOwner(epoch = authEpoch) {
     if (options.isExplicitlySignedOut() || loginInProgress) return snapshot;
-    const owner = await options.offlineOwner?.read().catch(() => null);
+    let owner: StoredLocalOwnerContext | null = null;
+    try {
+      owner = await options.offlineOwner?.read() || null;
+    } catch {
+      if (epoch !== authEpoch || options.isExplicitlySignedOut() || loginInProgress) return snapshot;
+      // A transient Keystore read error does not revoke a proof already verified
+      // in this process; a confirmed missing proof below does.
+      publishChecking("service-unavailable");
+      return snapshot;
+    }
     if (epoch !== authEpoch || options.isExplicitlySignedOut() || loginInProgress) return snapshot;
     if (owner?.userId) {
       publish({
@@ -191,7 +209,7 @@ export function createAndroidAuthController(options: AndroidAuthControllerOption
         rememberedOwner: options.loadRememberedOwner(), explicitSignedOut: false,
         verification: "offline-owner-read", offlineReadOwner: owner,
       });
-    } else publishChecking("service-unavailable");
+    } else publishChecking("service-unavailable", false);
     return snapshot;
   }
 
@@ -281,6 +299,9 @@ export function createAndroidAuthController(options: AndroidAuthControllerOption
           }
           expectedUserId = stored.data.session?.user?.id || null;
           if (!expectedUserId) {
+            // A missing local Session during network recovery is not proof that
+            // the previously verified offline Owner has signed out.
+            if (snapshot.offlineReadOwner?.userId) return restoreOfflineOwner(epoch);
             publishSignedOut("no-session", false);
             return snapshot;
           }

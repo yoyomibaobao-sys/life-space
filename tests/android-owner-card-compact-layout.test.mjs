@@ -45,17 +45,17 @@ test("Only My Space mobile header spacing shrinks, without shrinking controls or
   const taxonomy = read("components/archive-ui/ArchiveTaxonomyPanel.tsx");
   const web = read("app/globals.css");
   const bundled = read("mobile-offline-src/offline.css");
-  assert.match(userHeader, /marginBottom:\s*5/);
+  assert.match(userHeader, /marginBottom:\s*2/);
   assert.match(sources, /sourceSwitchStyle\(Boolean\(trailingSlot\), packVisibleSources\)/);
-  assert.match(sources, /margin:\s*packedMobile \? "0 0 7px" : "0 0 12px"/);
+  assert.match(sources, /margin:\s*packedMobile \? "0 0 4px" : "0 0 12px"/);
   assert.match(taxonomy, /marginBottom:\s*compact \? 5 : 18/);
   for (const css of [web,bundled]) {
     assert.match(css, /\.ls-sticky-workspace-controls[\s\S]*top:\s*calc\(50px \+ var\(--app-safe-area-top, 0px\)\);/);
-    assert.match(css, /\.ls-sticky-workspace-controls[\s\S]*padding:\s*2px 0;/);
+    assert.match(css, /\.ls-sticky-workspace-controls[\s\S]*padding:\s*1px 0 2px;/);
   }
   const filter = read("components/ui/CategoryFilterRow.module.css");
   const guides = read("components/plant/GuideCategoryTabs.module.css");
-  assert.match(filter, /\.sticky\s*\{[\s\S]*padding:\s*3px 0;/);
+  assert.match(filter, /\.sticky\s*\{[\s\S]*padding:\s*2px 0;/);
   assert.match(filter, /min-height:\s*40px/);
-  assert.match(guides, /\.tabs \{ padding:\s*3px 0; margin-bottom:\s*6px; \}/);
+  assert.match(guides, /\.tabs \{ padding:\s*2px 0; margin-bottom:\s*4px; \}/);
 });

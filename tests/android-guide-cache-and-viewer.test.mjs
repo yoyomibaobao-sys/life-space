@@ -47,15 +47,15 @@ test("standalone guide directory uses a stable fallback dependency", async () =>
   assert.doesNotMatch(source, /offlineDirectory = \[\]/);
 });
 
-test("visitor, Free and offline guides stay basic; only current paid Plus unlocks full reading", async () => {
+test("paid tier detection and authenticated online guide rendering remain independent", async () => {
   const bundle = await build({ entryPoints: [path.join(root, "lib/membership.ts")], absWorkingDir: root,
     bundle: true, platform: "node", format: "esm", write: false, alias: { "@": root } });
-  const { canAccessMembershipGuidance } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`);
-  assert.equal(canAccessMembershipGuidance(null), false);
-  assert.equal(canAccessMembershipGuidance({ status: "expired", can_create_content: true }), false);
-  assert.equal(canAccessMembershipGuidance({ plan: "trial", status: "trialing", can_create_content: false }), false);
-  assert.equal(canAccessMembershipGuidance({ plan: "basic", status: "active", can_create_content: false }), false);
-  assert.equal(canAccessMembershipGuidance({ plan: "basic", status: "active", can_create_content: true, paid_until: "2050-01-01T00:00:00Z" }), true);
+  const { hasActivePlus } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`);
+  assert.equal(hasActivePlus(null), false);
+  assert.equal(hasActivePlus({ status: "expired", can_create_content: true }), false);
+  assert.equal(hasActivePlus({ plan: "trial", status: "trialing", can_create_content: false }), false);
+  assert.equal(hasActivePlus({ plan: "basic", status: "active", can_create_content: false }), false);
+  assert.equal(hasActivePlus({ plan: "basic", status: "active", can_create_content: true, paid_until: "2050-01-01T00:00:00Z" }), true);
 
   const [index, plant, guide] = await Promise.all([
     readFile(path.join(root, "app/plant/page.tsx"), "utf8"),

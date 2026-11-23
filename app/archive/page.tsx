@@ -80,6 +80,7 @@ import {
   type ArchiveCategoryDepths,
 } from "@/lib/archive-category-settings";
 import { Capacitor } from "@capacitor/core";
+import { getAndroidAuthSnapshot, resolveAndroidReadOwner } from "@/lib/android-auth-state";
 import { LOCAL_ORIGIN_MIGRATED_EVENT } from "@/lib/local-origin-migration";
 import { PENDING_CLOUD_SYNC_UPDATED_EVENT, syncPendingCloudArchive, discardUnattemptedPendingArchiveEdit } from "@/lib/pending-cloud-sync";
 import { buildAndroidCloudWorkspace, type PendingCloudProject } from "@/lib/android-cloud-workspace";
@@ -1167,6 +1168,10 @@ export default function ArchivePage() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       const user = session?.user || null;
+      if (!user && isCapacitorAndroid()) {
+        const retainedOfflineOwner = resolveAndroidReadOwner(getAndroidAuthSnapshot());
+        if (retainedOfflineOwner?.userId && sessionOwnerRef.current === retainedOfflineOwner.userId) return;
+      }
       const id = user?.id || null;
       if (initializedOwnerRef.current && sessionOwnerRef.current === id) return;
       initializedOwnerRef.current = true;
@@ -2454,21 +2459,7 @@ export default function ArchivePage() {
         margin: "0 auto",
       }}
     >
-      {isMobileViewport ? (
-        <PersonalSpaceMobileIdentity
-          avatarUrl={spaceProfile?.avatar_url}
-          username={spaceProfile?.username || t.nav.username_unset}
-          membershipLabel={membershipLabel}
-          storageUsagePercent={storageUsagePercent}
-          storageTotalLabel={storageTotalLabel}
-          experienceLabel={t.archive_workspace.experience_cards}
-          experienceCardCount={experienceCardCount}
-          profileHref="/profile"
-          experienceHref="/experience-cards"
-          notificationSlot={<MobileNotificationLink />}
-          language={language}
-        />
-      ) : (
+      {isMobileViewport ? null : (
         <section style={personalSpaceIdentityStyle(false)}>
           <div style={personalSpaceIdentityMainStyle}>
             {spaceProfile?.avatar_url ? (
@@ -2498,6 +2489,21 @@ export default function ArchivePage() {
       {currentOwnerContext && !membershipLoading && !membershipFailed && !membership ? <CloudTrialEntry /> : null}
 
       <ArchiveWorkspaceTemplate<ArchiveSourceFilter>
+        headerSlot={isMobileViewport ? (
+        <PersonalSpaceMobileIdentity
+          avatarUrl={spaceProfile?.avatar_url}
+          username={spaceProfile?.username || t.nav.username_unset}
+          membershipLabel={membershipLabel}
+          storageUsagePercent={storageUsagePercent}
+          storageTotalLabel={storageTotalLabel}
+          experienceLabel={t.archive_workspace.experience_cards}
+          experienceCardCount={experienceCardCount}
+          profileHref="/profile"
+          experienceHref="/experience-cards"
+          notificationSlot={<MobileNotificationLink />}
+          language={language}
+        />
+        ) : null}
         sourceOptions={[
           { value: "cloud", label: t.archive_workspace.cloud_space, count: isCapacitorAndroid() ? w5Workspace.counts.cloud : archiveCount },
           ...(isCapacitorAndroid() && currentOwnerContext?.userId ? [{ value: "pending" as const, label: t.archive_workspace.temporary_space, count: w5Workspace.pending.length }] : []),

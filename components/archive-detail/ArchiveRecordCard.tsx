@@ -38,6 +38,8 @@ type ArchiveRecordCardProps = {
   variant?: "cloud" | "local";
   /** Display only: pending cloud records retain the existing local data adapter. */
   localStatusLabel?: string;
+  /** Hide the device-only badge when a record belongs to a cloud cache or pending cloud project. */
+  showLocalStatus?: boolean;
   cloudWritable?: boolean;
   startTime?: string | null;
   isHighlighted: boolean;
@@ -81,6 +83,7 @@ export default function ArchiveRecordCard({
   mode,
   variant = "cloud",
   localStatusLabel,
+  showLocalStatus = true,
   cloudWritable = true,
   startTime,
   isHighlighted,
@@ -400,7 +403,7 @@ export default function ArchiveRecordCard({
             ) : null}
 
             {isLocalMode ? (
-              <MobileLocalRecordMetaRow statusLabel={localStatusLabel} />
+              showLocalStatus ? <MobileLocalRecordMetaRow statusLabel={localStatusLabel} /> : null
             ) : (
               <>
                 <MobileRecordMetaRow
@@ -965,7 +968,7 @@ function MobileRecordMediaGrid({
   canOpen = true,
   onOpen,
 }: {
-  mediaList: Array<{ url: string; alt: string }>;
+  mediaList: Array<{ id?: string; url: string; alt: string }>;
   mediaItems: MediaItem[];
   canOpen?: boolean;
   onOpen: (mediaIndex: number) => void;
@@ -977,10 +980,11 @@ function MobileRecordMediaGrid({
   return (
     <div style={mobileRecordMediaGridStyle}>
       {mediaList.map((media, mediaIndex) => {
-        const target = mediaItems[mediaIndex];
+        const target = mediaItems.find((item) => item.id === media.id);
         const image = (
             <GuardedRecordImage
               src={target?.display_thumb_url || media.url}
+              fallbackSrc={media.url}
               alt={media.alt}
               style={mobileRecordMediaImageStyle}
             />
@@ -1020,7 +1024,7 @@ function DesktopRecordMediaGrid({
   onOpen,
   onDeleteMedia,
 }: {
-  mediaList: Array<{ url: string; alt: string }>;
+  mediaList: Array<{ id?: string; url: string; alt: string }>;
   mediaItems: MediaItem[];
   mode: ArchiveMode;
   canDeleteMedia: boolean;
@@ -1041,7 +1045,7 @@ function DesktopRecordMediaGrid({
       }}
     >
       {mediaList.map((media, mediaIndex) => {
-        const target = mediaItems[mediaIndex];
+        const target = mediaItems.find((item) => item.id === media.id);
         return (
           <div
             key={media.url}
@@ -1060,6 +1064,7 @@ function DesktopRecordMediaGrid({
           >
             <GuardedRecordImage
               src={target?.display_thumb_url || media.url}
+              fallbackSrc={media.url}
               alt={media.alt}
               loading="lazy"
               decoding="async"

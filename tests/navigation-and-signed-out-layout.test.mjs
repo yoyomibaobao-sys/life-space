@@ -230,7 +230,7 @@ test("mobile archive creation and project controls stay compact without clipping
   assert.match(projectCard, /<InlineRecordSummary/);
   assert.match(projectCardStyles, /\.title \{[^}]*white-space: normal/);
   assert.match(await source("components/ui/InlineRecordSummary.module.css"), /-webkit-line-clamp: 2/);
-  assert.match(newProjectShell, /styles\.categoryDescription/);
+  assert.doesNotMatch(newProjectShell, /styles\.categoryDescription/);
   assert.doesNotMatch(newProjectShell, /selectedCategoryDescription/);
   assert.match(newProjectStyles, /@media \(max-width: 759px\)[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(newProjectStyles, /-webkit-line-clamp: 2/);
@@ -318,7 +318,7 @@ test("account navigation exposes the confirmed independent menu entries", async 
   assert.match(navbar, /pathname !== "\/"/);
   assert.match(membership, /t\.membership_page/);
   assert.match(zhCopy, /eyebrow: "个人使用方案"/);
-  assert.match(zhCopy, /1GB.*云端存储/);
+  assert.match(zhCopy, /1GB 云空间/);
   assert.doesNotMatch(membership, /查看会员权益/);
   assert.doesNotMatch(login, /href="\/membership"/);
   assert.doesNotMatch(login, /登录后进入我的项目/);
@@ -373,7 +373,7 @@ test("mobile account actions, membership copy, and plant names stay compact", as
   assert.doesNotMatch(payment, /createOrder\("wechat"\)/);
   assert.match(benefits, /cloudPlan\.items\.map/);
   assert.match(benefits, /t\.membership_page\.rules\.map/);
-  assert.match(zhCopy, /mobile_items: \["1GB 云端存储与同步"/);
+  assert.match(zhCopy, /"mobile_items": \[\s*"含 Free 的全部浏览和互动权限"/);
   assert.match(zhCopy, /interested_plants: "我的植物收藏"/);
   assert.match(zhCopy, /planting_plan: "我的种植计划"/);
   assert.match(enCopy, /interested_plants: "My saved plants"/);

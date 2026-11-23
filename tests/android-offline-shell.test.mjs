@@ -75,7 +75,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /label: copy\.all/);
   assert.match(source, /label: copy\.cloud/);
   assert.match(source, /<ArchiveWorkspaceTemplate/);
-  assert.match(source, /w5WorkspaceSources\(auth\.status\)/);
+  assert.ok(source.includes('w5WorkspaceSources(offlineOwnerRead ? "offline-owner-read" : auth.status)'));
   assert.match(source, /auth === "signed-in" \|\| auth === "offline-owner-read"\s*\? \["cloud", "pending"\] : \["cloud"\]/);
   assert.match(source, /activeSource=\{sourceFilter\}/);
   assert.match(source, /<ArchiveTaxonomyPanel/);
@@ -95,7 +95,7 @@ test("online Android hides standalone local controls but preserves existing loca
   assert.match(source, /createNativeSafStorage|connectLocalSafDirectory/);
   assert.doesNotMatch(source, /onLocalSpaceVisibilityChange=\{updateLocalSpaceVisibility\}/);
   assert.match(source, /data-android-shell-page="s6-local-create-deferred"/);
-  assert.match(source, /w5WorkspaceSources\(auth\.status\)/);
+  assert.ok(source.includes('w5WorkspaceSources(offlineOwnerRead ? "offline-owner-read" : auth.status)'));
   assert.match(profile, /onLocalSpaceVisibilityChange \?/);
 });
 

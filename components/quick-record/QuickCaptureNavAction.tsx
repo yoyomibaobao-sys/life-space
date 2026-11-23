@@ -23,6 +23,7 @@ export default function QuickCaptureNavAction({
   const { language, t } = useLanguage();
   const isNativeApp = useIsNativeApp();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [choosing, setChoosing] = useState(false);
   const [busy, setBusy] = useState(false);
   const isMarketPath = pathname === "/market" || pathname.startsWith("/market/");
 
@@ -77,7 +78,11 @@ export default function QuickCaptureNavAction({
       MAX_RECORD_PHOTOS_PER_ADD,
     );
     event.target.value = "";
-    if (selected.length === 0 || busy) return;
+    if (selected.length) await continueCapture(selected);
+  }
+
+  async function continueCapture(selected: File[]) {
+    if (busy) return;
     setBusy(true);
 
     try {
@@ -95,6 +100,7 @@ export default function QuickCaptureNavAction({
         archiveId,
       });
 
+      setChoosing(false);
       if (targetType === "cloud" && archiveId) {
         router.push(`/archive/${archiveId}?quickCapture=${capture.id}#add-record`);
       } else if (targetType === "local" && archiveId) {
@@ -113,7 +119,7 @@ export default function QuickCaptureNavAction({
     <div style={{ position: "relative", display: "grid", placeItems: "center" }}>
       <button
         type="button"
-        onClick={() => inputRef.current?.click()}
+        onClick={() => setChoosing(true)}
         disabled={busy}
         aria-label={t.quick_record.take_photo}
         title={t.quick_record.take_photo}
@@ -133,6 +139,14 @@ export default function QuickCaptureNavAction({
       >
         <UiIcon name="plus" size={25} strokeWidth={2.2} />
       </button>
+      {choosing && (
+        <section role="dialog" aria-label={t.quick_record.take_photo}
+          style={{ position: "fixed", bottom: "calc(76px + env(safe-area-inset-bottom, 0px))", left: 12, right: 12, padding: 14, borderRadius: 16, background: "white", boxShadow: "0 3px 18px #0003", display: "grid", gap: 10 }}>
+          <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}>{language === "zh" ? "拍照或选照片" : "Take or choose photos"}</button>
+          <button type="button" onClick={() => void continueCapture([])} disabled={busy}>{language === "zh" ? "跳过照片，下一步" : "Continue without photos"}</button>
+          <button type="button" onClick={() => setChoosing(false)} disabled={busy}>{language === "zh" ? "取消" : "Cancel"}</button>
+        </section>
+      )}
       {busy ? (
         <div
           role="status"

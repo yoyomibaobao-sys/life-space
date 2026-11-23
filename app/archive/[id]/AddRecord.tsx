@@ -973,7 +973,7 @@ export default function AddRecord({
         : "Original cloud record verified; only the missing photo was uploaded.");
       setText("");
       clearSelectedFiles();
-      await onRecordCreated?.();
+      await Promise.resolve().then(() => onRecordCreated?.()).catch((error) => console.error("Record saved; refresh failed.", error));
     } catch (cause) {
       if (journal) await markRecoveryUnknown(journal, cause).catch(() => undefined);
       const unconfirmed = !journal || (cause instanceof Error &&
@@ -1319,7 +1319,7 @@ export default function AddRecord({
       setSelectedCycleId(undefined);
       setEndSelectedCycleAfterSave(false);
 
-      await onRecordCreated?.();
+      await Promise.resolve().then(() => onRecordCreated?.()).catch((error) => console.error("Record saved; refresh failed.", error));
       if (quickCaptureId && createdRecordCount > 0) {
         await deleteQuickCapture(quickCaptureId).catch(() => undefined);
         loadedQuickCaptureIdRef.current = "";

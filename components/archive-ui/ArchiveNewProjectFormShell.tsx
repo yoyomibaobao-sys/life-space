@@ -86,7 +86,7 @@ export default function ArchiveNewProjectFormShell({
     return { ...option, ...categoryCopy };
   });
   const systemNameLabel = copy.system_name_required;
-  const systemNameHelper = copy.system_name_helper;
+
 
   return (
     <main className={styles.page}>
@@ -103,7 +103,7 @@ export default function ArchiveNewProjectFormShell({
 
         {disabledNotice ? <div style={disabledNoticeStyle}>{disabledNotice}</div> : null}
 
-        <form onSubmit={onSubmit} className={styles.form}>
+        <form data-project-create onSubmit={onSubmit} className={styles.form}>
 
           <ArchiveNewProjectField label={copy.project_name_required}>
             <input
@@ -118,7 +118,6 @@ export default function ArchiveNewProjectFormShell({
 
           <ArchiveNewProjectField
             label={systemNameLabel}
-            helper={systemNameHelper}
           >
             {systemControl}
           </ArchiveNewProjectField>
@@ -137,7 +136,6 @@ export default function ArchiveNewProjectFormShell({
                   }`}
                 >
                   <strong className={styles.categoryLabel}>{option.label}</strong>
-                  <span className={styles.categoryDescription}>{option.description}</span>
                 </button>
               ))}
             </div>
@@ -160,7 +158,7 @@ export default function ArchiveNewProjectFormShell({
           </ArchiveNewProjectField>
 
           {visibilityControl}
-          <section className={styles.notice}>{notice}</section>
+          {notice ? <section className={styles.notice}>{notice}</section> : null}
 
           <div style={actionRowStyle}>
             <Link href={backHref} style={cancelButtonStyle}>

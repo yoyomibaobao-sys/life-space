@@ -244,8 +244,14 @@ button:disabled { opacity: 0.55; }
     position: sticky;
     top: calc(50px + var(--app-safe-area-top, 0px));
     z-index: 84;
-    padding: 2px 0;
+    padding: 1px 0 2px;
     background: #f7faf5;
     isolation: isolate;
   }
 }
+
+@media (max-width: 759px) {
+  .ls-sticky-workspace-controls[data-includes-header="true"] { top: var(--app-safe-area-top, 0px); }
+}
+
+.project-form-compact :is(input, textarea):not(:focus)::placeholder { color: transparent; }

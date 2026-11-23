@@ -190,7 +190,7 @@ LifeSpace for Cultivation
 * 不要做成泛生活社交平台。
 * 不要把产品整体做成普通云盘或同步工具。
 * 用户感知上应是“我的空间 / 我的档案 / 我的记录”。
-* 在收费、开通、迁移和权限说明中，必须清楚区分游客、Free 与 Plus：Free 永久拥有 30MB 云空间，Plus 拥有 1GB；两者在线查看完整植物参数、种植方法、养护经验、全部公开经验卡和公开种植记录的权限一致，不设置条数展示上限。Plus 的差异体现在更大容量、更多集市发布名额、图片画质选择及其他明确列出的 Plus 专属能力。游客不能查看完整种植参数、种植方法、养护经验、公开经验卡和公开种植记录。用户直接新建的云端项目和记录默认公开，创建界面必须清楚展示并允许修改；项目切换公开或私密时，现有记录及今后新增记录统一跟随；本地项目转到云端时由用户一次选择公开或仅自己可见。
+* 在收费、开通、迁移和权限说明中，必须清楚区分游客、Free 与 Plus：Free 永久拥有 30MB 云空间，Plus 拥有 1GB；两者在线查看完整植物参数、种植方法、养护经验、全部公开经验卡和公开种植记录的权限一致，不设置条数展示上限。Plus 的差异体现在更大容量、更多集市发布名额、图片画质选择及其他明确列出的 Plus 专属能力。游客不能查看完整种植参数、种植方法、养护经验、公开经验卡和公开种植记录。用户直接新建的云端项目和记录默认公开，创建界面必须清楚展示并允许修改；项目切换公开或私密时，现有记录及今后新增记录统一跟随；临时本地资料转入云空间时由用户一次选择公开或仅自己可见。
 * Discover / 发现页只展示公开内容。
 * 网站不设置点赞功能或点赞数；保留“有帮助”这一实用性反馈。不要突出粉丝、排名或流量竞争。
 * “歇歇 / 轻聊天”如果存在，应是轻入口，不是核心功能。
@@ -201,7 +201,7 @@ LifeSpace for Cultivation
 
 ## 五、注册与用户权限规则
 
-网页端可以支持注册和登录。注册流程应简单、克制，服务于用户建立自己的有时·耕作空间，不以强营销转化为目标。注册不是本地离线记录的硬门槛；未登录或网络不可用时，用户仍可使用当前设备上的本地项目和记录。
+网页端可以支持注册和登录。注册流程应简单、克制，服务于用户建立自己的有时·耕作空间，不以强营销转化为目标。注册不是本地离线记录的硬门槛；未登录或网络不可用时，用户仍可使用当前设备上的临时本地资料和记录。
 
 ### 用户类型
 
@@ -267,8 +267,8 @@ Free 与 Plus 的植物知识、公开内容浏览和社区互动权限完全一
 
 ### 本地离线规则
 
-* 数据保存在当前设备的 App 私有存储中。用户可离线查看、创建、编辑和删除本地项目与记录，查看已保存图片；关闭 App 或重启设备后仍应可用。
-* 离线仍使用正常“我的空间”本地界面与导航；本地项目详情、属性和添加记录的结构应与云端对应页面一致，不能只提供独立简陋备用表单。
+* 未同步资料保存在当前设备的 App 私有存储中，以“临时本地／临时空间”呈现；用户可离线查看、创建、编辑和删除临时资料与记录，查看已保存图片；关闭 App 或重启设备后仍应可用。
+* 离线仍使用正常“我的空间”界面与导航；临时本地资料的详情、属性和添加记录结构应与云端对应页面一致，不能只提供独立简陋备用表单。不得把 pending cloud project 或 cloud cache 误标成独立“本地项目”。
 * 当前 APK 内置植物目录、名称、分类，以及有限的简化概要和基础参数；它不是完整种植知识库。当前 APP 未内置完整的种植方法和完整养护经验。
 * 离线只显示实际已经打包在 APP 内或已成功保存在本机的指引内容；没有打包或缓存的内容离线不可见。Free 与 Plus 离线显示规则完全一致，不因会员等级制造内容差异。
 * 后续可以评估将完整植物参数、种植方法和养护经验制作成版本化文字知识包。先测量实际压缩包大小和更新成本；如果体积合理，可随 APP 安装或由用户下载更新。优先纳入结构化参数和文字，不默认把高清图片、视频或社区动态打进知识包。
@@ -1715,6 +1715,63 @@ Free 最多同时拥有 5 条、Plus 最多同时拥有 30 条“发布中”的
 
 
 ---
+
+## 2026-09-30 Android single-runtime 状态与数据源规则
+
+### 一、Connectivity 与 Auth 相互独立
+
+Android Connectivity 状态统一为 `checking／online／offline`，Auth 状态统一为 `checking／signed-out／signed-in`。`offline-owner-read` 是此前已验证 Owner 的 Keystore-backed 本机只读身份凭据，不等于 `signed-in`、在线 Session 或 Plus 权益。网络状态变化不得直接改变 Auth；断网不等于退出登录。只有用户主动退出，或联网后服务端明确确认已有 Session 无效，才能进入 `signed-out`。
+
+业务固定为四种组合：
+
+1. `ONLINE + SIGNED-IN`：可使用本人 live cloud 项目和正式云端能力；新建云端项目直接创建 live cloud project，云项目以 live cloud data 为准。未同步资料按“临时本地／临时空间”管理，不建立第二套独立本地项目系统。
+2. `ONLINE + SIGNED-OUT`：可使用临时本地资料和无需登录的公开内容，并显示登录云空间入口；不得读取私人云项目或私人 cloud cache，不得创建 pending cloud project 或执行需要身份的云写入。remembered local owner 不能被当成 authenticated session。
+3. `OFFLINE + SIGNED-IN`：此前已成功登录，只是 LifeSpace 服务当前不可达。必须保留登录身份、账号归属、该账号 cloud cache 与 pending cloud queue；允许查看已有云缓存、创建保存在本机现有 pending queue 的 pending cloud project、向已有 cloud cache 添加 pending record/image，并使用离线指引基础内容。用户界面显示“临时本地／临时空间”，不得称为独立“本地项目”。恢复联网先保持同一 Owner 的缓存和身份可见并进行重验证；同一 Session 验证成功后回到 `ONLINE + SIGNED-IN`，不得经过 `signed-out`、游客页、登录页或再次要求密码，除非服务端明确确认 Session 无效。
+4. `OFFLINE + SIGNED-OUT`：从未登录、已明确退出或 Session 已确认失效。可使用临时本地资料及可离线使用的公开或内置资料；不得读取私人 cloud cache、创建 pending cloud project，或以旧账号身份产生 cloud pending write。
+
+`cloud cache` 表示云端原项目已经存在、App 仅保存轻量离线副本；`pending cloud project` 表示云端尚不存在、用户离线明确新建云端项目并先完整保存在本机现有 pending queue，待网络和原 Owner 身份重新验证后按既定同步规则处理。两者不得混同；不得新建第二套本地项目、数据库或 pending queue，也不得复制项目／记录。
+
+### 二、登录恢复与退出登录
+
+App 启动先读取 explicit signed-out 标记；标记存在时不得自动恢复旧 cloud login。否则检查 Supabase 本地持久化 Session：只要存在此前已验证的本地 Session，即使当前服务不可达也保留原 Owner 的离线读取凭据。remembered owner 只用于 IndexedDB 数据归属，不能单独把 `signed-out` 变成 `signed-in`。离线、health probe 成功或验证请求暂时失败，都不能单独证明 Session 有效或失效；只有联网后 Supabase 明确验证同一用户，才能进入 `signed-in`；只有服务端明确确认 token／Session 无效才转为 `signed-out`。
+
+`offline-owner-read` 只允许在未显式退出且原 Owner 证明有效时读取该 Owner 的 cloud cache，并在认证重验证期间创建绑定原 Owner 的本机 pending-cloud 数据；它不是 live cloud write 权限，不授予 Plus 或其他在线权益。重验证期间必须保留该 Owner 的空间身份和缓存内容，不得短暂降级为游客页面。若同一 Owner 验证成功，再平滑转为 `signed-in`；若服务端确认 Session 无效，按失效流程收回私有读取能力。
+
+离线也必须允许主动退出。统一显式退出应：
+
+* 写入 explicit signed-out 标记，并清除本机可恢复的 Supabase auth Session，使当前 Auth 立即进入 `signed-out`；
+* 保留临时本地资料及 IndexedDB 用户资料，不重建数据库、不清空本地内容；
+* 按既有隐私规则清理或隐藏已同步 cloud cache；
+* 绝不删除 pending cloud project、record 或 image；pending 继续绑定原账号；
+* 网络恢复后不得自动登录；同一账号以后重新登录可以继续处理原 pending queue，不同账号不得查看或同步前账号 pending。
+
+网络恢复本身不是上传授权；不得因 connectivity 从 offline 变为 online 而静默覆盖、重复上传或跨 Owner 同步。待处理数据继续留在原 pending queue，按现行已确认的同步规则执行。
+
+### 三、LifeSpace 服务可达性
+
+Android 网络判断分两层：
+
+* `transportStatus`：`disconnected／connected`，由系统网络传输状态提供；
+* `serviceStatus`：`checking／reachable／unreachable`，通过轻量 LifeSpace health probe 判断。
+
+只有 `transportStatus === connected && serviceStatus === reachable` 才是业务 `online`。transport 断开立即离线；transport 已连接时先进入 checking/reconnecting，health 成功后才在线，失败则离线。health probe 只证明 LifeSpace 服务可达，不代表 Supabase Session 已验证。Wi-Fi、移动网络和 VPN 只属于网络路径，代码不得把 VPN 开关或图标当作产品状态：无论 VPN 是否存在，LifeSpace health 不可达即离线；没有 VPN 但服务可达即在线。
+
+Connectivity 变化只发布 connectivity/auth capability 状态，不得 reload document、替换 location、强制返回列表、Profile 或登录页，也不得清除 authenticated identity。联网恢复期间保留原 Owner 的离线只读凭据，直到同一 Owner 验证完成或服务端明确确认 Session 失效。
+
+### 四、Android presentation 总规则
+
+Android 长期采用 `same presentation + different data source + different capability`，不维护在线版、离线版、cache 版三套页面。`live cloud／cloud cache／pending cloud／临时本地` 是运行与数据状态，不是四种独立项目类型；用户主要感知为“云空间”和“临时空间”。状态切换不得改变项目 identity、删除真实 cache 或 pending、执行未确认的去重修复、重建 IndexedDB 或批量迁移真实用户内容。cloud cache 和 pending cloud 的记录图片下不得显示表示独立本地项目的“本地”标记。
+
+### 五、云端分类身份与数据安全
+
+1. 云端与本地 taxonomy 相互独立。
+2. local taxonomy label 不得自动创建或映射成 cloud taxonomy。
+3. offline pending cloud project 只能使用该 Owner 已缓存的真实 cloud taxonomy ID；`cached:<category>:<label>` 等 synthetic ID 只可用于显示／筛选，绝不能作为 cloud taxonomy identity。
+4. 没有可信 cloud taxonomy identity 时，允许未分组同步，不猜测、不自动创建。
+5. cloud cache 应保留 source cloud taxonomy identity，包括 `source_cloud_sub_tag_id` 和 `source_cloud_group_tag_id`；taxonomy snapshot 必须按 Owner 隔离。
+6. 同步前验证 sub_tag 属于当前 Owner 且 category 匹配；group_tag 属于当前 Owner 且 parent 指向所选 sub_tag。
+7. taxonomy ID 不存在、归属错误或父子关系失效时，不得按同名重建或自动映射；项目仍可按安全降级规则同步为未分组，并返回明确 warning。
+8. taxonomy failure 不得导致项目、记录或照片数据丢失。
 
 ## 2026-11-23 Free／Plus 权限、图片画质与种植星球补充
 

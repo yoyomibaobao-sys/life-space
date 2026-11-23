@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Capacitor } from "@capacitor/core";
 import { supabase } from "@/lib/supabase";
 import { fetchGuardedRecordImage, guardedRecordImagePath } from "@/lib/guarded-record-image.mjs";
 
-export function useGuardedRecordImage(source?: string) {
-  const guardedPath = Capacitor.isNativePlatform() ? null : guardedRecordImagePath(source);
+export function useGuardedRecordImage(source?: string, fallback?: string) {
+  const guardedPath = guardedRecordImagePath(source);
+  const fallbackPath = guardedRecordImagePath(fallback);
   const [loaded, setLoaded] = useState<{ path: string; url: string }>();
 
   useEffect(() => {
@@ -31,7 +31,9 @@ export function useGuardedRecordImage(source?: string) {
       const nextRequest = new AbortController();
       request = nextRequest;
       void fetchGuardedRecordImage(guardedPath, session?.access_token, nextRequest.signal)
-        .then((blob) => {
+        .then(async (primary) => {
+          const blob = primary || (fallbackPath && fallbackPath !== guardedPath && !nextRequest.signal.aborted
+            ? await fetchGuardedRecordImage(fallbackPath, session?.access_token, nextRequest.signal) : null);
           if (!blob || nextRequest.signal.aborted) return;
           objectUrl = URL.createObjectURL(blob);
           setLoaded({ path: guardedPath, url: objectUrl });
@@ -45,7 +47,7 @@ export function useGuardedRecordImage(source?: string) {
       subscription.unsubscribe();
       release();
     };
-  }, [guardedPath]);
+  }, [guardedPath, fallbackPath]);
 
   if (!guardedPath) return source;
   return loaded?.path === guardedPath ? loaded.url : undefined;

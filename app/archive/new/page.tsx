@@ -9,7 +9,6 @@ import { normalizePlantingRegion } from "@/lib/planting-region";
 import { useRouter, useSearchParams } from "next/navigation";
 import { showToast } from "@/components/Toast";
 import ArchiveNewProjectFormShell, {
-  archiveNewProjectHelperTextStyle,
   archiveNewProjectInputStyle,
   archiveNewProjectSuggestionButtonStyle,
   archiveNewProjectSuggestionPanelStyle,
@@ -40,14 +39,8 @@ import {
 
 const DEFAULT_RECORD_VISIBILITY = "public";
 
-// R07: Free may create private cloud projects; public creation requires an
-// active, unexpired paid Plus segment. This is a UI guard, not an RLS grant.
-function canCreatePublicCloudProject(membership: MyMembership | null, userId?: string | null, at = Date.now()) {
-  if (!membership || !["basic", "large", "seller"].includes(membership.plan) ||
-      membership.status !== "active" || membership.can_create_content !== true ||
-      !membership.paid_until || !Number.isFinite(Date.parse(membership.paid_until)) ||
-      Date.parse(membership.paid_until) <= at) return false;
-  return !userId || membership.user_id === userId;
+function canCreatePublicCloudProject(membership: MyMembership | null, userId?: string | null) {
+  return membership?.can_create_content === true && (!userId || membership.user_id === userId);
 }
 
 function resolveCloudProjectVisibility(manualChoice: boolean | null, plusAllowed: boolean) {
@@ -191,13 +184,8 @@ function NewArchiveContent() {
 
   const contentBlocked =
     !membershipLoading && !canCreateMembershipContent(membership);
-  const plusPublicAllowed = !membershipLoading && canCreatePublicCloudProject(membership);
-  const archiveIsPublic = resolveCloudProjectVisibility(visibilityChoice, plusPublicAllowed);
-  const publicNeedsPlus = !membershipLoading && archiveIsPublic && !plusPublicAllowed;
-  const plusPublicNotice = language === "en"
-    ? "Public projects require an active Plus membership. Choose Only me or renew Plus."
-    : "公开项目需要有效Plus会员。请选择「仅自己可见」或续费Plus。";
-
+  const publicAllowed = !membershipLoading && canCreatePublicCloudProject(membership);
+  const archiveIsPublic = resolveCloudProjectVisibility(visibilityChoice, publicAllowed);
   const guideSearch = category === "plant" ? speciesSearch : systemSearch;
   const systemOptions = filterSystemNameCandidates(systemCandidates, guideSearch, category);
 
@@ -284,12 +272,6 @@ function NewArchiveContent() {
     // Refresh the displayed default after a legitimate refund/expiry response.
     // visibilityChoice remains untouched, so a manual preference is preserved.
     setMembership(freshMembership);
-    if (archiveIsPublic && !canCreatePublicCloudProject(freshMembership, user.id)) {
-      setLoading(false);
-      showToast(language === "en" ? "Public projects require an active Plus membership." : "公开项目需要有效Plus会员。");
-      return;
-    }
-
     let archiveId = createdArchiveId;
     const recordVisibility = archiveIsPublic ? DEFAULT_RECORD_VISIBILITY : "private";
     if (!archiveId) {
@@ -354,12 +336,17 @@ function NewArchiveContent() {
 
     if (quickCaptureId && archiveId) {
       try {
-        await saveQuickCaptureAsFirstCloudRecord({
+        const result = await saveQuickCaptureAsFirstCloudRecord({
           archiveId,
           userId: user.id,
           quickCaptureId,
           visibility: recordVisibility,
         });
+        if (result === null) {
+          setLoading(false);
+          router.push(`/archive/${archiveId}?quickCapture=${encodeURIComponent(quickCaptureId)}#add-record`);
+          return;
+        }
       } catch (captureError) {
         setLoading(false);
         const code = captureError instanceof CloudQuickCaptureError ? captureError.code : "upload_failed";
@@ -461,7 +448,6 @@ function NewArchiveContent() {
             emptyText={copy.no_matching_name}
             customActionLabel={(inputValue) => `${copy.add_system_name}${inputValue}`}
           />
-          {!category ? <span style={archiveNewProjectHelperTextStyle}>{copy.guide_category_manual_hint}</span> : null}
         </>
       }
       plantingRegionControl={category === "plant" ? <PlantingRegionField value={plantingRegion} onChange={changePlantingRegion} language={language} required /> : null}
@@ -485,7 +471,7 @@ function NewArchiveContent() {
               <input type="radio" name="cloud-project-visibility" value="public"
                 checked={archiveIsPublic} disabled={Boolean(createdArchiveId) || membershipLoading}
                 onChange={() => setVisibilityChoice(true)} />
-              {copy.public_discover} {!plusPublicAllowed ? (language === "en" ? "(Plus only)" : "（Plus专属）") : null}
+              {copy.public_discover}
             </label>
             <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <input type="radio" name="cloud-project-visibility" value="private"
@@ -494,18 +480,13 @@ function NewArchiveContent() {
               {copy.private_only}
             </label>
           </div>
-          {publicNeedsPlus ? <p role="alert" style={{ color: "#9b3c23", fontSize: 13 }}>{plusPublicNotice}</p> : null}
         </fieldset>
       }
-      notice={publicNeedsPlus ? plusPublicNotice : archiveIsPublic ? copy.cloud_notice : (
-        language === "en"
-          ? "Only you can view this cloud project and its future records; you can change visibility later."
-          : "此云端项目及今后新增记录仅自己可见；创建后仍可修改公开方式。"
-      )}
+      notice={null}
       submitText={copy.create_project}
       loadingText={copy.creating}
       submitting={loading}
-      disabled={membershipLoading || contentBlocked || publicNeedsPlus}
+      disabled={membershipLoading || contentBlocked}
       disabledNotice={
         contentBlocked ? (
           <>

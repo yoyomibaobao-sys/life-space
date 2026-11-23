@@ -15,7 +15,7 @@ export type QuickCapturePhoto = {
 
 export type QuickCapture = {
   id: string;
-  blob: Blob;
+  blob?: Blob;
   name: string;
   mimeType: string;
   createdAt: string;
@@ -68,13 +68,12 @@ export async function saveQuickCapture(
     MAX_RECORD_PHOTOS_PER_ADD,
   );
   const file = files[0];
-  if (!file) throw new Error("quick_capture_failed");
   const createdAt = new Date().toISOString();
   const capture: QuickCapture = {
     id: crypto.randomUUID(),
     blob: file,
-    name: file.name || `capture-${Date.now()}.jpg`,
-    mimeType: file.type || "image/jpeg",
+    name: file?.name || "",
+    mimeType: file?.type || "",
     createdAt,
     sourcePath: context.sourcePath,
     targetType: context.targetType || null,
@@ -113,6 +112,7 @@ export async function appendQuickCaptureFiles(
     })),
   ];
   const first = nextPhotos[0];
+  if (!first) return { capture, acceptedCount: 0, rejectedCount: files.length };
   const nextCapture: QuickCapture = {
     ...capture,
     blob: first.blob,
@@ -154,15 +154,9 @@ export async function deleteQuickCapture(id: string) {
   await transactionDone(transaction).finally(() => db.close());
 }
 
-export function quickCaptureToFile(capture: QuickCapture) {
-  return new File([capture.blob], capture.name, {
-    type: capture.mimeType || capture.blob.type || "image/jpeg",
-    lastModified: new Date(capture.createdAt).getTime(),
-  });
-}
-
 export function getQuickCapturePhotos(capture: QuickCapture): QuickCapturePhoto[] {
-  if (Array.isArray(capture.photos) && capture.photos.length > 0) return capture.photos;
+  if (Array.isArray(capture.photos)) return capture.photos;
+  if (!capture.blob) return [];
   return [{
     blob: capture.blob,
     name: capture.name,

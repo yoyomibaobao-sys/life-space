@@ -24,6 +24,7 @@ type Props<T extends string> = {
   createDisabledTitle?: string;
   createDisabledHref?: string;
   showCreateToolbar?: boolean;
+  headerSlot?: ReactNode;
   filtersSlot?: ReactNode;
   noticeSlot?: ReactNode;
   sourceTrailingSlot?: ReactNode;
@@ -43,6 +44,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
   createDisabledTitle,
   createDisabledHref,
   showCreateToolbar = true,
+  headerSlot,
   filtersSlot,
   noticeSlot,
   sourceTrailingSlot,
@@ -70,7 +72,8 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
     <>
       {statsText ? <div style={statsStyle}>{statsText}</div> : null}
 
-      <div className="ls-sticky-workspace-controls" data-ls-sticky-workspace-controls="true">
+      <div className="ls-sticky-workspace-controls" data-ls-sticky-workspace-controls="true" data-includes-header={Boolean(headerSlot)}>
+      {headerSlot ? <div className="ls-sticky-workspace-header">{headerSlot}</div> : null}
       <ArchiveSourceSwitcher
         options={sourceOptions}
         activeValue={activeSource}
