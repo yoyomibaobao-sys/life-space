@@ -129,6 +129,7 @@ function fixture(status, catalogRows = [row]) {
     "@/lib/plant-env": { getEnvironmentDetailItems: () => [], getEnvironmentTags: () => [] },
     "@/lib/plant-shared": { getPlantGrowthTypeLabel: () => "" },
     "@/lib/media-urls": { resolveMediaDisplayPairs: async () => [] },
+    "@/lib/guide-association-pages": loadTypeScript("lib/guide-association-pages.ts", {}),
     "@/lib/supabase-schema-compat": { isMissingDatabaseFunction: () => false },
   });
   return { compat, calls, states, effects, render: () => {
