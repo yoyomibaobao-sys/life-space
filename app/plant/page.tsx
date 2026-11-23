@@ -262,7 +262,13 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
   const temperatureOptions = t.plant.temperature_options;
   const sceneOptions = t.plant.scene_options;
   const indoorOptions = t.plant.indoor_options;
-  const [plants, setPlants] = useState<PlantItem[]>([]);
+  // Show the already bundled, public plant guide directory immediately on the
+  // very first visit; cloud enrichment must not delay the initial plant tab.
+  const [plants, setPlants] = useState<PlantItem[]>(() => offlineDirectory
+    .filter((entry) => entry.category === "plant")
+    .map((entry) => ({ id: entry.id || entry.plantId || entry.label,
+      slug: entry.plantSlug, common_name: entry.label,
+      scientific_name: entry.nameEn, category: "all", is_active: true })) as PlantItem[]);
   const [guideSection, setGuideSection] = useState<ArchiveCategory>("plant");
   const [publicGuides, setPublicGuides] = useState<PublicGuideEntry[]>([]);
   const [publicGuideSections, setPublicGuideSections] = useState<PublicGuideSection[]>([]);
@@ -459,15 +465,27 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
     setBasicOverviews(fallbackOverviews);
     setBasicOverviewsEn(fallbackOverviewsEn);
     setParameters([]);
-    setLoading(false);
+    setLoading(!offline && fallbackPlants.length === 0);
     setPlantCatalogError(false);
 
     if (offline) {
       setIsSignedIn(offlineSignedIn);
+      // An offline view may keep the public basics but never inherit
+      // an earlier online membership entitlement after connectivity changes.
+      setHasCloudAccess(false);
       return;
     }
     let cancelled = false;
     async function load() {
+      const catalogRequest = withGuideRemoteTimeout(
+        loadGuideDirectoryRows<PublicPlantCatalogRow>(loadPublicPlantCatalogPage),
+      ).then((result) => {
+        if (!cancelled && !result?.error && result?.data?.length) {
+          setPlants(result.data);
+          setLoading(false);
+        }
+        return result;
+      });
       const authResult = await withGuideRemoteTimeout(supabase.auth.getUser());
       const user = authResult?.data.user || null;
       if (cancelled) return;
@@ -480,13 +498,13 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
       const membership = !membershipResult || membershipResult.error
         ? null
         : normalizeMembershipRpcResult(membershipResult.data);
+      if (cancelled) return;
       const canReadFullGuide = canAccessMembershipGuidance(membership);
 
       setHasCloudAccess(canReadFullGuide);
 
-      const catalogResult = await withGuideRemoteTimeout(
-        loadGuideDirectoryRows<PublicPlantCatalogRow>(loadPublicPlantCatalogPage),
-      );
+      const catalogResult = await catalogRequest;
+      if (cancelled) return;
       // Only the not-yet-applied migration uses the legacy column-limited path.
       const legacyCatalog = isMissingDatabaseFunction(catalogResult?.error, "get_public_plant_catalog");
       const catalogRows = legacyCatalog ? null : catalogResult?.data || [];
@@ -555,10 +573,12 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
       setBasicOverviewsEn((overviewDataEn || []).length ? (overviewDataEn || []) as BasicOverview[] : fallbackOverviewsEn);
       setParameters(parameterData || []);
       setInterestCount(interestCountResult);
+      setLoading(false);
     }
 
     void load().catch(() => {
       if (cancelled) return;
+      setLoading(false);
       setPlantCatalogError(true);
     });
     return () => { cancelled = true; };
@@ -825,6 +845,11 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
     ];
   }, [plants]);
 
+  // A saved online subcategory may not exist in the reduced offline index.
+  // Preserve the preference, but display all bundled plants until that category
+  // becomes available; never show an empty first visit caused by stale filters.
+  const visibleActiveCategory = categories.includes(activeCategory) ? activeCategory : "all";
+
   const categoryFilterOptions = useMemo(
     () => categories.map((category) => ({
       value: category,
@@ -851,7 +876,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
     return plants.filter((plant) => {
       const plantAliases = aliasMap[plant.id] || [];
       const inCategory =
-        activeCategory === "all" || normalizePlantCategoryKey(plant.category) === activeCategory;
+        visibleActiveCategory === "all" || normalizePlantCategoryKey(plant.category) === visibleActiveCategory;
 
       if (!inCategory) return false;
       if (
@@ -880,7 +905,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
     plants,
     aliasMap,
     query,
-    activeCategory,
+    visibleActiveCategory,
     parameterMap,
     filters,
     hasCloudAccess,
@@ -1406,7 +1431,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
                 />
                 <FilterSelect
                   label={t.plant.category}
-                  value={query ? "__global" : activeCategory}
+                  value={query ? "__global" : visibleActiveCategory}
                   onChange={changeCategory}
                   options={query ? [{ value: "__global", label: t.plant.global_scope }] : mobileCategoryFilterOptions}
                   disabled={Boolean(query)}
@@ -1455,7 +1480,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
                 ) : null}
               </div>
               <div style={desktopFiltersStyle}>
-                <FilterSelect label={t.plant.category} value={activeCategory} onChange={changeCategory} options={categoryFilterOptions} />
+                <FilterSelect label={t.plant.category} value={visibleActiveCategory} onChange={changeCategory} options={categoryFilterOptions} />
                 {hasCloudAccess ? (
                   <>
                     <FilterSelect label={t.plant.light} value={filters.light} onChange={(value) => updateFilter("light", value)} options={lightOptions} />

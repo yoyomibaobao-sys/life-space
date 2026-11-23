@@ -20,7 +20,7 @@ export function DiscoverFilterBar({
 
   if (compactMobile) {
     return (
-      <div className={`${filterStyles.row} ${filterStyles.withHelp}`}>
+      <div className={`${filterStyles.row} ${filterStyles.withHelp} ${filterStyles.sticky}`}>
           {categoryOptions.map((option) => {
             const active = activeMode === option.value;
             return (

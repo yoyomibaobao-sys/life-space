@@ -70,6 +70,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
     <>
       {statsText ? <div style={statsStyle}>{statsText}</div> : null}
 
+      <div className="ls-sticky-workspace-controls" data-ls-sticky-workspace-controls="true">
       <ArchiveSourceSwitcher
         options={sourceOptions}
         activeValue={activeSource}
@@ -88,6 +89,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
       ) : null}
 
       {filtersSlot}
+      </div>
       {showConnectivityNotice && !(controlledOnline ?? online) ? (
         <ConnectivityNotice message={t.archive_workspace.offline_notice} />
       ) : null}

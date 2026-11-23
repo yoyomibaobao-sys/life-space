@@ -268,7 +268,6 @@ function Content({ id }: { id: string }) {
         setArchiveLoadState("unavailable");
         return;
       }
-      setArchiveLoadState("ready");
 
       const isOwnerView = currentUserId === archiveData.user_id;
       setArchive(archiveData as ArchiveDetailArchive);
@@ -357,6 +356,7 @@ function Content({ id }: { id: string }) {
         setCycles([]);
         setRecords([]);
         setExperienceCardCount(0);
+        setArchiveLoadState("unavailable");
         return;
       }
 
@@ -446,6 +446,7 @@ saveRecentArchiveBrowse({
       if (cancelled) return;
       setCycles(timeline.cycles);
       setRecords(timeline.records);
+      setArchiveLoadState("ready");
       } catch (error) {
         if (cancelled) return;
         console.warn("archive detail load failed", error);
@@ -2326,7 +2327,8 @@ saveRecentArchiveBrowse({
       onUpdateCycleDates={cycleEnabled ? updateArchiveCycleDates : undefined}
       onRenameCycle={cycleEnabled ? renameArchiveCycle : undefined}
       onDeleteCycle={cycleEnabled ? deleteArchiveCycle : undefined}
-      emptyRecordsText={mode === "owner" ? archiveCopy.no_records_owner : archiveCopy.no_public_records}
+      emptyRecordsText={archiveLoadState === "loading" ? archiveCopy.loading
+        : mode === "owner" ? archiveCopy.no_records_owner : archiveCopy.no_public_records}
       renderRecord={(item, index) => {
         const sameTagLinks = (item.display_tags || [])
           .map((tag) => ({

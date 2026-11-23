@@ -71,7 +71,7 @@ export default function PublicExperiencePage() {
             <UiIcon name="search" size={15} /> {t.nav.search}
           </Link>
         </header>
-        <section className={`${filterStyles.row} ${filterStyles.experience}`} lang={language} aria-label={language === "en" ? "Category" : "分类"}>
+        <section className={`${filterStyles.row} ${filterStyles.experience} ${filterStyles.sticky}`} lang={language} aria-label={language === "en" ? "Category" : "分类"}>
           <button
             type="button"
             onClick={() => setCategoryFilter("all")}

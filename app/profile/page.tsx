@@ -169,6 +169,8 @@ export default function ProfilePage() {
   const [regionName, setRegionName] = useState("");
   const [cityName, setCityName] = useState("");
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editingMobileField, setEditingMobileField] = useState<"username" | "country" | "region" | "city" | null>(null);
+  const cancelMobileBlurSaveRef = useRef(false);
   const [initLoading, setInitLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -531,6 +533,64 @@ export default function ProfilePage() {
     setIsEditingProfile(false);
     setErrorMsg("");
   }
+
+  function beginMobileInlineEdit(field: "username" | "country" | "region" | "city") {
+    if (!user || !profile || saving) return;
+    const previousLocation = parseLegacyLocation(profile.location);
+    setUsername(String(profile.username || ""));
+    setCountryCode(String(profile.country_code || previousLocation.countryCode || ""));
+    setCustomCountryName(String(profile.country_name || previousLocation.countryName || ""));
+    setRegionName(String(profile.region_name || previousLocation.regionName || ""));
+    setCityName(String(profile.city_name || previousLocation.cityName || ""));
+    setErrorMsg("");
+    cancelMobileBlurSaveRef.current = false;
+    setEditingMobileField(field);
+  }
+  function cancelMobileInlineEdit() {
+    cancelMobileBlurSaveRef.current = true;
+    setEditingMobileField(null);
+  }
+  function mobileFieldBlur(event: React.FocusEvent<HTMLElement>) {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+    if (cancelMobileBlurSaveRef.current) { cancelMobileBlurSaveRef.current = false; return; }
+    void saveMobileInlineField();
+  }
+  function mobileFieldKeys(event: React.KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") { event.preventDefault(); cancelMobileInlineEdit(); }
+    else if (event.key === "Enter" && !(event.target instanceof HTMLSelectElement)) event.currentTarget.blur();
+  }
+  async function saveMobileInlineField() {
+    if (!user || !profile || saving || !editingMobileField) return;
+    const field = editingMobileField;
+    const cleanUsername = username.trim();
+    if (field === "username" && cleanUsername.length < 2) { setErrorMsg(t.profile.username_too_short); return; }
+    if (field === "country" && countryCode === "OTHER" && !customCountryName.trim()) { setErrorMsg(t.profile.custom_country_required); return; }
+    setSaving(true);
+    setErrorMsg("");
+    const safeCountryName = countryCode === "OTHER" ? customCountryName.trim() : getCountryName(countryCode, customCountryName, language);
+    const locationFields = { countryCode, countryName: safeCountryName, regionName: regionName.trim(), cityName: cityName.trim() };
+    const locationText = buildLocationTextFromFields(locationFields, language);
+    // Only update the clicked field. Preserve unrelated profile and location levels.
+    const patch = field === "username" ? { username: cleanUsername }
+      : field === "country" ? { country_code: countryCode || null, country_name: safeCountryName || null, location: locationText || null }
+      : field === "region" ? { region_name: locationFields.regionName || null, location: locationText || null }
+      : { city_name: locationFields.cityName || null, location: locationText || null };
+    try {
+      const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
+      if (error) throw error;
+      if (field !== "username") {
+        rememberDefaultRecordLocation(user.id, locationText);
+        rememberDefaultPlantingRegion(user.id, { country_code: countryCode, country_name: safeCountryName, region_name: regionName, city_name: cityName });
+      }
+      showToast(t.profile.saved);
+      setEditingMobileField((current) => current === field ? null : current);
+      void refreshProfile(user.id);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : t.profile.save_failed);
+      showToast(t.profile.save_failed);
+    } finally { setSaving(false); }
+  }
+
 
   function rememberProfileReturnPosition(event: ReactMouseEvent<HTMLElement>) {
     const target = event.target as Element | null;
@@ -1032,80 +1092,55 @@ export default function ProfilePage() {
               <UiIcon name="arrow-right" size={18} />
             </Link>
           ) : null}
-          identityAfterStats={isEditingProfile ? (
-            <div style={profileEditPanelStyle}>
-              <div style={profileEditHeadingStyle}>{t.profile.editing_profile}</div>
-              <div style={locationEditGridStyle}>
-                <div style={{ minWidth: 0 }}>
-                  <label style={fieldLabelStyle}>{t.profile.country_region}</label>
-                  <select
-                    value={countryCode}
-                    onChange={(event) => {
-                      setCountryCode(event.target.value);
-                      setRegionName("");
-                    }}
-                    style={fieldInputStyle}
-                  >
-                    <option value="">{t.profile.select}</option>
-                    {getLocalizedCountryOptions(language).map((item) => (
-                      <option key={item.code} value={item.code}>{item.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <label style={fieldLabelStyle}>{t.profile.region}</label>
-                  {useRegionSelect ? (
-                    <select value={regionName} onChange={(event) => setRegionName(event.target.value)} style={fieldInputStyle}>
+          identityAfterStats={(
+            <div data-mobile-profile-inline-location="true" style={{ ...savedLocationStyle, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+              <span style={{ color: "#61745d", fontSize: 12 }}>{t.profile.location_summary}</span>
+              <span onBlur={mobileFieldBlur} style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
+                {editingMobileField === "country" ? (
+                  <>
+                    <select aria-label={t.profile.country_region} autoFocus value={countryCode} disabled={saving}
+                      onChange={(event) => setCountryCode(event.target.value)} onKeyDown={mobileFieldKeys} style={fieldInputStyle}>
                       <option value="">{t.profile.select}</option>
-                      {regionOptions.map((item) => (
-                        <option key={item.value} value={item.value}>{item.label}</option>
-                      ))}
+                      {getLocalizedCountryOptions(language).map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
                     </select>
-                  ) : (
-                    <input
-                      value={regionName}
-                      onChange={(event) => setRegionName(event.target.value)}
-                      style={fieldInputStyle}
-                      placeholder={t.profile.region_example}
-                    />
-                  )}
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <label style={fieldLabelStyle}>{t.profile.city}</label>
-                  <input
-                    value={cityName}
-                    onChange={(event) => setCityName(event.target.value)}
-                    style={fieldInputStyle}
-                    placeholder={t.profile.city_example}
-                  />
-                </div>
-              </div>
-              {showCustomCountryInput ? (
-              <div>
-                <label style={fieldLabelStyle}>{t.profile.custom_country_region}</label>
-                <input
-                  value={customCountryName}
-                  onChange={(event) => setCustomCountryName(event.target.value)}
-                  style={fieldInputStyle}
-                  placeholder={t.profile.country_example}
-                />
-              </div>
-              ) : null}
-              <div style={profileEditActionsStyle}>
-                <button type="button" onClick={handleSave} disabled={saving} style={primaryActionStyle}>
-                  {saving ? t.profile.saving : t.profile.save_profile}
-                </button>
-                <button type="button" onClick={cancelProfileEdit} disabled={saving} style={secondaryEditButtonStyle}>
-                  {t.profile.cancel_edit}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div style={savedLocationStyle}>
-              <span>{t.profile.location_summary}</span>
-              <strong>{locationPreview || t.profile.not_assigned}</strong>
+                    {countryCode === "OTHER" ? <input aria-label={t.profile.custom_country_region} value={customCountryName}
+                      disabled={saving} onChange={(event) => setCustomCountryName(event.target.value)}
+                      onKeyDown={mobileFieldKeys} style={fieldInputStyle} /> : null}
+                  </>
+                ) : <button type="button" onClick={() => beginMobileInlineEdit("country")}
+                  aria-label={t.profile.country_region} style={{ ...savedUsernameStyle, border: 0, background: "transparent", padding: 0, cursor: "text", fontSize: 14 }}>
+                  {getCountryName(countryCode, customCountryName, language) || t.profile.country_region}
+                </button>}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span onBlur={mobileFieldBlur} style={{ display: "inline-flex", alignItems: "center" }}>
+                {editingMobileField === "region" ? (useRegionSelect ? (
+                  <select aria-label={t.profile.region} autoFocus value={regionName} disabled={saving}
+                    onChange={(event) => setRegionName(event.target.value)} onKeyDown={mobileFieldKeys} style={fieldInputStyle}>
+                    <option value="">{t.profile.select}</option>
+                    {regionName && !regionOptions.some((option) => option.value === regionName) ? <option value={regionName}>{regionName}</option> : null}
+                    {regionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                ) : <input aria-label={t.profile.region} autoFocus value={regionName} disabled={saving}
+                    onChange={(event) => setRegionName(event.target.value)} onKeyDown={mobileFieldKeys} style={fieldInputStyle} />) :
+                  <button type="button" onClick={() => beginMobileInlineEdit("region")}
+                    aria-label={t.profile.region} style={{ ...savedUsernameStyle, border: 0, background: "transparent", padding: 0, cursor: "text", fontSize: 14 }}>
+                    {regionName || t.profile.region}
+                  </button>}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span onBlur={mobileFieldBlur} style={{ display: "inline-flex", alignItems: "center" }}>
+                {editingMobileField === "city" ? <input aria-label={t.profile.city} autoFocus value={cityName}
+                  disabled={saving} onChange={(event) => setCityName(event.target.value)}
+                  onKeyDown={mobileFieldKeys} style={fieldInputStyle} /> :
+                  <button type="button" onClick={() => beginMobileInlineEdit("city")}
+                    aria-label={t.profile.city} style={{ ...savedUsernameStyle, border: 0, background: "transparent", padding: 0, cursor: "text", fontSize: 14 }}>
+                    {cityName || t.profile.city}
+                  </button>}
+              </span>
             </div>
           )}
+
           identityTop={(
             <>
               <label style={profileAvatarEditorStyle}>
@@ -1122,27 +1157,21 @@ export default function ProfilePage() {
               <div style={{ minWidth: 0, flex: 1 }}>
                 <label style={fieldLabelStyle}>{t.profile.username}</label>
                 {!initLoading && !membershipError && !membership ? <CloudTrialEntry /> : null}
-                {isEditingProfile ? (
-                  <input
-                    value={username}
+                {editingMobileField === "username" ? (
+                  <input aria-label={t.profile.username} autoFocus value={username} disabled={saving} maxLength={60}
                     onChange={(event) => setUsername(event.target.value)}
-                    style={fieldInputStyle}
-                    placeholder={t.profile.username_placeholder}
-                    autoFocus
-                  />
+                    onBlur={mobileFieldBlur} onKeyDown={mobileFieldKeys}
+                    style={{ ...fieldInputStyle, fontWeight: 800 }} />
                 ) : (
-                  <div style={savedUsernameStyle}>
+                  <button type="button" onClick={() => beginMobileInlineEdit("username")}
+                    aria-label={t.profile.username}
+                    style={{ ...savedUsernameStyle, padding: 0, border: 0, background: "transparent", textAlign: "left", cursor: "text" }}>
                     {username || t.profile.unset_username}
-                  </div>
+                  </button>
                 )}
+
               </div>
-              <button
-                type="button"
-                onClick={isEditingProfile ? cancelProfileEdit : beginProfileEdit}
-                style={profileEditButtonStyle}
-              >
-                {isEditingProfile ? t.profile.cancel_edit : t.profile.edit_profile}
-              </button>
+
             </>
           )}
         >

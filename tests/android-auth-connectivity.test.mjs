@@ -485,6 +485,29 @@ test("transport and LifeSpace service reachability jointly determine online", as
   assert.equal(controller.getSnapshot().status, "offline");
 });
 
+test("connected mobile transport recovers after a transient health timeout without granting access early", async () => {
+  const connectivity = await loadModule("lib/android-connectivity.ts", {
+    react: "export const useSyncExternalStore = () => {};",
+    "@capacitor/core": "export const Capacitor = { isNativePlatform: () => false }; export const CapacitorHttp = { request: async () => ({}) };",
+    "@capacitor/network": "export const Network = {};",
+    "@capacitor/app": "export const App = {};",
+  });
+  let calls = 0;
+  const controller = connectivity.createAndroidConnectivityController({
+    initialTransport: "connected",
+    retryUnreachableMs: 12,
+    probe: async () => ++calls >= 2,
+  });
+  assert.equal(await controller.probeNow(), false);
+  assert.equal(controller.getSnapshot().transportStatus, "connected");
+  assert.equal(controller.getSnapshot().serviceStatus, "unreachable");
+  assert.equal(controller.getSnapshot().status, "offline");
+  await new Promise((resolve) => setTimeout(resolve, 85));
+  assert.equal(calls, 2);
+  assert.equal(controller.getSnapshot().status, "online");
+  controller.dispose();
+});
+
 test("stale health result cannot overwrite a newer connectivity generation", async () => {
   const connectivity = await loadModule("lib/android-connectivity.ts", {
     react: "export const useSyncExternalStore = () => {};",
@@ -565,8 +588,8 @@ test("native health probe uses the production endpoint and validates its contrac
   });
   assert.equal(reachable, true);
   assert.equal(requestOptions.url, "https://life-space.uk/api/health");
-  assert.equal(requestOptions.connectTimeout, 2500);
-  assert.equal(requestOptions.readTimeout, 2500);
+  assert.equal(requestOptions.connectTimeout, 7500);
+  assert.equal(requestOptions.readTimeout, 7500);
 });
 
 test("health endpoint is public, side-effect free and non-cacheable", async () => {

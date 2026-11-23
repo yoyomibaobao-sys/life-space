@@ -22,7 +22,7 @@ import {
   type LocalRecordWithImages,
 } from "@/lib/local-offline-db";
 import { normalizePlantingRegion } from "@/lib/planting-region";
-import { isAndroidOnline } from "@/lib/android-connectivity";
+import { getAndroidConnectivitySnapshot, isAndroidOnline, recheckAndroidConnectivity } from "@/lib/android-connectivity";
 import {
   isDefiniteStorageUploadRejection,
   uploadMediaStorageObject,
@@ -1191,7 +1191,8 @@ async function syncPendingCloudArchiveUnlocked(params: {
       error: "请先登录，再上传本机改动。",
     };
   }
-  if (!isAndroidOnline()) {
+  if (!isAndroidOnline() && !(await recheckAndroidConnectivity())) {
+    const connected = getAndroidConnectivitySnapshot().transportStatus === "connected";
     return {
       success: false,
       cloudArchiveId: null,
@@ -1199,7 +1200,9 @@ async function syncPendingCloudArchiveUnlocked(params: {
       recordCount: 0,
       imageCount: 0,
       failedCount: 1,
-      error: "当前仍处于离线状态，请联网后重试。",
+      error: connected
+        ? "手机已连接网络，但云端服务校验未通过；本机记录已保留，请检查网络后再试。"
+        : "当前无网络连接，本机记录已保留，请联网后重试。",
     };
   }
 
@@ -1579,7 +1582,11 @@ export async function syncAllPendingCloudArchives(params: {
     recordCount: 0, imageCount: 0, failedCount: 1, error,
   }];
   if (!userId) return blocked("请先登录，再上传本机改动。");
-  if (!isAndroidOnline()) return blocked("当前仍处于离线状态，请联网后重试。");
+  if (!isAndroidOnline() && !(await recheckAndroidConnectivity())) {
+    return blocked(getAndroidConnectivitySnapshot().transportStatus === "connected"
+      ? "手机已连接网络，但云端服务校验未通过；待上传资料已保留。"
+      : "当前无网络连接，待上传资料已保留。");
+  }
   let verifiedUserId: string | null = null;
   try {
     const { data, error } = await supabase.auth.getUser();

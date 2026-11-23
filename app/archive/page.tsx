@@ -71,6 +71,7 @@ import {
 } from "@/lib/local-offline-db";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobileNotificationLink from "@/components/mobile/MobileNotificationLink";
+import AndroidPendingRecordReview from "@/components/mobile/AndroidPendingRecordReview";
 import {
   DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
   getArchiveCategoryDepth,
@@ -174,6 +175,7 @@ export default function ArchivePage() {
   const [currentOwnerContext, setCurrentOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [activeSource, setActiveSource] = useState<ArchiveSourceFilter>("cloud");
   const [w5UploadingKey, setW5UploadingKey] = useState<string | null>(null);
+  const [w5FocusedPendingKey, setW5FocusedPendingKey] = useState<string | null>(null);
   const [w5CloudCaches, setW5CloudCaches] = useState<LocalArchiveSummary[]>([]);
   const [w5Online, setW5Online] = useState(true);
   useEffect(() => {
@@ -338,15 +340,13 @@ export default function ArchivePage() {
       setLocalCategoryDepths(getLocalArchiveCategoryDepths(user.id));
       setVerifiedOwnerId(user.id);
 
-      try {
-        const depths = await getCloudArchiveCategoryDepths(user.id);
-        if (!stillCurrent(user.id)) return;
-        setCloudCategoryDepths(depths);
-      } catch (settingsError) {
-        if (!stillCurrent(user.id)) return;
-        console.error("load archive category settings error:", settingsError);
-        setCloudCategoryDepths({ ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS });
-      }
+      // Category depth is independent of the archive/species queries. Start it
+      // concurrently so My Space does not pay one extra network round-trip
+      // before it can start loading projects; keep identity checks unchanged.
+      const cloudDepthsPromise = getCloudArchiveCategoryDepths(user.id).then(
+        (depths) => ({ depths, error: null as unknown }),
+        (error: unknown) => ({ depths: { ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS }, error }),
+      );
 
       const [
         archivesResult,
@@ -385,6 +385,10 @@ export default function ArchivePage() {
       ]);
 
       if (!stillCurrent(user.id)) return;
+      const cloudDepthsResult = await cloudDepthsPromise;
+      if (!stillCurrent(user.id)) return;
+      if (cloudDepthsResult.error) console.error("load archive category settings error:", cloudDepthsResult.error);
+      setCloudCategoryDepths(cloudDepthsResult.depths);
       const archivesData = archivesResult.error ? null : archivesResult.data;
       if (archivesResult.error) {
         console.error("load archives error:", archivesResult.error);
@@ -1559,6 +1563,24 @@ export default function ArchivePage() {
   }
 
   function renderW5PendingItem(item: PendingCloudProject<LocalArchiveSummary, ArchiveItem>) {
+    if (activeSource === "pending" && w5FocusedPendingKey === item.key && currentOwnerContext) {
+      return <section key={item.key} data-w5-pending-only-detail="true">
+        <button type="button" onClick={() => setW5FocusedPendingKey(null)}>{t.archive_workspace.pending_back}</button>
+        <h2>{item.local?.title || item.cache?.title || item.cloud?.title || item.summaries[0]?.title}</h2>
+        {item.summaries.map((row) => <AndroidPendingRecordReview key={row.local_archive_id}
+          archiveId={row.local_archive_id} owner={currentOwnerContext} language={language} focused
+          onChanged={() => loadLocalArchives(currentOwnerContext)}
+          onUploadRecord={async (recordId) => {
+            if (!currentOwnerContext.userId) throw Error("未确认待上传Owner。");
+            const { data, error } = await supabase.auth.getUser();
+            if (error || data.user?.id !== currentOwnerContext.userId) throw Error("登录Owner与待上传资料不匹配。");
+            const result = await syncPendingCloudArchive({ localArchiveId: row.local_archive_id,
+              targetRecordId: recordId, ownerContext: currentOwnerContext });
+            if (!result.success) throw Error(result.error || t.archive.pending_sync_incomplete);
+            await Promise.all([loadLocalArchives(currentOwnerContext), loadData()]);
+          }} />)}
+      </section>;
+    }
     const summary = item.summaries[0];
     const canCancel = item.summaries.length === 1 &&
       (summary.archive_create_pending ||
@@ -1570,7 +1592,7 @@ export default function ArchivePage() {
           {item.failed ? t.archive_workspace.pending_retry : item.creating ? t.archive_workspace.pending_create_cloud_project : t.archive_workspace.pending_upload} · {item.recordCount} {t.archive.pending_sync_record_unit} · {item.imageCount} {t.archive.pending_sync_photo_unit}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button type="button" onClick={() => router.push("/local/archive/" + summary.local_archive_id)}>{t.archive_workspace.pending_view_edit}</button>
+          <button type="button" onClick={() => { setActiveSource("pending"); setW5FocusedPendingKey(item.key); }}>{t.archive_workspace.pending_view}</button>
           <button type="button" disabled={Boolean(w5UploadingKey)} onClick={() => void w5UploadPending(item)}>
             {item.failed ? t.archive_workspace.pending_retry_action : t.archive_workspace.pending_upload_action}
           </button>
@@ -1590,6 +1612,7 @@ export default function ArchivePage() {
       setActiveSource(
         isCapacitorAndroid() && nextSource === "pending" ? "pending" : "cloud"
       );
+      setW5FocusedPendingKey(null);
       setActiveSubTag(null);
       setActiveGroupTag(null);
     });
@@ -2499,7 +2522,7 @@ export default function ArchivePage() {
           !currentOwnerContext?.userId ? <div style={emptyPanelStyle}>{t.archive_workspace.pending_login_required}</div> :
           localLoading ? <div style={emptyPanelStyle}>{t.archive_workspace.pending_loading}</div> :
           localError ? <div style={emptyPanelStyle}>{localError}</div> :
-          w5Workspace.pending.length ? <section data-w5-temporary-space="true">{w5Workspace.pending.map(renderW5PendingItem)}</section> :
+          w5Workspace.pending.length ? <section data-w5-temporary-space="true">{w5Workspace.pending.filter((item) => !w5FocusedPendingKey || item.key === w5FocusedPendingKey).map(renderW5PendingItem)}</section> :
           <div style={emptyPanelStyle}>{t.archive_workspace.pending_empty}</div>
         ) : null}
         {isCapacitorAndroid() && (activeSource === "cloud" || activeSource === "all") && currentOwnerContext?.userId ? (

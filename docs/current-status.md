@@ -1,5 +1,12 @@
 # LifeSpace 当前开发进程（跨聊天交接）
 
+## Android v33 在线页面修复候选（2026-11-23）
+
+- 正式 v33 源码 `80fdd401` 与 PR #106 `0988a896` 已合入独立候选。旧版 Android 10 真机实际打开正式网站的 /archive，登录后的来源行显示旧三项。候选的在线页面和内置页面均使用云空间、临时空间，分类行保留全部。
+- 在线植物指引并行读取公开目录与身份，目录返回后即可显示。项目详情等待时间线期间显示加载提示，读完后才判断记录是否为空。
+- TypeScript 检查、102 项定向检查、294 项 Android 及相关回归均通过。两组测试有重叠。正式 W4 候选在本地构建成功，产物保留 R2 服务绑定与读取、镜像写入开关。
+- 旧版真机已验证指定项目的六张历史原图、植物列表及详情。新候选仍待真机验收与发布。离线保存及恢复同步保持 STOP。
+
 ## 最新总控检查点｜正式 W4 v107 / R2 / APP 发布线（2026-11-22）
 
 - **正式部署实况：**Cloudflare 正式 W4 `life-space-canary` 为 v107，Deployment `f43c05be-af86-403b-9359-ff9a6f6ec79c`，Version `d35f531f-6b90-4e4e-9fd7-131f94815bec`，100% 流量；媒体 Worker `life-space-business-media` 为 v3，Deployment `6b3b793b-07a0-4f3e-88fb-042d87507710`，Version `4efee71b-1463-40be-b0f2-127a420f37a5`，100% 流量。W4 Service Binding 指向媒体 Worker；两端 R2 mode=`isolated`，READ/MIRROR_WRITE 均为 `true`。本轮只读核对，未修改生产配置。

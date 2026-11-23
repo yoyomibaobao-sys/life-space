@@ -57,3 +57,9 @@ test("stale async results and record timeline are guarded", () => {
   assert.ok(/if \(!archiveData\.is_public && !isOwnerView\)/.test(source), "Missing contract: /if \\(!archiveData\\.is_public && !isOwnerView\\)/");
   assert.ok(/if \(!isOwner && !activeArchive\.is_public\)/.test(source), "Missing contract: /if \\(!isOwner && !activeArchive\\.is_public\\)/");
 });
+
+test("timeline loading cannot display a false empty history", () => {
+  assert.match(source, /setRecords\(timeline\.records\);\s*setArchiveLoadState\("ready"\)/);
+  assert.equal(source.match(/setArchiveLoadState\("ready"\)/g)?.length, 1);
+  assert.match(source, /emptyRecordsText=\{archiveLoadState === "loading" \? archiveCopy\.loading/);
+});

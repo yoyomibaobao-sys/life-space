@@ -102,6 +102,7 @@ import MobileBottomNavigationView, {
   type MobileBottomNavigationItem,
 } from "@/components/mobile/MobileBottomNavigationView";
 import AndroidQuickCamera from "@/components/mobile/AndroidQuickCamera";
+import AndroidPendingRecordReview from "@/components/mobile/AndroidPendingRecordReview";
 import AppConfirmDialog from "@/components/mobile/AppConfirmDialog";
 import { getMobilePrimaryNavigationDescriptors } from "@/components/mobile/mobilePrimaryNavigation";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
@@ -896,6 +897,7 @@ function App() {
   const [archives, setArchives] = useState<LocalArchiveSummary[]>([]);
   const [cloudCaches, setCloudCaches] = useState<LocalArchiveSummary[]>([]);
   const [sourceFilter, setSourceFilter] = useState<ShellSourceFilter>("all");
+  const [focusedPendingKey, setFocusedPendingKey] = useState<string | null>(null);
   const [unownedCount, setUnownedCount] = useState(0);
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [cloudPendingDetail, setCloudPendingDetail] = useState<LocalArchiveDetail | null>(null);
@@ -1522,11 +1524,18 @@ function App() {
 
   async function reconnect() {
     const nextOnline = await recheckAndroidConnectivity();
-    if (!nextOnline) showToast(
-      getAndroidConnectivitySnapshot().transportStatus === "disconnected"
-        ? copy.offlineTitle
-        : (language === "zh" ? "网络已连接，云端服务暂不可用。" : "Connected, but the cloud service is unavailable."),
-    );
+    if (nextOnline) {
+      // Healthy service is not an Owner grant. Revalidate through Supabase
+      // before enabling private cache access or cloud mutation.
+      await revalidateAndroidAuthSession();
+      showToast(language === "zh" ? "云端连接已恢复，请确认登录状态。" : "Cloud connection restored; check sign-in.");
+    } else {
+      showToast(
+        getAndroidConnectivitySnapshot().transportStatus === "disconnected"
+          ? copy.offlineTitle
+          : (language === "zh" ? "手机已联网，但云端检查失败；本机资料已保留。" : "Network connected but cloud check failed; local data retained."),
+      );
+    }
   }
 
   function openDetail(archiveId: string) {
@@ -2108,7 +2117,12 @@ function App() {
     setGroupFilter(null);
   }, [auth.status, localSpaceEnabled, cloudReadable, sourceFilter]);
   function openNewProjectEntry() {
-    if (auth.status === "checking") return;
+    if (auth.status === "checking") {
+      showToast(language === "zh"
+        ? "正在核验云端身份，请先点“重新检查云端”；本机记录保持不变。"
+        : "Cloud identity is being verified. Recheck connection; local records are preserved.");
+      return;
+    }
     const signedIn = auth.status === "signed-in" || Boolean(readOwnerContext);
     if (!signedIn) {
       openCloudLogin("list-cloud");
@@ -2285,6 +2299,7 @@ function App() {
         key={archive.id}
         project={cloudProjectView(archive)}
         mobileMode
+        compactOwnerHeader
         mobileShowCategoryBadge={false}
         actionSlot={renderProjectActions(archive, "cloud")}
         onClick={() => {
@@ -2305,6 +2320,7 @@ function App() {
       }}
       onClick={() => openDetail(archive.id)}
       mobileMode
+      compactOwnerHeader
       mobileShowCategoryBadge={false}
       actionSlot={renderProjectActions(archive, "cache")}
     />;
@@ -2318,6 +2334,7 @@ function App() {
       }}
       onClick={() => openDetail(archive.id)}
       mobileMode
+      compactOwnerHeader
       mobileShowCategoryBadge={false}
       actionSlot={renderProjectActions(archive, "local")}
     />;
@@ -2348,10 +2365,22 @@ function App() {
     const counts = language === "zh"
       ? `${item.recordCount} 条记录 · ${item.imageCount} 张照片待上传`
       : `${item.recordCount} records · ${item.imageCount} photos to upload`;
-    return <ArchiveProjectCard
+    const focused = sourceFilter === "pending" && focusedPendingKey === item.key;
+    return <div key={item.key}>{focused ? (
+      <section data-android-pending-only-detail="true" className="panel">
+        <button type="button" onClick={() => setFocusedPendingKey(null)}>{language === "zh" ? "返回临时空间" : "Back to temporary space"}</button>
+        <h2>{base.title}</h2>
+        {readOwnerContext ? item.summaries.map((row) => (
+          <AndroidPendingRecordReview key={row.local_archive_id} archiveId={row.local_archive_id}
+            owner={readOwnerContext} language={language} focused
+            onChanged={() => loadList(readOwnerContext)}
+            onUploadRecord={online && authenticatedOwnerContext ? (recordId) => uploadPendingRecord(recordId, row.local_archive_id) : undefined} />
+        )) : null}
+      </section>
+    ) : <ArchiveProjectCard
       key={item.key}
       project={{ ...base, href: undefined, visibilityLabel: badge, visibilityTone: "neutral", latestText: counts }}
-      onClick={() => local ? openDetail(local.id) : item.cloud && setScreen({ kind: "cloud-detail", archiveId: item.cloud.id })}
+      onClick={() => { if (sourceFilter === "pending" || item.creating) { setSourceFilter("pending"); setFocusedPendingKey(item.key); } else if (local) openDetail(local.id); else if (item.cloud) setScreen({ kind: "cloud-detail", archiveId: item.cloud.id }); }}
       mobileMode mobileShowCategoryBadge={false}
       actionSlot={authenticatedOwnerContext ? <div className="action-row">
         {online ? <button type="button" className="secondary-button compact-card-action"
@@ -2363,7 +2392,8 @@ function App() {
           title={!item.creating ? (language === "zh" ? "远端或修改状态未知，不能安全取消" : "Cannot safely cancel remote edits") : undefined}
           onClick={() => void cancelPendingCreatedProject(item)}>{language === "zh" ? "取消待上传" : "Cancel pending"}</button>
       </div> : null}
-    />;
+    />}
+    </div>;
   }
   function renderProjectActions(archive: CloudArchiveSummary | LocalArchiveSummary, source: "cloud" | "local" | "cache") {
     const category = archive.category as ArchiveCategory;
@@ -2649,6 +2679,7 @@ function App() {
           packVisibleSources
           onSelectSource={(source) => {
             setSourceFilter(source);
+            setFocusedPendingKey(null);
             setSubcategoryFilter(null);
             setGroupFilter(null);
             setScreen({ kind: "list" });
@@ -2700,6 +2731,16 @@ function App() {
               <button type="button" className="secondary-button"
                 onClick={() => { void reconnect().then(() => revalidateAndroidAuthSession()); }}>
                 {language === "zh" ? "重新核验" : "Verify again"}
+              </button>
+            </section>
+          ) : serviceConnectivity.transportStatus === "connected" &&
+              serviceConnectivity.serviceStatus === "unreachable" ? (
+            <section className="notice warning" data-w5-connected-cloud-check-failed="true">
+              <p>{language === "zh"
+                ? "手机网络已连接，但云端检查暂未通过。请重新检查连接；本机缓存和待上传资料不会被删除。"
+                : "Device connected, but cloud check failed. Retry safely; local cache and pending data stay intact."}</p>
+              <button type="button" className="secondary-button" onClick={() => void reconnect()}>
+                {language === "zh" ? "重新检查云端" : "Recheck cloud connection"}
               </button>
             </section>
           ) : ownerContext && unownedCount > 0 ? (
@@ -2755,7 +2796,7 @@ function App() {
                   </button>
                 </div>
               ) : null}
-              <div className="project-list">{filteredPending.map(renderPendingProjectCard)}</div>
+              <div className="project-list">{filteredPending.filter((item) => !focusedPendingKey || item.key === focusedPendingKey).map(renderPendingProjectCard)}</div>
             </section>
           ) : null}
           {sourceFilter === "cloud" && !offlineOwnerRead && auth.status !== "checking" && (auth.status !== "signed-in" || !canCreateMembershipContent(membership)) ? renderCloudAccessOptions() : null}
@@ -3185,7 +3226,7 @@ function App() {
             setScreen({ kind: "activity" });
           }}
         />
-        <section className={`${filterStyles.row} ${filterStyles.experience}`} lang={language} aria-label={language === "en" ? "Category" : "分类"}>
+        <section className={`${filterStyles.row} ${filterStyles.experience} ${filterStyles.sticky}`} lang={language} aria-label={language === "en" ? "Category" : "分类"}>
           <button
             type="button"
             onClick={() => setExperienceCategoryFilter("all")}
@@ -3550,7 +3591,7 @@ function App() {
             </div>
             ) : null}
             <div className="choose-project-create-actions">
-              {localSpaceClosed ? null : projectCreationDestinations(online, auth.status === "signed-in", localSpaceEnabled, offlineOwnerRead).map((destination) => <div key={destination} className="choose-project-create-item"><button type="button" className="primary-button" onClick={() => destination === "login" ? openCloudLogin("choose-project") : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</button>{!online && destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</div>)}
+              {localSpaceClosed ? null : (auth.status === "signed-out" ? ["login" as const] : projectCreationDestinations(online, auth.status === "signed-in", localSpaceEnabled, offlineOwnerRead).filter((destination) => destination !== "local-only")).map((destination) => <div key={destination} className="choose-project-create-item"><button type="button" className="primary-button" onClick={() => destination === "login" ? openCloudLogin("choose-project") : setScreen({ kind: "new-project", destination })}>{destination === "login" ? copy.cloudSignIn : copy.newProject}</button>{!online && destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</div>)}
               <button type="button" className="secondary-button choose-project-cancel" onClick={() => { setQuickAddDraft(null); goList(); }}>{copy.cancel}</button>
             </div>
           </section>

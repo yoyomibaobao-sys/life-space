@@ -1864,6 +1864,8 @@ const zh = {
     pending_retry_action: "重试",
     pending_cancel_action: "取消待上传",
     pending_view_edit: "查看／编辑",
+    pending_view: "查看",
+    pending_back: "返回临时空间",
     pending_login_required: "请登录后查看待上传内容",
     pending_loading: "正在读取待上传内容…",
     pending_empty: "目前没有待上传内容",

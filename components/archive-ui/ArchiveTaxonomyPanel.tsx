@@ -473,8 +473,8 @@ function TaxonomyChipButton({
 
 function panelStyle(compact: boolean): CSSProperties {
   return {
-    marginBottom: compact ? 8 : 18,
-    padding: compact ? "7px 8px" : "12px 14px",
+    marginBottom: compact ? 5 : 18,
+    padding: compact ? "5px 8px" : "12px 14px",
     border: "1px solid #edf0e8",
     borderRadius: compact ? 12 : 16,
     background: "#fff",

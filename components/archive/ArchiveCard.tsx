@@ -777,6 +777,7 @@ function MobileArchiveCard({
       project={projectView}
       actionSlot={actionSlot}
       mobileMode
+      compactOwnerHeader
       mobileShowCategoryBadge={false}
     />
   );

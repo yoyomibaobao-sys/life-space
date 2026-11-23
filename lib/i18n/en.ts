@@ -1864,6 +1864,8 @@ const en = {
     pending_retry_action: "Retry",
     pending_cancel_action: "Cancel pending upload",
     pending_view_edit: "View / edit",
+    pending_view: "View",
+    pending_back: "Back to temporary space",
     pending_login_required: "Sign in to view pending uploads.",
     pending_loading: "Loading pending uploads…",
     pending_empty: "Nothing is waiting to upload.",

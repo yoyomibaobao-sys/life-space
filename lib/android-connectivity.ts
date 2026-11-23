@@ -21,6 +21,8 @@ type ConnectivityControllerOptions = {
   probe: () => Promise<boolean>;
   initialTransport?: AndroidTransportStatus;
   debounceMs?: number;
+  /** Optional slow recovery polling; disabled by default for isolated controllers. */
+  retryUnreachableMs?: number;
 };
 
 const PRODUCTION_SUPABASE_REF = "eidltoikfpnrzxruvawf";
@@ -76,7 +78,9 @@ export function resolveAndroidWorkspaceNetworkState(
   return "idle";
 }
 
-const HEALTH_TIMEOUT_MS = 2500;
+// Strict 2.5-second probes incorrectly marked usable mobile connections offline.
+// Cloud health is only a reachability signal, NEVER a login/Owner grant.
+const HEALTH_TIMEOUT_MS = 7500;
 
 function resolveBusinessStatus(
   transportStatus: AndroidTransportStatus,
@@ -92,6 +96,7 @@ export function createAndroidConnectivityController({
   probe,
   initialTransport = "connected",
   debounceMs = 80,
+  retryUnreachableMs = 0,
 }: ConnectivityControllerOptions) {
   let generation = 0;
   let snapshot: AndroidConnectivitySnapshot = {
@@ -163,6 +168,14 @@ export function createAndroidConnectivityController({
         if (probeAfterFlight && snapshot.transportStatus === "connected") {
           probeAfterFlight = false;
           scheduleProbe(0);
+        } else if (
+          retryUnreachableMs > 0 &&
+          snapshot.transportStatus === "connected" &&
+          snapshot.serviceStatus === "unreachable"
+        ) {
+          // Health can time out on a working mobile network. Retry quietly
+          // without marking the Session verified or preparing upload queues.
+          scheduleProbe(retryUnreachableMs);
         }
       });
     return inFlight;
@@ -262,6 +275,7 @@ const initialTransport: AndroidTransportStatus =
 const controller = createAndroidConnectivityController({
   initialTransport,
   probe: () => probeLifeSpaceService(),
+  retryUnreachableMs: 12000,
 });
 let started = false;
 let startGeneration = 0;

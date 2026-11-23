@@ -65,6 +65,8 @@ type Props = {
   durationDays?: number | null;
   ownerLine?: ReactNode;
   actionSlot?: ReactNode;
+  /** My Space owner cards use a compact one-line title and status beneath the menu. */
+  compactOwnerHeader?: boolean;
 };
 
 export default function ProjectSummaryCard(props: Props) {
@@ -108,6 +110,23 @@ export default function ProjectSummaryCard(props: Props) {
     </span>
   );
 
+  const visibilityNode = props.visibilityLabel ? (
+    taxonomyAction?.onTogglePublic ? (
+      <button type="button" className={styles.visibility} data-no-card-nav="true"
+        aria-label={taxonomyAction.isPublic ? t.archive_workspace.set_private : t.archive_workspace.set_public}
+        onClick={(event) => { event.preventDefault(); event.stopPropagation(); taxonomyAction.onTogglePublic?.(); }}>
+        {props.visibilityLabel}
+      </button>
+    ) : <span className={styles.visibility}>{props.visibilityLabel}</span>
+  ) : null;
+  const storageNode = props.storageLabel ? <span className={styles.storage}>{props.storageLabel}</span> : null;
+  const actionNode = displayActionSlot ? (
+    <span className={styles.actionSlot} data-no-card-nav="true"
+      onClick={(event) => { event.preventDefault(); event.stopPropagation(); }}>
+      {displayActionSlot}
+    </span>
+  ) : null;
+
   const content = (
     <>
       <span className={styles.media}>
@@ -133,47 +152,33 @@ export default function ProjectSummaryCard(props: Props) {
       </span>
 
       <span className={styles.body}>
-        <span className={styles.titleRow}>
-          <span className={styles.identity}>
-            <strong className={styles.title}>{props.title}</strong>
-            {props.visibilityLabel ? (
-              taxonomyAction?.onTogglePublic ? (
-                <button
-                  type="button"
-                  className={styles.visibility}
-                  data-no-card-nav="true"
-                  aria-label={taxonomyAction.isPublic ? t.archive_workspace.set_private : t.archive_workspace.set_public}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    taxonomyAction.onTogglePublic?.();
-                  }}
-                >
-                  {props.visibilityLabel}
-                </button>
-              ) : <span className={styles.visibility}>{props.visibilityLabel}</span>
-            ) : null}
-            {props.storageLabel ? (
-              <span className={styles.storage}>{props.storageLabel}</span>
-            ) : null}
+        {props.compactOwnerHeader ? (
+          <span className={styles.compactTitleGrid} data-project-owner-compact-header="true">
+            <strong className={styles.title} title={props.title}>{props.title}</strong>
+            {actionNode}
+            <span className={styles.compactVisibilityRow}>
+              {visibilityNode}
+              {storageNode}
+            </span>
+            <span className={styles.compactHelpRow}>
+              {props.helpLabel ? <span className={styles.help}>{props.helpLabel}</span> : null}
+              {props.unread ? <span className={styles.unread} aria-hidden="true" /> : null}
+            </span>
           </span>
-          <span className={styles.titleActions}>
-            {props.helpLabel ? <span className={styles.help}>{props.helpLabel}</span> : null}
-            {props.unread ? <span className={styles.unread} aria-hidden="true" /> : null}
-            {displayActionSlot ? (
-              <span
-                className={styles.actionSlot}
-                data-no-card-nav="true"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-              >
-                {displayActionSlot}
-              </span>
-            ) : null}
+        ) : (
+          <span className={styles.titleRow}>
+            <span className={styles.identity}>
+              <strong className={styles.title} title={props.title}>{props.title}</strong>
+              {visibilityNode}
+              {storageNode}
+            </span>
+            <span className={styles.titleActions}>
+              {props.helpLabel ? <span className={styles.help}>{props.helpLabel}</span> : null}
+              {props.unread ? <span className={styles.unread} aria-hidden="true" /> : null}
+              {actionNode}
+            </span>
           </span>
-        </span>
+        )}
 
         <InlineRecordSummary text={props.latestText} time={props.latestTime} className={styles.update} />
 
@@ -218,6 +223,7 @@ export default function ProjectSummaryCard(props: Props) {
         href={props.href}
         aria-label={props.ariaLabel}
         className={styles.card}
+        data-compact-owner-header={props.compactOwnerHeader ? "true" : undefined}
         data-ended={props.ended ? "true" : "false"}
         onClick={props.onOpen}
       >
@@ -239,6 +245,7 @@ export default function ProjectSummaryCard(props: Props) {
       tabIndex={props.onOpen ? 0 : undefined}
       aria-label={props.ariaLabel}
       className={styles.card}
+      data-compact-owner-header={props.compactOwnerHeader ? "true" : undefined}
       data-ended={props.ended ? "true" : "false"}
       onClick={props.onOpen}
       onKeyDown={handleKeyDown}
