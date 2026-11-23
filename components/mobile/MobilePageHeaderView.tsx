@@ -72,7 +72,7 @@ const headerStyle: CSSProperties = {
   minHeight:
     "calc(50px + var(--app-safe-area-top, env(safe-area-inset-top, 0px)))",
   display: "grid",
-  alignItems: "end",
+  alignItems: "center",
   gap: 4,
   padding:
     "calc(5px + var(--app-safe-area-top, env(safe-area-inset-top, 0px))) 8px 5px",
@@ -118,8 +118,8 @@ const titleStyle: CSSProperties = {
   justifyContent: "center",
   overflow: "hidden",
   color: "#213121",
-  fontSize: 17,
-  fontWeight: 820,
+  fontSize: 16,
+  fontWeight: 650,
   lineHeight: 1.2,
   textAlign: "center",
   textOverflow: "ellipsis",
