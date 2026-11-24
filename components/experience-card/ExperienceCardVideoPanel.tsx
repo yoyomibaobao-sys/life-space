@@ -9,6 +9,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { ExperienceFullscreenDetail } from "@/components/experience-card/PublicExperienceGallery";
 import { showToast } from "@/components/Toast";
 import { isAndroidNativeShare, shareMp4File } from "@/lib/android-native-share";
 import type {
@@ -241,6 +242,7 @@ const ExperienceCardVideoPanel = forwardRef<
   ref
 ) {
   const { language, t } = useLanguage();
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const videoUrlRef = useRef("");
@@ -842,6 +844,11 @@ const ExperienceCardVideoPanel = forwardRef<
                 aria-label={t.experience.loop_preview_aria}
               />
             )}
+            <button type="button" aria-label={t.experience.open_fullscreen + detail.card.title}
+              style={videoUrl ? fullscreenVideoButtonStyle : fullscreenPreviewButtonStyle}
+              onClick={() => setFullscreenOpen(true)}>
+              <span style={fullscreenBadgeStyle}>{language === "zh" ? "全屏" : "Full screen"}</span>
+            </button>
             {!readOnly ? (
               <div style={previewLabelStyle}>
                 {videoUrl ? t.experience.mp4_loop : t.experience.loop_preview}
@@ -928,6 +935,7 @@ const ExperienceCardVideoPanel = forwardRef<
           ) : null}
         </div>
       ) : null}
+      {fullscreenOpen && <ExperienceFullscreenDetail detail={detail} onClose={() => setFullscreenOpen(false)} />}
     </section>
   );
 });
@@ -1116,6 +1124,17 @@ const previewShellStyle: CSSProperties = {
   boxShadow: "0 12px 30px rgba(47, 73, 43, 0.14)",
 };
 
+const fullscreenPreviewButtonStyle: CSSProperties = {
+  position: "absolute", inset: 0, width: "100%", height: "100%",
+  display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
+  padding: 8, background: "transparent", border: 0, cursor: "zoom-in",
+};
+const fullscreenVideoButtonStyle: CSSProperties = {
+  ...fullscreenPreviewButtonStyle, inset: "0 0 auto auto", width: "auto", height: "auto",
+};
+const fullscreenBadgeStyle: CSSProperties = {
+  background: "rgba(19,33,21,.78)", color: "#fff", borderRadius: 16, padding: "6px 10px",
+};
 const previewStyle: CSSProperties = {
   display: "block",
   width: "100%",

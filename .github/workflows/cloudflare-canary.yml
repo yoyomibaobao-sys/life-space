@@ -189,9 +189,9 @@ jobs:
           assert.ok(Array.isArray(deployments.deployments) && deployments.deployments.length > 0, "active_deployment_missing");
           assert.ok(Array.isArray(versions.items), "worker_versions_missing");
           const latest = deployments.deployments[0];
-          assert.equal(latest.id, "06b407d2-928c-42f2-9f4a-5740d2bb02ea", "unexpected_active_deployment_before_stage");
+          assert.equal(latest.id, "4e314e10-391e-4fb2-9354-7adf48d91028", "unexpected_active_deployment_before_stage");
           assert.deepEqual(latest.versions, [{
-            version_id: "e63c0cc6-e6a1-45b0-bcac-9a47abc0c5bb",
+            version_id: "aab58c83-daae-4f90-84af-9d9ab9564ab8",
             percentage: 100,
           }], "unexpected_active_worker_version_before_stage");
           assert.equal(latest.versions.reduce((sum, item) => sum + item.percentage, 0), 100, "active_traffic_not_100_percent");
