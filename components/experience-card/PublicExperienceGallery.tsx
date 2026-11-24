@@ -43,6 +43,10 @@ export default function PublicExperienceGallery({
 
   function handleCardClick(event: MouseEvent<HTMLElement>, index: number) {
     if ((event.target as HTMLElement).closest("a")) return;
+    if ((event.target as HTMLElement).closest("[data-fullscreen-cover]")) {
+      openPlayback(index);
+      return;
+    }
     if (onOpenDetail) {
       onOpenDetail(items[index]);
       return;
@@ -74,7 +78,7 @@ export default function PublicExperienceGallery({
             onClick={(event) => handleCardClick(event, index)}
             onKeyDown={(event) => handleCardKeyDown(event, index)}
           >
-            <span className={`${styles.previewMediaButton} ${verticalCard.media}`} aria-hidden="true">
+            <span data-fullscreen-cover className={`${styles.previewMediaButton} ${verticalCard.media}`} aria-hidden="true">
               <span className={styles.previewMedia}>
               {item.coverUrl ? (
                 <img

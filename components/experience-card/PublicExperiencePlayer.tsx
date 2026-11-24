@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import GuardedRecordImage from "@/components/archive-detail/GuardedRecordImage";
 import UiIcon from "@/components/ui/UiIcon";
 import {
   buildExperienceCardVideoScenes,
@@ -84,7 +85,7 @@ export default function PublicExperiencePlayer({
         style={fullscreen ? fullscreenStageButtonStyle : stageButtonStyle}
       >
         {currentScene.imageUrl ? (
-          <img
+          <GuardedRecordImage
             src={currentScene.imageUrl}
             alt=""
             style={sceneImageStyle}
