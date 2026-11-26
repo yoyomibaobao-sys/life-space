@@ -150,9 +150,7 @@ import {
   syncAndroidAllPendingCloudArchives,
   syncAndroidPendingCloudArchive,
 } from "@/lib/android-verified-pending-sync";
-import {
-  getPendingR2MirrorCountForOwner, retryPendingR2MediaMirrorsForOwner,
-} from "@/lib/r2-business-media-mirror";
+import { photoQualities, photoQualityLabel, type PhotoQuality } from "@/lib/record-photo-quality";
 import { buildAndroidCloudWorkspace, canOfferLocalCloudTransfer, type PendingCloudProject } from "@/lib/android-cloud-workspace";
 import { syncLocalArchiveToCloud, type LocalToCloudVisibility } from "@/lib/local-to-cloud-sync";
 import { canAddLocalArchiveRecord } from "@/lib/local-archive-detail-adapters";
@@ -161,6 +159,7 @@ import { createLiveCloudArchive } from "@/lib/android-live-cloud-create";
 import { canReadAndroidCloudWorkspace, chooseProjectSources, projectCreationDestinations, type CreationDestination, type QuickAddDraft, type QuickAddSource } from "@/lib/android-creation-capabilities";
 import { formatStorage } from "@/lib/user-profile-shared";
 import {
+  hasActivePlus,
   canCreateMembershipContent,
   getUserTypeLabel,
   normalizeCloudTrialOfferRpcResult,
@@ -1008,7 +1007,9 @@ function App() {
     screen.kind === "new-record" && detail?.archive.id === screen.archiveId &&
     recordEditorOwnerRef.current?.archiveId === detail.archive.id &&
     recordEditorOwnerRef.current?.ownerId === detail.archive.local_owner_user_id;
-  const offlineCreatedProjects = useRef(new Set<string>());
+  const [projectQuery, setProjectQuery] = useState("");
+  const [projectSort, setProjectSort] = useState("updated");
+  const [experienceSort, setExperienceSort] = useState("time");
 
   const loadShellIdentity = useCallback(async (userId: string) => {
     const authority = getAndroidAuthSnapshot();
@@ -1942,24 +1943,6 @@ function App() {
   }
 
 
-  async function retryPendingR2Mirrors() {
-    if (!online || !authenticatedOwnerContext || !cloudUserId ||
-        authenticatedOwnerContext.userId !== cloudUserId || syncingArchiveId) return;
-    setSyncingArchiveId("r2");
-    try {
-      const result = await retryPendingR2MediaMirrorsForOwner(cloudUserId);
-      showToast(result.blocked
-        ? (language === "zh" ? "镜像状态无法核实，原云端照片已保留" : "Mirror status unavailable; source photos are safe")
-        : result.pending > 0
-          ? (language === "zh" ? "仍有备用镜像待补传，原云端照片已保留" : "Some mirrors remain pending; source photos are safe")
-          : (language === "zh" ? "备用镜像已核实" : "Backup mirrors verified"));
-    } catch {
-      showToast(language === "zh" ? "补镜像暂不可用，原云端照片已保留" : "Mirror retry unavailable; source photos are safe");
-    } finally {
-      setSyncingArchiveId(null);
-    }
-  }
-
   async function uploadPendingProject(item: PendingCloudProject<LocalArchiveSummary, CloudArchiveSummary>) {
     if (!online) { showToast(language === "zh" ? "联网后可上传待同步内容" : "Connect to upload pending changes"); return; }
     if (!authenticatedOwnerContext || !cloudUserId) { openCloudLogin("list-cloud"); return; }
@@ -2138,7 +2121,7 @@ function App() {
   function openNewProjectEntry() {
     if (auth.status === "checking" && !offlineOwnerRead) {
       showToast(language === "zh"
-        ? "正在核验云端身份，请先点“重新检查云端”；本机记录保持不变。"
+        ? "正在核验账号，请稍后再试。"
         : "Cloud identity is being verified. Recheck connection; local records are preserved.");
       return;
     }
@@ -2159,18 +2142,26 @@ function App() {
   const newProjectDestination: CreationDestination | null = screen.kind === "new-project"
     ? (screen.destination === "pending-cloud" || !online || offlineOwnerRead ? "pending-cloud" : "live-cloud") : null;
   const canCreatePendingCloud = newProjectDestination === "pending-cloud" && offlineOwnerRead && Boolean(readOwnerContext?.userId);
-  const filteredLocalArchives = workspace.localOnly.filter((archive) => filterCategory(archive) &&
+  type SortableProject = { title?: string | null; created_at?: string | null; updated_at?: string | null; last_record_time?: string | null; latest_record_time?: string | null };
+  const matchesProject = (row: SortableProject) => (row.title || "").toLocaleLowerCase().includes(projectQuery.trim().toLocaleLowerCase());
+  function compareProjects(a: SortableProject, b: SortableProject) {
+    if (projectSort === "name") return (a.title || "").localeCompare(b.title || "", language);
+    const time = (row: SortableProject) => projectSort === "created" ? Date.parse(row.created_at || "") || 0
+      : Math.max(...[row.updated_at, row.created_at, row.last_record_time, row.latest_record_time].map(value => Date.parse(value || "") || 0));
+    return time(b) - time(a) || (a.title || "").localeCompare(b.title || "", language);
+  }
+  const filteredLocalArchives = workspace.localOnly.filter((archive) => matchesProject(archive) && filterCategory(archive) &&
     (!subcategoryFilter || archive.subcategory === subcategoryLabel) &&
     (!groupFilter || archive.group_name === groupLabel));
-  const filteredCloudCaches = workspace.normalCache.filter((archive) => filterCategory(archive) &&
+  const filteredCloudCaches = workspace.normalCache.filter((archive) => matchesProject(archive) && filterCategory(archive) &&
     (!subcategoryFilter || archive.subcategory === subcategoryLabel) &&
     (!groupFilter || archive.group_name === groupLabel));
-  const filteredCloudArchives = workspace.normalLive.filter((archive) => filterCategory(archive) &&
+  const filteredCloudArchives = workspace.normalLive.filter((archive) => matchesProject(archive) && filterCategory(archive) &&
     (!subcategoryFilter || archive.sub_tag_id === subcategoryFilter) &&
     (!groupFilter || archive.group_tag_id === groupFilter));
   const filteredPending = workspace.pending.filter((item) => {
     const archive = item.local || item.cache || item.cloud;
-    if (!archive || !filterCategory(archive)) return false;
+    if (!archive || !matchesProject(archive) || !filterCategory(archive)) return false;
     if (item.local || item.cache) {
       const local = (item.local || item.cache)!;
       return (!subcategoryFilter || local.intended_cloud_sub_tag_id === subcategoryFilter || local.source_cloud_sub_tag_id === subcategoryFilter) &&
@@ -2179,6 +2170,9 @@ function App() {
     return (!subcategoryFilter || item.cloud?.sub_tag_id === subcategoryFilter) &&
       (!groupFilter || item.cloud?.group_tag_id === groupFilter);
   });
+  filteredPending.sort((a, b) => compareProjects(a.local || a.cache || a.cloud || {}, b.local || b.cache || b.cloud || {}));
+  filteredCloudCaches.sort(compareProjects);
+  filteredCloudArchives.sort(compareProjects);
   const activeFilteredLocalArchives = filteredLocalArchives.filter((archive) => archive.status !== "ended");
   const endedFilteredLocalArchives = filteredLocalArchives.filter((archive) => archive.status === "ended");
   const activeFilteredCloudCaches = filteredCloudCaches.filter((archive) => archive.status !== "ended");
@@ -2186,8 +2180,14 @@ function App() {
   const activeFilteredCloudArchives = filteredCloudArchives.filter((archive) => archive.status !== "ended");
   const endedFilteredCloudArchives = filteredCloudArchives.filter((archive) => archive.status === "ended");
   const orderedFilteredLocalArchives = [...activeFilteredLocalArchives, ...endedFilteredLocalArchives];
-  const orderedFilteredCloudCaches = [...activeFilteredCloudCaches, ...endedFilteredCloudCaches];
-  const orderedFilteredCloudArchives = [...activeFilteredCloudArchives, ...endedFilteredCloudArchives];
+  function cloudListWithDrafts<T extends SortableProject>(rows: T[], render: (row: T) => React.ReactNode) {
+    const cards = rows.map(row => ({ project: row as SortableProject, card: render(row) }));
+    for (const pending of filteredPending) {
+      const project = pending.local || pending.cache;
+      if (pending.creating && project) cards.push({ project, card: renderPendingProjectCard(pending) });
+    }
+    return cards.sort((a, b) => compareProjects(a.project, b.project)).map(item => item.card);
+  }
   const activeDepths = sourceFilter === "local" ? getLocalArchiveCategoryDepths(ownerContext?.userId) : cloudDepths;
   const canEditLocalTaxonomy = sourceFilter === "local";
   const canEditCloudTaxonomy = sourceFilter === "cloud" && online && Boolean(authenticatedOwnerContext);
@@ -2259,6 +2259,10 @@ function App() {
       .join(" ")
       .toLowerCase()
       .includes(query);
+  }).sort((a, b) => {
+    const heat = (item: ExperienceCardListItem) => item.helpfulCount + item.bookmarkCount + item.commentCount;
+    if (experienceSort === "heat" && heat(b) !== heat(a)) return heat(b) - heat(a);
+    return Date.parse(b.published_at || b.created_at) - Date.parse(a.published_at || a.created_at);
   });
   function changeActivityFilter(mode: FilterMode) {
     if (mode === "help") {
@@ -2378,11 +2382,7 @@ function App() {
       ? localArchiveToProjectView(local, ownerContext, language, cloudDepths[local.category])
       : item.cloud ? cloudProjectView(item.cloud) : null;
     if (!base) return null;
-    const badge = item.failed
-      ? (language === "zh" ? "待重试" : "Retry upload")
-      : item.creating
-        ? (language === "zh" ? "待创建云端" : "Pending cloud creation")
-        : (language === "zh" ? "待同步" : "Pending upload");
+    const badge = language === "zh" ? "待上传" : "Pending upload";
     const counts = language === "zh"
       ? `${item.recordCount} 条记录 · ${item.imageCount} 张照片待上传`
       : `${item.recordCount} records · ${item.imageCount} photos to upload`;
@@ -2391,6 +2391,9 @@ function App() {
       <section data-android-pending-only-detail="true" className="panel">
         <button type="button" onClick={() => setFocusedPendingKey(null)}>{language === "zh" ? "返回临时空间" : "Back to temporary space"}</button>
         <h2>{base.title}</h2>
+        {local?.status === "active" && local.local_owner_user_id === readOwnerContext?.userId ? (
+          <button type="button" onClick={() => setScreen({ kind: "new-record", archiveId: local.id })}>{copy.addRecord}</button>
+        ) : null}
         {readOwnerContext ? item.summaries.map((row) => (
           <AndroidPendingRecordReview key={row.local_archive_id} archiveId={row.local_archive_id}
             owner={readOwnerContext} language={language} focused
@@ -2401,23 +2404,24 @@ function App() {
     ) : <ArchiveProjectCard
       key={item.key}
       project={{ ...base, href: undefined, visibilityLabel: badge, visibilityTone: "neutral", latestText: counts }}
-      onClick={() => { if (sourceFilter === "pending" || item.creating) { setSourceFilter("pending"); setFocusedPendingKey(item.key); } else if (local) openDetail(local.id); else if (item.cloud) setScreen({ kind: "cloud-detail", archiveId: item.cloud.id }); }}
+      onClick={() => { if (sourceFilter === "pending") { setSourceFilter("pending"); setFocusedPendingKey(item.key); } else if (local) openDetail(local.id); else if (item.cloud) setScreen({ kind: "cloud-detail", archiveId: item.cloud.id }); }}
       mobileMode mobileShowCategoryBadge={false}
     />}
     {!focused && authenticatedOwnerContext ? <div className="action-row pending-project-actions">
         {online ? <button type="button" className="secondary-button compact-card-action"
           disabled={Boolean(syncingArchiveId)} onClick={() => void uploadPendingProject(item)}>
-          {syncingArchiveId === item.key || syncingArchiveId === item.summaries[0]?.local_archive_id ? (language === "zh" ? "上传中…" : "Uploading…") : item.failed ? (language === "zh" ? "重试" : "Retry") : (language === "zh" ? "上传" : "Upload")}
+          {syncingArchiveId === item.key || syncingArchiveId === item.summaries[0]?.local_archive_id ? (language === "zh" ? "上传中…" : "Uploading…") : (language === "zh" ? "上传" : "Upload")}
         </button> : null}
         <button type="button" className="secondary-button compact-card-action"
-          disabled={!item.creating || item.summaries.length !== 1 || Boolean(syncingArchiveId)}
+          hidden={!item.creating || item.summaries.length !== 1}
+          disabled={Boolean(syncingArchiveId)}
           title={!item.creating ? (language === "zh" ? "远端或修改状态未知，不能安全取消" : "Cannot safely cancel remote edits") : undefined}
           onClick={() => {
             if (authenticatedOwnerContext?.userId && !syncingArchiveId && item.creating && item.summaries.length === 1 &&
               item.local?.local_owner_user_id === authenticatedOwnerContext.userId) {
               setPendingCancelTarget({ key: item.key, archiveId: item.summaries[0].local_archive_id, ownerId: authenticatedOwnerContext.userId, screen });
             }
-          }}>{language === "zh" ? "取消待上传" : "Cancel pending"}</button>
+          }}>{language === "zh" ? "删除" : "Delete"}</button>
       </div> : null}
     </div>;
   }
@@ -2585,7 +2589,7 @@ function App() {
     ? formatStorage(storageLimitBytes)
     : "—";
   const hasAuthenticatedIdentity = Boolean(readOwnerContext?.userId);
-  const membershipLabel = offlineOwnerRead ? (language === "zh" ? "离线访问" : "Offline access") : getUserTypeLabel(
+  const membershipLabel = readOwnerContext && (!online || offlineOwnerRead) ? (language === "zh" ? "离线" : "Offline") : getUserTypeLabel(
     { signedIn: hasAuthenticatedIdentity, membership: hasAuthenticatedIdentity ? membership : null },
     language,
   );
@@ -2720,6 +2724,12 @@ function App() {
           )}
           filtersSlot={(
             <>
+            <div className="workspace-tools">
+              <input type="search" placeholder={language === "zh" ? "搜索我的项目" : "Search my projects"} aria-label={language === "zh" ? "搜索我的项目" : "Search my projects"} value={projectQuery} onChange={event => setProjectQuery(event.target.value)} />
+              <select aria-label={language === "zh" ? "项目排序" : "Project order"} value={projectSort} onChange={event => setProjectSort(event.target.value)}>
+                <option value="updated">{language === "zh" ? "最新更新" : "Last updated"}</option><option value="created">{language === "zh" ? "创建时间" : "Creation date"}</option><option value="name">{language === "zh" ? "名称" : "Name"}</option>
+              </select>
+            </div>
             <ArchiveTaxonomyPanel
               activeCategory={categoryFilter === "all" ? null : categoryFilter}
               activeSubcategoryId={subcategoryFilter}
@@ -2760,16 +2770,6 @@ function App() {
                 {language === "zh" ? "重新核验" : "Verify again"}
               </button>
             </section>
-          ) : serviceConnectivity.transportStatus === "connected" &&
-              serviceConnectivity.serviceStatus === "unreachable" ? (
-            <section className="notice warning" data-w5-connected-cloud-check-failed="true">
-              <p>{language === "zh"
-                ? "手机网络已连接，但云端检查暂未通过。请重新检查连接；本机缓存和待上传资料不会被删除。"
-                : "Device connected, but cloud check failed. Retry safely; local cache and pending data stay intact."}</p>
-              <button type="button" className="secondary-button" onClick={() => void reconnect()}>
-                {language === "zh" ? "重新检查云端" : "Recheck cloud connection"}
-              </button>
-            </section>
           ) : ownerContext && unownedCount > 0 ? (
             <section className="notice warning">
               <strong>{copy.unownedTitle}</strong>
@@ -2782,36 +2782,10 @@ function App() {
             </section>
           ) : null}
         >
-          {((readOwnerContext && sourceFilter === "pending" && filteredPending.length) ||
-            (readOwnerContext && sourceFilter === "pending" && cloudUserId &&
-             authenticatedOwnerContext?.userId === cloudUserId &&
-             getPendingR2MirrorCountForOwner(cloudUserId) > 0)) ? (
+          {readOwnerContext && sourceFilter === "pending" && filteredPending.length > 0 ? (
             <section data-android-cloud-pending="true" data-android-temporary-space="true">
               <div className="panel pending-upload-summary">
-                <h2 className="workspace-section-label">{language === "zh" ? "待上传" : "Pending uploads"} {workspace.pending.length}</h2>
-                <p>{language === "zh"
-                  ? `${workspace.pendingCounts.archive} 个待创建云项目 · ${workspace.pendingCounts.record} 条记录 · ${workspace.pendingCounts.image} 张照片`
-                  : `${workspace.pendingCounts.archive} projects to create · ${workspace.pendingCounts.record} records · ${workspace.pendingCounts.image} photos`}</p>
-                <p>{language === "zh"
-                  ? "请进入待创建项目或具体待上传记录，明确点击上传或删除。"
-                  : "Open the pending project or record and explicitly choose Upload or Delete."}</p>
-              </div>
-
-              {cloudUserId && authenticatedOwnerContext?.userId === cloudUserId &&
-                getPendingR2MirrorCountForOwner(cloudUserId) > 0 ? (
-                <div className="panel" data-android-r2-qa-pending="true">
-                  <p>{language === "zh"
-                    ? `R2备用镜像待核实：${getPendingR2MirrorCountForOwner(cloudUserId)} 张。原云端照片已保存。`
-                    : `R2 shadow mirrors pending: ${getPendingR2MirrorCountForOwner(cloudUserId)}. Original cloud photos are saved.`}</p>
-                  <button type="button" className="secondary-button"
-                    disabled={!online || Boolean(syncingArchiveId)}
-                    onClick={() => void retryPendingR2Mirrors()}>
-                    {syncingArchiveId === "r2"
-                      ? (language === "zh" ? "核实镜像中…" : "Verifying mirrors…")
-                      : (language === "zh" ? "手动补镜像" : "Retry mirrors")}
-                  </button>
-                </div>
-              ) : null}
+                <strong>{language === "zh" ? `待上传记录 ${workspace.pendingCounts.record} 条` : `${workspace.pendingCounts.record} pending records`}</strong>
               {online && authenticatedOwnerContext && cloudUserId ? (
                 <div className="action-row" data-w5-upload-all-pending="true">
                   <button type="button" className="secondary-button"
@@ -2823,6 +2797,7 @@ function App() {
                   </button>
                 </div>
               ) : null}
+              </div>
               <div className="project-list">{filteredPending.filter((item) => !focusedPendingKey || item.key === focusedPendingKey).map(renderPendingProjectCard)}</div>
             </section>
           ) : null}
@@ -2837,8 +2812,7 @@ function App() {
                   (filteredCloudArchives.length ||
                     (sourceFilter === "cloud" && filteredPending.some((item) => item.creating))) ? (
                   <div className="project-list" data-android-live-cloud-list="true">
-                    {(sourceFilter === "all" ? activeFilteredCloudArchives : orderedFilteredCloudArchives).map(renderCloudProjectCard)}
-                    {sourceFilter === "cloud" ? filteredPending.filter((item) => item.creating).map(renderPendingProjectCard) : null}
+                    {sourceFilter === "all" ? activeFilteredCloudArchives.map(renderCloudProjectCard) : cloudListWithDrafts(filteredCloudArchives, renderCloudProjectCard)}
                   </div>
                 ) : null}
                 {!cloudLoading && !cloudError && sourceFilter === "cloud" && filteredCloudArchives.length === 0 && filteredPending.length === 0 ? (
@@ -2854,8 +2828,7 @@ function App() {
                   (sourceFilter === "cloud" && filteredPending.some((item) => item.creating))) ? (
                   <>
                   <div className="project-list" data-android-cloud-cache-list="true">
-                    {(sourceFilter === "all" ? activeFilteredCloudCaches : orderedFilteredCloudCaches).map(renderCloudCacheCard)}
-                    {sourceFilter === "cloud" ? filteredPending.filter((item) => item.creating).map(renderPendingProjectCard) : null}
+                    {sourceFilter === "all" ? activeFilteredCloudCaches.map(renderCloudCacheCard) : cloudListWithDrafts(filteredCloudCaches, renderCloudCacheCard)}
                   </div>
                   </>
                 ) : sourceFilter === "cloud" && !liveCloudWorkspace && filteredPending.length === 0 ? (
@@ -2944,7 +2917,6 @@ function App() {
           guide={screen.guide}
           onCancel={() => quickAddDraft ? setScreen({ kind: "choose-project" }) : goList()}
           onSaved={async (archive) => {
-            if (offlineOwnerRead) offlineCreatedProjects.current.add(archive.id);
             try {
               await loadList();
             } catch (error) {
@@ -3151,6 +3123,8 @@ function App() {
           copy={copy}
           archive={detail.archive}
           language={language}
+          allowOfflineAppend={detail.archive.sync.operation_kind === "create-archive" && canAddLocalArchiveRecord(detail.archive)}
+          plusPhotos={membership?.user_id === readOwnerContext?.userId && hasActivePlus(membership)}
           initialFiles={quickAddDraft?.files}
           initialCapturedAt={quickAddDraft?.capturedAt}
           initialNote={quickAddDraft?.note}
@@ -3275,6 +3249,9 @@ function App() {
             </button>
           ))}
         </section>
+        <div className="experience-sort"><select aria-label={language === "zh" ? "经验排序" : "Experience order"} value={experienceSort} onChange={event => setExperienceSort(event.target.value)}>
+          <option value="time">{language === "zh" ? "按时间" : "Newest"}</option><option value="heat">{language === "zh" ? "按热度" : "Most popular"}</option>
+        </select></div>
         {experienceSearchOpen ? (
           <MobileSearchField
             autoFocus
@@ -3351,7 +3328,7 @@ function App() {
       {screen.kind === "market-detail" ? <AndroidMarketDetailController id={screen.id}
         online={online} onBack={backFromMarketDetail} /> : null}
 
-      {screen.kind === "my-experience" ? <MyExperienceCardsContent onRequireLogin={() => openCloudLogin("profile", undefined, "/experience-cards")} /> : null}
+      {screen.kind === "my-experience" ? <MyExperienceCardsContent mineOnly onRequireLogin={() => openCloudLogin("profile", undefined, "/experience-cards")} /> : null}
       {screen.kind === "experience-new" ? (() => {
         const params = new URLSearchParams((screen.search || "").replace(/^\?/, ""));
         return <div data-android-shell-page="experience-new">
@@ -3502,6 +3479,7 @@ function App() {
       {screen.kind === "plant-detail" ? (
         <PlantDetailContent key={screen.id} id={screen.id} offline={!online || offlineOwnerRead}
           offlineGuide={findOfflineGuideEntry(directory, screen.id)}
+          onCreate={guide => readOwnerContext ? setScreen({ kind: "new-project", guide, destination: online ? "live-cloud" : "pending-cloud" }) : openCloudLogin("list-cloud")}
           onBack={() => goBackInShell({ kind: "guides" })} />
       ) : null}
       {screen.kind === "guide-detail" ? <GuideDetailView key={screen.guideId || screen.guideKey} id={activeGuide?.source === "public_guide" && activeGuide.id ? activeGuide.id : screen.guideId || screen.guideKey} offline={!online || offlineOwnerRead} offlineGuide={activeGuide} offlineSignedIn={Boolean(readOwnerContext?.userId)} onBack={() => goBackInShell({ kind: "guides" })} onCreate={(guide) => readOwnerContext
@@ -4475,10 +4453,11 @@ function FilePreview({ file }: { file: File }) {
   return <img src={url} alt="" />;
 }
 
-function RecordForm({ copy, archive, language, record, allowOfflineAppend = false, initialFiles = [], initialCapturedAt = [], initialNote = "", onCancel, onSaved }: {
+function RecordForm({ copy, archive, language, record, allowOfflineAppend = false, plusPhotos = false, initialFiles = [], initialCapturedAt = [], initialNote = "", onCancel, onSaved }: {
   copy: OfflineCopy; archive: LocalArchive; language: Language; record?: LocalRecordWithImages;
   initialFiles?: File[]; initialCapturedAt?: (string | null)[]; initialNote?: string;
   allowOfflineAppend?: boolean;
+  plusPhotos?: boolean;
   onCancel: () => void; onSaved: () => void | Promise<void>;
 }) {
   const [note, setNote] = useState(record?.note || initialNote);
@@ -4493,6 +4472,7 @@ function RecordForm({ copy, archive, language, record, allowOfflineAppend = fals
   );
   const [cycleId, setCycleId] = useState(record?.cycle_id || (archive.cycle_enabled ? archive.cycles?.find((cycle) => cycle.status === "active")?.id : null) || "");
   const [files, setFiles] = useState<File[]>(initialFiles);
+  const [qualities, setQualities] = useState(new Map<File, PhotoQuality>());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const camera = useRef<HTMLInputElement>(null);
@@ -4549,6 +4529,7 @@ function RecordForm({ copy, archive, language, record, allowOfflineAppend = fals
               visibility,
               cycle_id: cycleId || null,
               image_files: group.photos.map((photo) => photo.file),
+              image_qualities: group.photos.map(({ file }) => plusPhotos ? qualities.get(file) || "standard" : "standard"),
               image_captured_at: group.photos.map((photo) => photo.capturedAt),
             });
           }
@@ -4587,7 +4568,10 @@ function RecordForm({ copy, archive, language, record, allowOfflineAppend = fals
       <label className="field">{copy.recordNote}<textarea value={note} onChange={(e) => { setNote(e.target.value); if (error === copy.requiredRecord) setError(""); }} placeholder={language === "zh" ? "填写记录内容（照片选填）" : "Write a note (photos optional)"} maxLength={8000} disabled={busy} /></label>
       <div className="field"><label>{language === "zh" ? "照片（选填，最多 10 张）" : "Photos (optional, max 10)"}</label>{(record?.images.length || 0) + files.length > 0 ? <small>{(record?.images.length || 0) + files.length} {copy.photos}</small> : null}
         {record?.images.length ? <div className="photo-grid">{record.images.map((image) => <BlobImage key={image.id} image={image} alt="" />)}</div> : null}
-        {files.length ? <div className="photo-grid">{files.map((file, index) => <div className="photo-preview" key={`${file.name}-${file.lastModified}-${index}`}><FilePreview file={file} /><button type="button" disabled={busy} aria-label={copy.removePhoto} onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}>×</button></div>)}</div> : null}
+        {files.length ? <div className="photo-grid">{files.map((file, index) => <div className="photo-preview" key={`${file.name}-${file.lastModified}-${index}`}><FilePreview file={file} />{plusPhotos && !record ? <select aria-label={language === "zh" ? "照片画质" : "Photo quality"} value={qualities.get(file) || "standard"} disabled={busy}
+          onChange={(event) => { const quality = event.target.value as PhotoQuality; setQualities(previous => new Map(previous).set(file, quality)); }}>
+          {photoQualities.map(quality => <option key={quality} value={quality}>{photoQualityLabel(quality, language)}</option>)}
+        </select> : null}<button type="button" disabled={busy} aria-label={copy.removePhoto} onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}>×</button></div>)}</div> : null}
         <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
         <input ref={album} type="file" accept="image/*" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
         <div className="submit-row"><button className="secondary-button" type="button" disabled={busy} onClick={() => camera.current?.click()}>{copy.camera}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => {

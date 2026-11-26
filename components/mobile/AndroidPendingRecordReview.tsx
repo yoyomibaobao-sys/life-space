@@ -131,14 +131,14 @@ export default function AndroidPendingRecordReview({
     {!focused ? <button type="button" aria-expanded={expanded}
       onClick={() => { setExpanded((open) => !open); setSelectedId(null); setConfirmTarget(null); }}>
       {language === "zh"
-        ? (expanded ? "收起待上传记录" : "查看待上传记录（仅显示未完成同步的内容）")
+        ? (expanded ? "收起待上传记录" : "查看待上传记录")
         : (expanded ? "Hide pending records" : "View pending records only")}
     </button> : null}
     {expanded ? (
       <div style={{ padding: "8px 0" }}>
         {loading ? <p role="status">{language === "zh" ? "正在核对待上传记录…" : "Checking pending records..."}</p> : null}
         {!loading && !error && pending.length === 0 ? (
-          <p role="status">{language === "zh" ? "这里没有待上传记录；项目属性或上传队列可能仍有待处理项目。" : "No pending records; project changes may still be pending."}</p>
+          <p role="status">{language === "zh" ? "暂无待上传记录。" : "No pending records; project changes may still be pending."}</p>
         ) : null}
         {pending.map((record) => {
           const opened = selectedId === record.id;
@@ -151,8 +151,7 @@ export default function AndroidPendingRecordReview({
               {(record.note || "").trim().slice(0, 45) ||
                 (language === "zh" ? "未填写文字的记录" : "Record without text")}
               {" · "}{outstandingPhotos}{language === "zh" ? "张照片待上传" : " photos pending"}
-              {" · "}{record.sync.status === "failed" ? (language === "zh" ? "上传失败" : "Failed")
-                : (language === "zh" ? "待处理" : "Pending")}
+              {" · "}{language === "zh" ? "待上传" : "Pending upload"}
             </button>
             {opened ? <div style={{ padding: "8px 0" }}>
               <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>

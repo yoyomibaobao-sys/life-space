@@ -29,7 +29,7 @@ export default function MyExperienceCardsPage() {
   return <MyExperienceCardsContent onRequireLogin={() => router.replace(buildLoginHref("/experience-cards"))} />;
 }
 
-export function MyExperienceCardsContent({ onRequireLogin }: { onRequireLogin: () => void }) {
+export function MyExperienceCardsContent({ onRequireLogin, mineOnly = false }: { onRequireLogin: () => void; mineOnly?: boolean }) {
   const { language, t } = useLanguage();
   const [items, setItems] = useState<CardListItem[]>([]);
   const [savedItems, setSavedItems] = useState<ExperienceCardListItem[]>([]);
@@ -56,7 +56,7 @@ export function MyExperienceCardsContent({ onRequireLogin }: { onRequireLogin: (
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false })
         .order("id", { ascending: false }),
-      supabase
+      mineOnly ? Promise.resolve({ data: [] }) : supabase
         .from("experience_card_bookmarks")
         .select("card_id, created_at")
         .eq("user_id", user.id)
@@ -165,7 +165,7 @@ export function MyExperienceCardsContent({ onRequireLogin }: { onRequireLogin: (
   const visibleItems = activeTab === "mine" ? items : savedItems;
 
   return (
-    <main style={pageStyle}>
+    <main style={pageStyle} data-mine-only={mineOnly || undefined}>
       <header style={headerStyle}>
         <div>
           <InternalLink href="/archive" style={backLinkStyle}>
@@ -175,14 +175,14 @@ export function MyExperienceCardsContent({ onRequireLogin }: { onRequireLogin: (
         </div>
       </header>
 
-      <nav style={tabRowStyle} aria-label={t.experience.directory_aria}>
+      {!mineOnly && <nav style={tabRowStyle} aria-label={t.experience.directory_aria}>
         <button type="button" aria-pressed={activeTab === "mine"} style={tabButtonStyle(activeTab === "mine")} onClick={() => setActiveTab("mine")}>
           {t.experience.my_cards}（{items.length}）
         </button>
         <button type="button" aria-pressed={activeTab === "saved"} style={tabButtonStyle(activeTab === "saved")} onClick={() => setActiveTab("saved")}>
           {t.experience.saved_cards}（{savedItems.length}）
         </button>
-      </nav>
+      </nav>}
 
       {loading ? (
         <section style={emptyStyle}>{t.experience.reading}</section>
@@ -207,7 +207,7 @@ export function MyExperienceCardsContent({ onRequireLogin }: { onRequireLogin: (
               key={item.id}
               item={item}
               dateValue={activeTab === "mine" ? item.updated_at : item.published_at}
-              showAuthor
+              showAuthor={!mineOnly}
               status={
                 activeTab === "saved" ? (
                   <span style={statusStyle(true)}>{t.experience.saved}</span>
@@ -220,7 +220,7 @@ export function MyExperienceCardsContent({ onRequireLogin }: { onRequireLogin: (
                         ? t.experience.publication_paused
                         : t.experience.private}
                   </span>
-                  <span>{t.experience.bookmarked_prefix}{item.bookmarkCount}</span>
+                  {!mineOnly && <span>{t.experience.bookmarked_prefix}{item.bookmarkCount}</span>}
                   </>
                 )
               }

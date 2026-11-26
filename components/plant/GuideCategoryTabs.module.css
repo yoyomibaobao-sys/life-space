@@ -46,6 +46,6 @@
 }
 
 @media (max-width: 759px) {
-  .tabs { padding: 2px 0; margin-bottom: 4px; }
-  .tabs button { font-size: 14px; }
+  .tabs { padding: 2px 0; margin-bottom: 2px; }
+  .tabs button { font-size: 14px; white-space: nowrap; }
 }

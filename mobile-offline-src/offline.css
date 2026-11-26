@@ -259,3 +259,15 @@ button:disabled { opacity: 0.55; }
 }
 
 .project-form-compact :is(input, textarea):not(:focus)::placeholder { color: transparent; }
+
+.pending-upload-summary, .workspace-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.workspace-tools { margin: 4px 0; }
+.workspace-tools input { flex: 1; min-width: 0; }
+.workspace-tools select, .experience-sort select { width: auto; }
+.experience-sort { text-align: end; margin: 4px 0; }
+.photo-preview:has(select) { height: auto; overflow: visible; }
+.photo-preview select { display: block; width: 100%; font-size: 12px; }
+
+@media (max-width: 759px) {
+  [data-android-shell-page="guides"] main:has(> section) { padding-top: 0 !important; }
+}

@@ -2,6 +2,7 @@ import { normalizePlantingRegion, type PlantingRegion } from "@/lib/planting-reg
 import { loadDefaultRecordLocation, normalizeRecordLocation, type RecordLocation } from "@/lib/record-location";
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import { isLocalDateBefore, toLocalDateEndIso } from "@/lib/archive-cycle-dates";
+import type { PhotoQuality } from "@/lib/record-photo-quality";
 import { standardizeRecordPhotoFile } from "@/lib/image-compression";
 import { localImageBlobForIndexedDb, normalizeLocalImageBlob } from "@/lib/local-image-blob";
 import { commitSafContent, readSafCommitted, type SafContent, type SafState } from "@/lib/local-saf-repository";
@@ -5677,10 +5678,10 @@ function ensureLocalImageFile(file: File) {
   }
 }
 
-async function prepareLocalImage(file: File, sortOrder: number) {
+async function prepareLocalImage(file: File, sortOrder: number, quality: PhotoQuality = "standard") {
   ensureLocalImageFile(file);
 
-  const standard = await standardizeRecordPhotoFile(file);
+  const standard = await standardizeRecordPhotoFile(file, { quality, requireSanitized: quality !== "standard" });
 
   return {
     blob: standard.file,
@@ -6314,6 +6315,7 @@ export async function createLocalRecord(input: {
   end_cycle_after_record?: boolean;
   note: string;
   image_files?: File[];
+  image_qualities?: PhotoQuality[];
   image_captured_at?: Array<string | null>;
   record_time?: string;
   visibility?: "public" | "private" | null;
@@ -6344,7 +6346,7 @@ export async function createLocalRecord(input: {
     sync: localSyncMeta(),
   };
   const preparedImages = await Promise.all(
-    files.map((file, index) => prepareLocalImage(file, index))
+    files.map((file, index) => prepareLocalImage(file, index, input.image_qualities?.[index]))
   );
   const images: LocalImage[] = preparedImages.map((image, index) => ({
     id: createId("local_image"),

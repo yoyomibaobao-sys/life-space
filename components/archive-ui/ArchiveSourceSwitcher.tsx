@@ -53,7 +53,7 @@ export default function ArchiveSourceSwitcher<T extends string>({
     : trailingSlot;
 
   return (
-    <section style={sourceSwitchStyle(Boolean(trailingSlot), packVisibleSources)}>
+    <section style={sourceSwitchStyle(Boolean(trailingSlot) || packVisibleSources, packVisibleSources)}>
       {options.map((item, index) => (
         <button
           key={item.value}
@@ -61,7 +61,7 @@ export default function ArchiveSourceSwitcher<T extends string>({
           aria-pressed={activeValue === item.value}
           onClick={() => onSelect(item.value)}
           style={{
-            ...sourceButtonStyle(activeValue === item.value, Boolean(trailingSlot)),
+            ...sourceButtonStyle(activeValue === item.value, Boolean(trailingSlot) || packVisibleSources),
             ...(trailingSlot ? { gridColumn: packVisibleSources ? index + 1 : sourceSlotColumn(item.value) } : {}),
           }}
         >

@@ -539,6 +539,10 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
   const rawNewProjectHref = displayEntry
     ? `/archive/new?category=${encodeURIComponent(displayEntry.category)}&system_name=${encodeURIComponent(displayEntry.name)}`
     : "/archive/new";
+  const handleCreateProject = displayEntry && onCreate ? (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    onCreate(offlineGuide || { label: displayEntry.name, category: displayEntry.category, source: "public_guide", id: displayEntry.id });
+  } : undefined;
   const newProjectHref = signedIn
     ? rawNewProjectHref
     : buildLoginHref(rawNewProjectHref);
@@ -621,7 +625,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
         onBack={onBack || (() => window.history.back())}
         ariaLabel={t.nav.back}
         right={
-          <InternalLink href={newProjectHref} onClick={offline && offlineGuide && onCreate ? (event) => { event.preventDefault(); onCreate(offlineGuide); } : undefined} className={styles.mobileNewProject}>
+          <InternalLink href={newProjectHref} onClick={handleCreateProject} className={styles.mobileNewProject}>
             {copy.newProject}
           </InternalLink>
         }
@@ -632,7 +636,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
           <InternalLink href={fallbackHref} className={styles.desktopBack}>
             <UiIcon name="arrow-left" size={15} /> {copy.back}
           </InternalLink>
-          <InternalLink href={newProjectHref} onClick={offline && offlineGuide && onCreate ? (event) => { event.preventDefault(); onCreate(offlineGuide); } : undefined} className={styles.desktopNewProject}>
+          <InternalLink href={newProjectHref} onClick={handleCreateProject} className={styles.desktopNewProject}>
             {copy.newProject}
           </InternalLink>
         </div>

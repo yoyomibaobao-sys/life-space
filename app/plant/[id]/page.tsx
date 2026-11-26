@@ -1198,12 +1198,13 @@ export default function PlantDetailPage() {
   return <PlantDetailContent id={params?.id} search={searchParams.toString()} />;
 }
 
-export function PlantDetailContent({ id, search = "", onBack, offline = false, offlineGuide }: {
+export function PlantDetailContent({ id, search = "", onBack, offline = false, offlineGuide, onCreate }: {
   id?: string;
   search?: string;
   onBack?: () => void;
   offline?: boolean;
   offlineGuide?: OfflineGuideDirectoryEntry;
+  onCreate?: (guide: OfflineGuideDirectoryEntry) => void;
 }) {
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const { language, t } = useLanguage();
@@ -1390,6 +1391,17 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
         "name" in authResult.error && authResult.error.name === "AuthSessionMissingError";
       setGuideReadState(canReadFullGuide ? "ready" : user || (authResult.error && !missingSession) ? "unavailable" : "guest");
 
+      const parameterData = plusDetail?.parameters || null;
+      const growthCycleData = plusDetail?.growth_cycle || null;
+      const careGuideData = plusDetail?.care_guide || null;
+      setParameters(
+        (Array.isArray(parameterData) ? parameterData[0] : parameterData || null) as
+          | PlantParametersRow
+          | null
+      );
+      setGrowthCycle((growthCycleData || null) as PlantGrowthCycleRow | null);
+      setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
+
       const [{ data: i18nData }, { data: aliasData }] = await Promise.all([
         catalogAvailable ? Promise.resolve({ data: catalogRow?.translations || [] }) : supabase
           .from("plant_species_i18n")
@@ -1402,9 +1414,6 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
           .eq("species_id", resolvedPlantId)
           .order("alias_name", { ascending: true }),
       ]);
-      const parameterData = plusDetail?.parameters || null;
-      const growthCycleData = plusDetail?.growth_cycle || null;
-      const careGuideData = plusDetail?.care_guide || null;
       if (cancelled) return;
       const i18nRows = (i18nData || []) as PlantSpeciesI18nRow[];
       const aliasRows = (aliasData || []) as PlantAliasSearchRow[];
@@ -1412,13 +1421,6 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
       setPlant(plantRow || cachedPlant);
       setI18n(i18nRows);
       setAliases(aliasRows);
-      setParameters(
-        (Array.isArray(parameterData) ? parameterData[0] : parameterData || null) as
-          | PlantParametersRow
-          | null
-      );
-      setGrowthCycle((growthCycleData || null) as PlantGrowthCycleRow | null);
-      setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
       // Render the core guide before optional related projects/cards finish loading.
       setLoading(false);
       if (!user) { setInterestAdded(false); return; }
@@ -1567,6 +1569,10 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
       }`
     : null;
   const plantProjectId = encodeURIComponent(plant?.id || id || "");
+  const handleCreateProject = onCreate && plant ? (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    onCreate(offlineGuide || { label: plant.common_name || displayName, category: "plant", source: "plant_species", plantId: plant.id });
+  } : undefined;
   const createProjectHref = isSignedIn
     ? `/archive/new?species=${plantProjectId}`
     : buildLoginHref(`/archive/new?species=${plantProjectId}`);
@@ -1814,7 +1820,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
           onBack={onBack}
           ariaLabel={t.nav.back}
           right={
-            <Link href={createProjectHref} className={styles.mobileNewProjectLink}>
+            <Link href={createProjectHref} onClick={handleCreateProject} className={styles.mobileNewProjectLink}>
               {copy.new_project}
             </Link>
           }
@@ -1826,7 +1832,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
           fallbackHref={returnRecordHref || "/plant"}
           ariaLabel={t.nav.back}
           right={
-            <Link href={createProjectHref} className={styles.mobileNewProjectLink}>
+            <Link href={createProjectHref} onClick={handleCreateProject} className={styles.mobileNewProjectLink}>
               {copy.new_project}
             </Link>
           }
@@ -1875,7 +1881,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
         <div className={`${styles.heroHeadingRow} mobile-app-desktop-only`}>
           <h1 className={styles.heroTitle}>{displayName}</h1>
           <Link
-            href={createProjectHref}
+            href={createProjectHref} onClick={handleCreateProject}
             className={styles.heroAction}
           >
             {copy.new_project}

@@ -144,3 +144,10 @@
     padding-top: 6px;
   }
 }
+
+[data-mine-only] .card { grid-template-columns: minmax(88px, 32%) minmax(0, 1fr); min-height: 0; }
+[data-mine-only] .card > a:first-child { width: 100%; height: auto; aspect-ratio: 16 / 10; }
+[data-mine-only] .content { min-height: 0; }
+[data-mine-only] .headerRow { display: grid; gap: 2px; }
+[data-mine-only] .statusRow { justify-content: flex-start; }
+[data-mine-only] .footer { padding-top: 0; }

@@ -42,7 +42,7 @@ export function buildAndroidCloudWorkspace<L extends LocalArchiveSummary, C exte
     const cloudId = summary.cloud_archive_id;
     const key = cloudId ? `cloud:${cloudId}` : `pending:${summary.local_archive_id}`;
     pendingLocalIds.add(summary.local_archive_id);
-    if (cloudId) pendingCloudIds.add(cloudId);
+    if (cloudId && summary.archive_create_pending) pendingCloudIds.add(cloudId);
     let entry = pendingByKey.get(key);
     if (!entry) {
       entry = {
@@ -86,9 +86,9 @@ export function buildAndroidCloudWorkspace<L extends LocalArchiveSummary, C exte
   return {
     pending, normalLive, normalCache, localOnly,
     counts: {
-      cloud: pending.length + normalLive.length + normalCache.length,
+      cloud: pending.filter(entry => entry.creating).length + normalLive.length + normalCache.length,
       local: localOnly.length,
-      all: pending.length + normalLive.length + normalCache.length + localOnly.length,
+      all: pending.filter(entry => entry.creating).length + normalLive.length + normalCache.length + localOnly.length,
     },
     pendingCounts: {
       archive: pending.filter((entry) => entry.creating).length,

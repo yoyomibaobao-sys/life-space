@@ -39,7 +39,7 @@ test("live, cache and multiple pending rows for one cloud project count once", (
   assert.equal(view.pending.length, 1);
   assert.equal(view.pending[0].recordCount, 2);
   assert.equal(view.pending[0].imageCount, 4);
-  assert.deepEqual(view.normalLive.map((row) => row.id), ["cloud-2"]);
+  assert.deepEqual(view.normalLive.map((row) => row.id), ["cloud-1", "cloud-2"]);
   assert.deepEqual(view.localOnly.map((row) => row.id), ["local-only"]);
   assert.deepEqual(view.counts, { cloud: 2, local: 1, all: 3 });
   const offline = buildAndroidCloudWorkspace({
@@ -49,7 +49,7 @@ test("live, cache and multiple pending rows for one cloud project count once", (
   });
   assert.equal(offline.pending.length, 1);
   assert.equal(offline.pending[0].failed, true);
-  assert.equal(offline.normalCache.length, 0);
+  assert.equal(offline.normalCache.length, 1);
   assert.equal(offline.counts.local, 0);
 });
 
@@ -72,7 +72,7 @@ test("independent saved local copy stays local; linked pending row does not", ()
   });
   assert.deepEqual(view.localOnly.map((row) => row.id), ["saved-copy"]);
   assert.equal(view.pending.length, 1);
-  assert.equal(view.normalLive.length, 0);
+  assert.equal(view.normalLive.length, 1);
 });
 
 test("SAF saved cloud copies remain independent local cards beside their original", () => {
@@ -114,8 +114,7 @@ test("pending UI stays visible offline and both upload paths require a user clic
   assert.match(source, /sourceFilter === "cloud" \|\| sourceFilter === "pending"/);
   assert.match(source, /data-android-temporary-space="true"/);
   assert.match(source, /联网后可上传/);
-  assert.match(source, /item\.creating[\s\S]*待创建云端/);
-  assert.match(source, /item\.failed[\s\S]*待重试[\s\S]*待同步/);
+  assert.match(source, /const badge = language === "zh" \? "待上传"/);
   assert.match(source, /onClick=\{\(\) => void uploadAllPending\(\)\}/);
   assert.match(source, /onClick=\{\(\) => void uploadPendingProject\(item\)\}/);
   assert.match(source, /language === "zh" \? "上传" : "Upload"/);
