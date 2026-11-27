@@ -231,7 +231,7 @@ test("deferring is persistent and later pending work stays in manual mode", asyn
   assert.equal(reopened[0].deferred_at, firstRead[0].deferred_at);
 });
 
-test("cloud record first edit queues fields and photo, then freezes pending fields", async () => {
+test("cloud record first edit queues fields and photo, then permits owner edits before upload", async () => {
   await fixture();
   const changed = await dbModule.updateLocalRecordFields("imported-record", {
     note: "离线修改后的文字", image_files: [photo("added.gif")],
@@ -251,9 +251,13 @@ test("cloud record first edit queues fields and photo, then freezes pending fiel
   await assert.rejects(() => dbModule.updateLocalRecordFields("imported-record", {
     location: { label: "后院", source: "manual" },
   }), /待上传记录只读/);
+  await dbModule.updateLocalRecordFields("imported-record", {
+    note: "补记", remove_image_ids: [added.id], image_files: [photo("replacement.gif")],
+  }, owner);
   const kept = (await dbModule.getLocalArchiveDetail("cloud-local-copy", owner))
     .records.find((r) => r.id === "imported-record");
-  assert.equal(kept.note, "离线修改后的文字");
+  assert.equal(kept.note, "补记");
+  assert.equal(kept.images.some(image => image.id === added.id), false);
   assert.equal(kept.sync.client_operation_id, id);
   assert.deepEqual(kept.sync.pending_fields, ["note"]);
   assert.equal(kept.images.length, 2);

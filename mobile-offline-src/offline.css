@@ -271,3 +271,26 @@ button:disabled { opacity: 0.55; }
 @media (max-width: 759px) {
   [data-android-shell-page="guides"] > main { padding: 0 0 10px !important; }
 }
+
+.workspace-tools input, .workspace-tools select, .experience-sort select {
+  height: 34px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 0 12px;
+  background-color: var(--card);
+  color: var(--green-dark);
+  font: inherit;
+  font-size: 14px;
+}
+.workspace-tools input { padding-inline-start: 14px; }
+.experience-sort { margin: 3px 0 5px; }
+.pending-upload-summary { padding: 2px 4px; font-size: 14px; min-height: 36px; }
+.pending-upload-summary .action-row { margin: 0; }
+.pending-upload-summary .secondary-button,
+[data-android-pending-only-detail] button:not([role="dialog"] button) {
+  width: auto; min-height: 32px; padding: 3px 12px; border-radius: 18px;
+  background: white; border: 1px solid var(--line); color: var(--green-dark); font-size: 14px;
+}
+[data-android-pending-only-detail] h2 { font-size: 18px; margin-block: 8px; }
+[data-android-pending-only-detail] p { margin: 4px 0; }

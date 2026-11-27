@@ -627,7 +627,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
         onBack={onBack || (() => window.history.back())}
         ariaLabel={t.nav.back}
         right={
-          <InternalLink href={newProjectHref} onClick={handleCreateProject} className={styles.mobileNewProject}>
+          <InternalLink href={newProjectHref} data-shell-handled={handleCreateProject ? "true" : undefined} onClick={handleCreateProject} className={styles.mobileNewProject}>
             {copy.newProject}
           </InternalLink>
         }
@@ -638,7 +638,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
           <InternalLink href={fallbackHref} className={styles.desktopBack}>
             <UiIcon name="arrow-left" size={15} /> {copy.back}
           </InternalLink>
-          <InternalLink href={newProjectHref} onClick={handleCreateProject} className={styles.desktopNewProject}>
+          <InternalLink href={newProjectHref} data-shell-handled={handleCreateProject ? "true" : undefined} onClick={handleCreateProject} className={styles.desktopNewProject}>
             {copy.newProject}
           </InternalLink>
         </div>

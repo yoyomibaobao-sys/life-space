@@ -924,6 +924,7 @@ function App() {
     userId: string;
     lifecycle: string;
   } | null>(null);
+  const [loadedCloudOwner, setLoadedCloudOwner] = useState<string | null>(null);
   const [cloudArchives, setCloudArchives] = useState<CloudArchiveSummary[]>([]);
   const [cloudTaxonomy, setCloudTaxonomy] = useState<ProjectTaxonomyEntry[]>([]);
   const [localTaxonomy, setLocalTaxonomy] = useState<ProjectTaxonomyEntry[]>([]);
@@ -1214,6 +1215,7 @@ function App() {
           getAndroidAuthSnapshot().explicitSignedOut ||
           getAndroidAuthSnapshot().sessionUserId !== resolvedUserId) return false;
       setCloudArchives(displayRows);
+      setLoadedCloudOwner(resolvedUserId);
       setCloudError("");
       void Promise.all([loadCloudProjectTaxonomy(resolvedUserId), getCloudArchiveCategoryDepths(resolvedUserId)])
         .then(([entries, depths]) => {
@@ -1313,7 +1315,7 @@ function App() {
     lastRecoveryKey.current = "";
     cloudListRequestRef.current += 1;
     setCloudLoading(false);
-    setCloudArchives([]);
+    setCloudArchives([]); setLoadedCloudOwner(null);
     setCloudTaxonomy([]);
     setActivityItems([]);
     setPublicDetailItem(null);
@@ -1342,7 +1344,7 @@ function App() {
     if (auth.status === "signed-in" && auth.sessionUserId) {
       if (owner?.userId !== auth.sessionUserId) {
         clearShellIdentityCache(owner?.userId);
-        setCloudArchives([]);
+        setCloudArchives([]); setLoadedCloudOwner(null);
         setCloudTaxonomy([]);
         setCloudCaches([]);
         setPendingSync([]);
@@ -1361,7 +1363,7 @@ function App() {
     }
 
     clearShellIdentityCache(owner?.userId);
-    setCloudArchives([]);
+    setCloudArchives([]); setLoadedCloudOwner(null);
     setCloudTaxonomy([]);
     setCloudCaches([]);
     setPendingSync([]);
@@ -1473,7 +1475,7 @@ function App() {
     // This already validated editor must survive a same-Owner, same-project
     // background read. Resetting detail here unmounts RecordForm and discards
     // its real React note and File[] even though the process remains alive.
-    const preserveEditor = screen.kind === "new-record" &&
+    const preserveEditor = (screen.kind === "new-record" || screen.kind === "edit-record") &&
       detail?.archive.id === expectedArchiveId &&
       detail.archive.local_owner_user_id === expectedOwnerId &&
       (detailStatus === "ready" || detailStatus === "loading");
@@ -2065,9 +2067,7 @@ function App() {
   const subcategoryLabel = selectedTaxonomy.find((item) => item.id === subcategoryFilter)?.label;
   const groupLabel = selectedTaxonomy.find((item) => item.id === groupFilter)?.label;
   const filterCategory = (archive: { category?: string | null }) => categoryFilter === "all" || archive.category === categoryFilter;
-  const liveCloudWorkspace =
-    online &&
-    Boolean(authenticatedOwnerContext);
+  const liveCloudWorkspace = online && Boolean(authenticatedOwnerContext) && loadedCloudOwner === authenticatedOwnerContext?.userId;
   const workspace = buildAndroidCloudWorkspace({
     local: readOwnerContext ? archives.filter((row) =>
       row.local_owner_user_id === readOwnerContext.userId) : [],
@@ -2083,7 +2083,7 @@ function App() {
     const summary = item.summaries[0];
     const archive = item.local || item.cache;
     return item.summaries.length === 1 && archive?.id === summary.local_archive_id &&
-      archive.local_owner_user_id === authenticatedOwnerContext?.userId && archive.sync.attempt_count === 0 &&
+      archive.local_owner_user_id === authenticatedOwnerContext?.userId && (archive.sync.attempt_count === 0 || (item.creating && archive.sync.status === "failed" && !item.recordCount && !item.imageCount)) &&
       (item.creating || (summary.archive_update_pending && !item.recordCount && !item.imageCount));
   }
   const confirmedPendingProject = pendingCancelTarget && authenticatedOwnerContext?.userId &&
@@ -2377,7 +2377,8 @@ function App() {
     setPendingCancelTarget(null);
     setSyncingArchiveId(item.key);
     try {
-      if (item.creating) await cancelNeverUploadedCloudArchive(item.summaries[0].local_archive_id, authenticatedOwnerContext);
+      if (item.creating && (item.local || item.cache)?.sync.status === "failed") await cancelNeverUploadedCloudArchive(item.summaries[0].local_archive_id, authenticatedOwnerContext, true);
+      else if (item.creating) await cancelNeverUploadedCloudArchive(item.summaries[0].local_archive_id, authenticatedOwnerContext);
       else await discardUnattemptedPendingArchiveEdit(item.summaries[0].local_archive_id, authenticatedOwnerContext);
       await loadList(authenticatedOwnerContext);
     } catch (error) {
@@ -2406,6 +2407,7 @@ function App() {
         {readOwnerContext ? item.summaries.map((row) => (
           <AndroidPendingRecordReview key={row.local_archive_id} archiveId={row.local_archive_id}
             owner={readOwnerContext} language={language} focused
+            onEditRecord={(recordId) => setScreen({ kind: "edit-record", archiveId: row.local_archive_id, recordId })}
             onChanged={() => loadList(readOwnerContext)}
             onUploadRecord={online && authenticatedOwnerContext ? (recordId) => uploadPendingRecord(recordId, row.local_archive_id) : undefined} />
         )) : null}
@@ -2722,9 +2724,9 @@ function App() {
             setGroupFilter(null);
             setScreen({ kind: "list" });
           }}
-          onCreateArchive={() => { if (sourceFilter !== "pending") openNewProjectEntry(); }}
+          onCreateArchive={openNewProjectEntry}
           showCreateToolbar={false}
-          sourceTrailingSlot={sourceFilter === "pending" ? null : (
+          sourceTrailingSlot={(
             <button type="button" onClick={() => openNewProjectEntry()}>
               +{copy.project}
             </button>
@@ -2791,7 +2793,7 @@ function App() {
         >
           {readOwnerContext && sourceFilter === "pending" && filteredPending.length > 0 ? (
             <section data-android-cloud-pending="true" data-android-temporary-space="true">
-              <div className="panel pending-upload-summary">
+              {!focusedPendingKey && <div className="pending-upload-summary">
                 <strong>{language === "zh" ? `待上传记录 ${workspace.pendingCounts.record} 条` : `${workspace.pendingCounts.record} pending records`}</strong>
                 <div className="action-row" data-w5-upload-all-pending="true">
                   <button type="button" className="secondary-button"
@@ -2802,7 +2804,7 @@ function App() {
                       : (language === "zh" ? "全部上传" : "Upload all")}
                   </button>
                 </div>
-              </div>
+              </div>}
               <div className="project-list">{filteredPending.filter((item) => !focusedPendingKey || item.key === focusedPendingKey).map(renderPendingProjectCard)}</div>
             </section>
           ) : null}
@@ -2811,10 +2813,9 @@ function App() {
             liveCloudWorkspace ? (
               <>
 
-                {cloudLoading ? <section className="panel empty">{copy.cloudLoading}</section> : null}
+                {cloudLoading && !cloudArchives.length ? <section className="panel empty">{copy.cloudLoading}</section> : null}
                 {cloudError && cloudUserId ? <section className="notice warning"><p>{cloudError}</p></section> : null}
-                {!cloudLoading && !cloudError &&
-                  (filteredCloudArchives.length ||
+                {(filteredCloudArchives.length ||
                     (sourceFilter === "cloud" && filteredPending.some((item) => item.creating))) ? (
                   <div className="project-list" data-android-live-cloud-list="true">
                     {sourceFilter === "all" ? activeFilteredCloudArchives.map(renderCloudProjectCard) : cloudListWithDrafts(filteredCloudArchives, renderCloudProjectCard)}
@@ -3144,7 +3145,7 @@ function App() {
         />
       ) : null}
 
-      {screen.kind === "edit-record" && detail ? (
+      {screen.kind === "edit-record" && detail?.archive.id === screen.archiveId && detail.records.some(record => record.id === screen.recordId) ? (
         <RecordForm
           copy={copy}
           archive={detail.archive}
@@ -3683,7 +3684,7 @@ function App() {
         open={Boolean(confirmedPendingProject)}
         title={language === "zh" ? "取消待上传" : "Cancel pending upload"}
         message={confirmedPendingProject?.creating
-          ? (language === "zh" ? "删除尚未上传的项目及其记录和照片？" : "Delete the never-uploaded project and its records and photos?")
+          ? (language === "zh" ? "移除此项目的本机待上传内容？云端已有项目会保留。" : "Remove this local draft and its pending contents? Existing cloud projects are retained.")
           : (language === "zh" ? "放弃此次待上传修改，恢复云端项目内容？" : "Discard pending changes and restore cloud project details?")}
         cancelLabel={language === "zh" ? "返回" : "Back"}
         confirmLabel={language === "zh" ? "确认取消" : "Confirm cancellation"}
@@ -4469,6 +4470,8 @@ function RecordForm({ copy, archive, language, record, allowOfflineAppend = fals
   onCancel: () => void; onSaved: () => void | Promise<void>;
 }) {
   const [note, setNote] = useState(record?.note || initialNote);
+  const [removedImages, setRemovedImages] = useState<string[]>([]);
+  const keptImages = (record?.images || []).filter(image => !removedImages.includes(image.id));
   const [recordTime, setRecordTime] = useState(toDateTimeLocal(record?.record_time || undefined));
   const [timeMode, setTimeMode] = useState<"photo" | "record" | "custom">(record ? "custom" : "photo");
   const [customTime, setCustomTime] = useState(toDateTimeLocal(record?.record_time || undefined));
@@ -4488,12 +4491,12 @@ function RecordForm({ copy, archive, language, record, allowOfflineAppend = fals
   const periods = getArchiveCycleTerminology(archive.category, language);
   function addFiles(incoming: FileList | File[] | null) {
     const images = Array.from(incoming || []).filter((file) => file.type.startsWith("image/"));
-    if (files.length + images.length > MAX_PHOTOS) { setError(copy.photoLimit); return; }
+    if (keptImages.length + files.length + images.length > MAX_PHOTOS) { setError(copy.photoLimit); return; }
     setError(""); setFiles((previous) => [...previous, ...images]);
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!note.trim() && !files.length && !record?.images.length) { setError(copy.requiredRecord); return; }
+    if (!note.trim() && !files.length && !keptImages.length) { setError(copy.requiredRecord); return; }
     if (busy) return;
     setBusy(true); setError("");
     try {
@@ -4502,8 +4505,8 @@ function RecordForm({ copy, archive, language, record, allowOfflineAppend = fals
       if (archive.local_owner_user_id && readOwner?.userId !== archive.local_owner_user_id) {
         throw new Error(copy.cloudSignIn);
       }
-      if (identity.status === "offline-owner-read" && (record ||
-          (isPendingCloudSyncStatus(archive.sync.status) && !allowOfflineAppend))) {
+      if (identity.status === "offline-owner-read" && ((record && !isPendingCloudSyncStatus(record.sync.status)) ||
+          (!record && isPendingCloudSyncStatus(archive.sync.status) && !allowOfflineAppend))) {
         throw new Error(copy.needNetwork); // Historical pending stays read-only.
       }
       const selectedTime = timeMode === "custom" ? customTime : recordTime;
@@ -4526,7 +4529,8 @@ function RecordForm({ copy, archive, language, record, allowOfflineAppend = fals
           image_files: files,
           image_qualities: files.map(file => plusPhotos ? qualities.get(file) || "standard" : "standard"),
           image_captured_at: imageCapturedAt,
-        });
+          remove_image_ids: removedImages,
+        }, readOwner);
       } else {
         const groups = buildRecordPhotoGroups(preparedPhotos, !splitByDate);
         if (groups.length) {
@@ -4575,8 +4579,12 @@ function RecordForm({ copy, archive, language, record, allowOfflineAppend = fals
       {timeMode === "custom" ? <label className="field">{language === "zh" ? "自定义时间" : "Custom time"}<input type="datetime-local" value={customTime} onChange={(e) => setCustomTime(e.target.value)} required disabled={busy} /></label> : null}
       {archive.cycle_enabled ? <label className="field">{periods.assignLabel}<select value={cycleId} disabled={busy} onChange={(e) => setCycleId(e.target.value)}><option value="">{periods.unassignedOption}</option>{(archive.cycles || []).filter((cycle) => record || cycle.status === "active").map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</option>)}</select></label> : null}
       <label className="field">{copy.recordNote}<textarea value={note} onChange={(e) => { setNote(e.target.value); if (error === copy.requiredRecord) setError(""); }} placeholder={language === "zh" ? "填写记录内容（照片选填）" : "Write a note (photos optional)"} maxLength={8000} disabled={busy} /></label>
-      <div className="field"><label>{language === "zh" ? "照片（选填，最多 10 张）" : "Photos (optional, max 10)"}</label>{(record?.images.length || 0) + files.length > 0 ? <small>{(record?.images.length || 0) + files.length} {copy.photos}</small> : null}
-        {record?.images.length ? <div className="photo-grid">{record.images.map((image) => <BlobImage key={image.id} image={image} alt="" />)}</div> : null}
+      <div className="field"><label>{language === "zh" ? "照片（选填，最多 10 张）" : "Photos (optional, max 10)"}</label>{keptImages.length + files.length > 0 ? <small>{keptImages.length + files.length} {copy.photos}</small> : null}
+        {keptImages.length ? <div className="photo-grid">{keptImages.map(image => <div className="photo-preview" key={image.id}>
+          <BlobImage image={image} alt={copy.photos} />
+          {image.sync.status === "pending-cloud-sync" && !image.sync.attempt_count && !image.sync.cloud_media_id && !image.sync.cloud_media_url ?
+            <button type="button" disabled={busy} aria-label={copy.removePhoto} onClick={() => setRemovedImages(ids => [...ids, image.id])}>×</button> : null}
+        </div>)}</div> : null}
         {files.length ? <div className="photo-grid">{files.map((file, index) => <div className="photo-preview" key={`${file.name}-${file.lastModified}-${index}`}><FilePreview file={file} />{plusPhotos ? <select aria-label={language === "zh" ? "照片画质" : "Photo quality"} value={qualities.get(file) || "standard"} disabled={busy}
           onChange={(event) => { const quality = event.target.value as PhotoQuality; setQualities(previous => new Map(previous).set(file, quality)); }}>
           {photoQualities.map(quality => <option key={quality} value={quality}>{photoQualityLabel(quality, language)}</option>)}

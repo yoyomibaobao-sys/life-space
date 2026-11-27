@@ -1274,6 +1274,20 @@ async function syncPendingCloudArchiveUnlocked(params: {
     ((sync.attempt_count || 0) > 0 &&
       sync.status !== "synced" && sync.status !== "failed");
   const candidateImages = candidateRecords.flatMap((record) => record.images);
+  if (!params.targetRecordId && detail.archive.sync.status === "failed" &&
+      isPendingCloudCreateArchive(detail.archive) && !detail.archive.source_cloud_archive_id) {
+    const archive = detail.archive;
+    const operation = archive.sync.client_operation_id;
+    if (operation && isStableCloudOperationId(operation) && (!archive.sync.cloud_archive_id || archive.sync.cloud_archive_id === operation)) {
+      const existing = await findCloudArchiveById(operation);
+      const visibility = archive.migration_visibility === "private" ? "private" : "public";
+      if (existing?.id === operation && existing.user_id === userId && existing.is_public === (visibility === "public") &&
+          existing.default_record_visibility === visibility) {
+        await persistLocalCloudArchiveMapping(archive.id, operation, operation, params.ownerContext, archive);
+        detail = (await getLocalArchiveDetail(archive.id, params.ownerContext, true)) || detail;
+      }
+    }
+  }
   if ((!params.targetRecordId && unsafe(detail.archive.sync)) ||
       candidateRecords.some((record) => unsafe(record.sync)) ||
       candidateImages.some((image) => unsafeImage(image.sync))) {

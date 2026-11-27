@@ -83,7 +83,7 @@ test("W5 temporary listing has no independent creation route and invokes the exi
   assert.match(web, /discardUnattemptedPendingArchiveEdit\(/);
   assert.match(shell, /readOwnerContext && sourceFilter === "pending"/);
   assert.match(shell, /data-android-cloud-pending="true" data-android-temporary-space="true"/);
-  assert.match(shell, /sourceTrailingSlot=\{sourceFilter === "pending" \? null/);
+  assert.match(shell, /onCreateArchive=\{openNewProjectEntry\}/);
   assert.match(shell, /cancelNeverUploadedCloudArchive\(/);
   assert.match(shell, /syncAndroidPendingCloudArchive\(\{[\s\S]*ownerContext: authenticatedOwnerContext/);
 });

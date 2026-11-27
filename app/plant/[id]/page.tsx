@@ -1820,7 +1820,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
           onBack={onBack}
           ariaLabel={t.nav.back}
           right={
-            <Link onClick={handleCreateProject} href={createProjectHref} className={styles.mobileNewProjectLink}>
+            <Link data-shell-handled={handleCreateProject ? "true" : undefined} onClick={handleCreateProject} href={createProjectHref} className={styles.mobileNewProjectLink}>
               {copy.new_project}
             </Link>
           }
@@ -1832,7 +1832,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
           fallbackHref={returnRecordHref || "/plant"}
           ariaLabel={t.nav.back}
           right={
-            <Link onClick={handleCreateProject} href={createProjectHref} className={styles.mobileNewProjectLink}>
+            <Link data-shell-handled={handleCreateProject ? "true" : undefined} onClick={handleCreateProject} href={createProjectHref} className={styles.mobileNewProjectLink}>
               {copy.new_project}
             </Link>
           }
@@ -1881,7 +1881,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
         <div className={`${styles.heroHeadingRow} mobile-app-desktop-only`}>
           <h1 className={styles.heroTitle}>{displayName}</h1>
           <Link
-            href={createProjectHref} onClick={handleCreateProject}
+            href={createProjectHref} data-shell-handled={handleCreateProject ? "true" : undefined} onClick={handleCreateProject}
             className={styles.heroAction}
           >
             {copy.new_project}

@@ -85,7 +85,7 @@ test("online cloud cards use live images even when a cache thumbnail is missing"
 
 test("online cloud workspace never falls back to cache cards when live loading fails", () => {
   const shell = read("mobile-offline-src/main.tsx");
-  assert.match(shell, /const liveCloudWorkspace =\s*online &&\s*Boolean\(authenticatedOwnerContext\);/);
+  assert.match(shell, /const liveCloudWorkspace =\s*online &&\s*Boolean\(authenticatedOwnerContext\) && loadedCloudOwner === authenticatedOwnerContext\?\.userId/);
   assert.match(shell, /cloudError && cloudUserId[\s\S]*notice warning/);
   assert.match(shell, /readOwnerContext && cloudReadable && sourceFilter !== "local" && sourceFilter !== "pending"/);
   assert.match(shell, /!liveCloudWorkspace &&[\s\S]{0,80}filteredCloudCaches\.length/);
