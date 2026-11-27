@@ -252,7 +252,7 @@ test("offline and online record creation permit a note without photos", async ()
   const native = await source("mobile-offline-src/main.tsx");
   const form = native.slice(native.indexOf("function RecordForm("));
   const cloud = await source("app/archive/[id]/AddRecord.tsx");
-  assert.match(form, /if \(!note\.trim\(\) && !files\.length && !record\?\.images\.length\)/);
+  assert.match(form, /if \(!note\.trim\(\) && !files\.length && !keptImages\.length\)/);
   assert.match(form, /note,\s*record_time: isoTime,[\s\S]*?image_files: \[\]/);
   assert.match(form, /照片（选填，最多 10 张）/);
   assert.match(cloud, /if \(!text\.trim\(\) && files\.length === 0\)/);
