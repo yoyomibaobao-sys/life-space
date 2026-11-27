@@ -152,6 +152,7 @@ import {
 } from "@/lib/android-verified-pending-sync";
 import { photoQualities, photoQualityLabel, type PhotoQuality } from "@/lib/record-photo-quality";
 import { buildAndroidCloudWorkspace, canOfferLocalCloudTransfer, type PendingCloudProject } from "@/lib/android-cloud-workspace";
+import { discardUnattemptedPendingArchiveEdit } from "@/lib/pending-cloud-sync";
 import { syncLocalArchiveToCloud, type LocalToCloudVisibility } from "@/lib/local-to-cloud-sync";
 import { canAddLocalArchiveRecord } from "@/lib/local-archive-detail-adapters";
 import { readCloudTaxonomySnapshot } from "@/lib/cloud-taxonomy-snapshot";
@@ -704,7 +705,7 @@ function App() {
   const [detailAddRecordRequest, setDetailAddRecordRequest] = useState<{ archiveId: string; nonce: number } | null>(null);
   const [chooseProjectExpanded, setChooseProjectExpanded] = useState<{ cloud: boolean; local: boolean }>({ cloud: false, local: false });
   const [trashMoveConfirm, setTrashMoveConfirm] = useState<null | { message: string; action: () => void }>(null);
-  const [pendingCancelTarget, setPendingCancelTarget] = useState<null | { key: string; archiveId: string; ownerId: string; screen: Screen }>(null);
+  const [pendingCancelTarget, setPendingCancelTarget] = useState<null | { key: string; archiveId: string; ownerId: string; creating: boolean; screen: Screen }>(null);
   const [taxonomySyncWarning, setTaxonomySyncWarning] = useState<string | null>(null);
   const quickGallery = useRef<HTMLInputElement>(null);
   async function acceptQuickAddImageFiles(images: File[], source: QuickAddSource) {
@@ -2078,12 +2079,19 @@ function App() {
         row.local_owner_user_id === readOwnerContext.userId)) : [],
     preferLive: liveCloudWorkspace,
   });
+  function canDiscardProject(item: PendingCloudProject<LocalArchiveSummary, CloudArchiveSummary>) {
+    const summary = item.summaries[0];
+    const archive = item.local || item.cache;
+    return item.summaries.length === 1 && archive?.id === summary.local_archive_id &&
+      archive.local_owner_user_id === authenticatedOwnerContext?.userId && archive.sync.attempt_count === 0 &&
+      (item.creating || (summary.archive_update_pending && !item.recordCount && !item.imageCount));
+  }
   const confirmedPendingProject = pendingCancelTarget && authenticatedOwnerContext?.userId &&
     pendingCancelTarget.ownerId === authenticatedOwnerContext.userId &&
     pendingCancelTarget.ownerId === cloudUserId && pendingCancelTarget.screen === screen && !syncingArchiveId
-    ? workspace.pending.find((item) => item.key === pendingCancelTarget.key && item.creating &&
+    ? workspace.pending.find((item) => item.key === pendingCancelTarget.key && item.creating === pendingCancelTarget.creating && canDiscardProject(item) &&
         item.summaries.length === 1 && item.summaries[0].local_archive_id === pendingCancelTarget.archiveId &&
-        item.local?.local_owner_user_id === pendingCancelTarget.ownerId)
+        (item.local || item.cache)?.local_owner_user_id === pendingCancelTarget.ownerId)
     : undefined;
   useEffect(() => { setPendingCancelTarget(null); }, [screen, authenticatedOwnerContext?.userId, cloudUserId]);
   useEffect(() => {
@@ -2364,12 +2372,13 @@ function App() {
     />;
   }
   async function cancelPendingCreatedProject(item: PendingCloudProject<LocalArchiveSummary, CloudArchiveSummary>) {
-    if (!authenticatedOwnerContext?.userId || syncingArchiveId || !item.creating || item.summaries.length !== 1) return;
+    if (!authenticatedOwnerContext?.userId || syncingArchiveId || !canDiscardProject(item)) return;
     if (confirmedPendingProject !== item || !pendingCancelTarget || authenticatedOwnerContext.userId !== pendingCancelTarget.ownerId) return;
     setPendingCancelTarget(null);
     setSyncingArchiveId(item.key);
     try {
-      await cancelNeverUploadedCloudArchive(item.summaries[0].local_archive_id, authenticatedOwnerContext);
+      if (item.creating) await cancelNeverUploadedCloudArchive(item.summaries[0].local_archive_id, authenticatedOwnerContext);
+      else await discardUnattemptedPendingArchiveEdit(item.summaries[0].local_archive_id, authenticatedOwnerContext);
       await loadList(authenticatedOwnerContext);
     } catch (error) {
       showToast(error instanceof Error ? error.message : (language === "zh" ? "安全条件未通过，已保留原件" : "Unsafe to cancel; local data preserved"));
@@ -2404,7 +2413,7 @@ function App() {
     ) : <ArchiveProjectCard
       key={item.key}
       project={{ ...base, href: undefined, visibilityLabel: badge, visibilityTone: "neutral", latestText: counts }}
-      onClick={() => { if (sourceFilter === "pending") { setSourceFilter("pending"); setFocusedPendingKey(item.key); } else if (local) openDetail(local.id); else if (item.cloud) setScreen({ kind: "cloud-detail", archiveId: item.cloud.id }); }}
+      onClick={() => { if (sourceFilter === "pending") { setFocusedPendingKey(item.key); } else if (local) openDetail(local.id); else if (item.cloud) setScreen({ kind: "cloud-detail", archiveId: item.cloud.id }); }}
       mobileMode mobileShowCategoryBadge={false}
     />}
     {!focused && authenticatedOwnerContext ? <div className="action-row pending-project-actions">
@@ -2413,15 +2422,13 @@ function App() {
           {syncingArchiveId === item.key || syncingArchiveId === item.summaries[0]?.local_archive_id ? (language === "zh" ? "上传中…" : "Uploading…") : (language === "zh" ? "上传" : "Upload")}
         </button> : null}
         <button type="button" className="secondary-button compact-card-action"
-          hidden={!item.creating || item.summaries.length !== 1}
+          hidden={!canDiscardProject(item)}
           disabled={Boolean(syncingArchiveId)}
-          title={!item.creating ? (language === "zh" ? "远端或修改状态未知，不能安全取消" : "Cannot safely cancel remote edits") : undefined}
           onClick={() => {
-            if (authenticatedOwnerContext?.userId && !syncingArchiveId && item.creating && item.summaries.length === 1 &&
-              item.local?.local_owner_user_id === authenticatedOwnerContext.userId) {
-              setPendingCancelTarget({ key: item.key, archiveId: item.summaries[0].local_archive_id, ownerId: authenticatedOwnerContext.userId, screen });
+            if (authenticatedOwnerContext?.userId && !syncingArchiveId && canDiscardProject(item)) {
+              setPendingCancelTarget({ key: item.key, creating: item.creating, archiveId: item.summaries[0].local_archive_id, ownerId: authenticatedOwnerContext.userId, screen });
             }
-          }}>{language === "zh" ? "删除" : "Delete"}</button>
+          }}>{item.creating ? (language === "zh" ? "删除" : "Delete") : (language === "zh" ? "放弃修改" : "Discard changes")}</button>
       </div> : null}
     </div>;
   }
@@ -2786,17 +2793,15 @@ function App() {
             <section data-android-cloud-pending="true" data-android-temporary-space="true">
               <div className="panel pending-upload-summary">
                 <strong>{language === "zh" ? `待上传记录 ${workspace.pendingCounts.record} 条` : `${workspace.pendingCounts.record} pending records`}</strong>
-              {online && authenticatedOwnerContext && cloudUserId ? (
                 <div className="action-row" data-w5-upload-all-pending="true">
                   <button type="button" className="secondary-button"
-                    disabled={Boolean(syncingArchiveId)}
+                    disabled={!online || !authenticatedOwnerContext || !cloudUserId || Boolean(syncingArchiveId)}
                     onClick={() => void uploadAllPending()}>
                     {syncingArchiveId === "all"
                       ? (language === "zh" ? "全部上传中…" : "Uploading all…")
                       : (language === "zh" ? "全部上传" : "Upload all")}
                   </button>
                 </div>
-              ) : null}
               </div>
               <div className="project-list">{filteredPending.filter((item) => !focusedPendingKey || item.key === focusedPendingKey).map(renderPendingProjectCard)}</div>
             </section>
@@ -3144,6 +3149,7 @@ function App() {
           copy={copy}
           archive={detail.archive}
           language={language}
+          plusPhotos={membership?.user_id === readOwnerContext?.userId && hasActivePlus(membership)}
           record={detail.records.find((item) => item.id === screen.recordId)}
           onCancel={() => openDetail(detail.archive.id)}
           onSaved={async () => {
@@ -3676,7 +3682,9 @@ function App() {
       <AppConfirmDialog
         open={Boolean(confirmedPendingProject)}
         title={language === "zh" ? "取消待上传" : "Cancel pending upload"}
-        message={language === "zh" ? "确认取消尚未上传的项目及其记录与照片？不能恢复。" : "Cancel the never-uploaded project and its records/photos permanently?"}
+        message={confirmedPendingProject?.creating
+          ? (language === "zh" ? "删除尚未上传的项目及其记录和照片？" : "Delete the never-uploaded project and its records and photos?")
+          : (language === "zh" ? "放弃此次待上传修改，恢复云端项目内容？" : "Discard pending changes and restore cloud project details?")}
         cancelLabel={language === "zh" ? "返回" : "Back"}
         confirmLabel={language === "zh" ? "确认取消" : "Confirm cancellation"}
         destructive
@@ -4516,6 +4524,7 @@ function RecordForm({ copy, archive, language, record, allowOfflineAppend = fals
           visibility,
           cycle_id: cycleId || null,
           image_files: files,
+          image_qualities: files.map(file => plusPhotos ? qualities.get(file) || "standard" : "standard"),
           image_captured_at: imageCapturedAt,
         });
       } else {
@@ -4568,7 +4577,7 @@ function RecordForm({ copy, archive, language, record, allowOfflineAppend = fals
       <label className="field">{copy.recordNote}<textarea value={note} onChange={(e) => { setNote(e.target.value); if (error === copy.requiredRecord) setError(""); }} placeholder={language === "zh" ? "填写记录内容（照片选填）" : "Write a note (photos optional)"} maxLength={8000} disabled={busy} /></label>
       <div className="field"><label>{language === "zh" ? "照片（选填，最多 10 张）" : "Photos (optional, max 10)"}</label>{(record?.images.length || 0) + files.length > 0 ? <small>{(record?.images.length || 0) + files.length} {copy.photos}</small> : null}
         {record?.images.length ? <div className="photo-grid">{record.images.map((image) => <BlobImage key={image.id} image={image} alt="" />)}</div> : null}
-        {files.length ? <div className="photo-grid">{files.map((file, index) => <div className="photo-preview" key={`${file.name}-${file.lastModified}-${index}`}><FilePreview file={file} />{plusPhotos && !record ? <select aria-label={language === "zh" ? "照片画质" : "Photo quality"} value={qualities.get(file) || "standard"} disabled={busy}
+        {files.length ? <div className="photo-grid">{files.map((file, index) => <div className="photo-preview" key={`${file.name}-${file.lastModified}-${index}`}><FilePreview file={file} />{plusPhotos ? <select aria-label={language === "zh" ? "照片画质" : "Photo quality"} value={qualities.get(file) || "standard"} disabled={busy}
           onChange={(event) => { const quality = event.target.value as PhotoQuality; setQualities(previous => new Map(previous).set(file, quality)); }}>
           {photoQualities.map(quality => <option key={quality} value={quality}>{photoQualityLabel(quality, language)}</option>)}
         </select> : null}<button type="button" disabled={busy} aria-label={copy.removePhoto} onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}>×</button></div>)}</div> : null}

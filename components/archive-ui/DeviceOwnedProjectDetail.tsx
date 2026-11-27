@@ -92,6 +92,9 @@ export default function DeviceOwnedProjectDetail({
       ? `/plant/${encodeURIComponent(archive.plant_slug)}`
       : null;
   const isCloudCache = isCloudOfflineCacheArchive(archive);
+  const pendingCreate = archive.sync?.operation_kind === "create-archive" && !archive.source_cloud_archive_id;
+  const projectBadge = pendingCreate ? (language === "zh" ? "待上传" : "Pending upload")
+    : isCloudCache ? workspaceCopy.cloud_cache_copy : archiveCopy.local_project;
   const canEditArchive = canEditLocalArchiveFields(archive, ownerContext);
   const canAddRecord = canAddLocalArchiveRecord(archive);
   const cycleEnabled = Boolean(archive.cycle_enabled);
@@ -170,7 +173,7 @@ export default function DeviceOwnedProjectDetail({
   const localArchiveRecordShell = localArchiveToDetailArchive(
     archive,
     detail.records.length,
-    archiveCopy.local_project,
+    projectBadge,
   );
   const cycleOptions = (archive.cycles || []).map((cycle) => ({
     id: cycle.id,
@@ -246,7 +249,7 @@ export default function DeviceOwnedProjectDetail({
       viewCount={0}
       followerCount={0}
       durationDays={ongoingDays}
-      statusBadge={isCloudCache ? workspaceCopy.cloud_cache_copy : archiveCopy.local_project}
+      statusBadge={projectBadge}
       statusNotice={
         <>
           {isCloudCache && !canEditArchive ? (
@@ -254,7 +257,7 @@ export default function DeviceOwnedProjectDetail({
               <span>{archiveCopy.cloud_read_only_notice}</span>
             </div>
           ) : null}
-          {showPendingNotice ? (
+          {showPendingNotice && !pendingCreate ? (
             <div style={{ margin: "0 0 10px", color: "#8a5a36", fontSize: 12, lineHeight: 1.4 }}>
               {archiveCopy.pending_sync_workspace_notice}
             </div>
@@ -321,7 +324,7 @@ export default function DeviceOwnedProjectDetail({
       }}
       storageLabel={isCloudCache ? archiveCopy.device : undefined}
       storageTone="device"
-      visibilityLabel={isCloudCache ? workspaceCopy.cloud_cache_copy : archiveCopy.local_project}
+      visibilityLabel={projectBadge}
       mobileOwnerSettings={
         <>
           <ArchiveOwnerSettingsFields
@@ -390,7 +393,7 @@ export default function DeviceOwnedProjectDetail({
             return true;
           }
         : undefined}
-      emptyRecordsText={recordCopy.no_local_records}
+      emptyRecordsText={pendingCreate || isCloudCache ? (language === "zh" ? "还没有记录，添加第一条记录。" : "Add the first record.") : recordCopy.no_local_records}
       renderRecord={(record, index) => {
         const source = detail.records.find((item) => item.id === record.id);
         const editable = source ? canEditLocalArchiveRecord(archive, source, ownerContext) : false;

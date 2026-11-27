@@ -269,5 +269,5 @@ button:disabled { opacity: 0.55; }
 .photo-preview select { display: block; width: 100%; font-size: 12px; }
 
 @media (max-width: 759px) {
-  [data-android-shell-page="guides"] main:has(> section) { padding-top: 0 !important; }
+  [data-android-shell-page="guides"] > main { padding: 0 0 10px !important; }
 }

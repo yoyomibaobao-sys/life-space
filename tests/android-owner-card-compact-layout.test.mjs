@@ -46,7 +46,7 @@ test("Only My Space mobile header spacing shrinks, without shrinking controls or
   const web = read("app/globals.css");
   const bundled = read("mobile-offline-src/offline.css");
   assert.match(userHeader, /marginBottom:\s*2/);
-  assert.match(sources, /sourceSwitchStyle\(Boolean\(trailingSlot\), packVisibleSources\)/);
+  assert.match(sources, /sourceSwitchStyle\(Boolean\(trailingSlot\) \|\| packVisibleSources, packVisibleSources\)/);
   assert.match(sources, /margin:\s*packedMobile \? "0 0 4px" : "0 0 12px"/);
   assert.match(taxonomy, /marginBottom:\s*compact \? 5 : 18/);
   for (const css of [web,bundled]) {

@@ -1820,7 +1820,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
           onBack={onBack}
           ariaLabel={t.nav.back}
           right={
-            <Link href={createProjectHref} onClick={handleCreateProject} className={styles.mobileNewProjectLink}>
+            <Link onClick={handleCreateProject} href={createProjectHref} className={styles.mobileNewProjectLink}>
               {copy.new_project}
             </Link>
           }
@@ -1832,7 +1832,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
           fallbackHref={returnRecordHref || "/plant"}
           ariaLabel={t.nav.back}
           right={
-            <Link href={createProjectHref} onClick={handleCreateProject} className={styles.mobileNewProjectLink}>
+            <Link onClick={handleCreateProject} href={createProjectHref} className={styles.mobileNewProjectLink}>
               {copy.new_project}
             </Link>
           }

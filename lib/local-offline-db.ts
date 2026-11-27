@@ -1956,6 +1956,11 @@ export async function listLocalArchiveCycleTrash(
     );
 }
 
+function isOwnerCloudSnapshot(row: LocalArchive, owner?: LocalArchiveOwnerContext | null) {
+  return Boolean(owner?.snapshotOnly && owner.userId && row.local_owner_user_id === owner.userId &&
+    classifyLegacySafArchive(row) !== "local-project");
+}
+
 export async function listVisibleLocalArchiveSummaries(
   ownerContext?: LocalArchiveOwnerContext | null,
   options: { includePendingCloud?: boolean } = {},
@@ -1969,7 +1974,7 @@ export async function listVisibleLocalArchiveSummaries(
   ]);
   const currentUserId = getOwnerUserId(ownerContext);
 
-  const normalizedArchives = archives.filter((row) => (safConnected || !row.saf_local_space_id) &&
+  const normalizedArchives = archives.filter((row) => (safConnected || !row.saf_local_space_id || isOwnerCloudSnapshot(row, ownerContext)) &&
       !(row.saf_local_space_id && classifyLegacySafArchive(row) !== "local-project" &&
         row.local_owner_user_id !== currentUserId))
     .map(normalizeLocalArchive);
@@ -2028,12 +2033,13 @@ export async function listPendingCloudSyncSummaries(
     getAllRows<LocalImage>(IMAGE_STORE, ownerContext?.snapshotOnly),
   ]);
 
-  if (!safConnected && archives.some((archive) => archive.saf_local_space_id &&
+  if (!ownerContext?.snapshotOnly && !safConnected && archives.some((archive) => archive.saf_local_space_id &&
       archive.local_owner_user_id === getOwnerUserId(ownerContext) &&
       classifyLegacySafArchive(archive) !== "local-project")) {
     throw Error("Reconnect your LifeSpace data folder to read pending cloud data.");
   }
   return archives
+    .filter(row => !row.saf_local_space_id || safConnected || isOwnerCloudSnapshot(row, ownerContext))
     .map(normalizeLocalArchive)
     .filter(
       (archive) =>
@@ -2409,12 +2415,13 @@ export async function listVisibleCloudOfflineArchiveSummaries(
     getAllRows<LocalImage>(IMAGE_STORE, ownerContext?.snapshotOnly),
   ]);
 
-  if (!safConnected && archives.some((archive) => archive.saf_local_space_id &&
+  if (!ownerContext?.snapshotOnly && !safConnected && archives.some((archive) => archive.saf_local_space_id &&
       archive.local_owner_user_id === getOwnerUserId(ownerContext) &&
       resolveLocalArchiveRole(archive) === "cloud-offline-cache")) {
     throw Error("Reconnect your LifeSpace data folder to read cloud offline data.");
   }
   const summaries = archives
+    .filter(row => !row.saf_local_space_id || safConnected || isOwnerCloudSnapshot(row, ownerContext))
     .map(normalizeLocalArchive)
     .filter(
       (archive) =>
@@ -3517,13 +3524,13 @@ export async function convertPendingCloudProjectToOfflineCache(
 export async function updateLocalRecordFields(recordId: string, updates: {
   note?: string | null; record_time?: string | null; cycle_id?: string | null;
   visibility?: "public" | "private" | null;
-  location?: RecordLocation | null; image_files?: File[]; image_captured_at?: Array<string | null>;
+  location?: RecordLocation | null; image_files?: File[]; image_qualities?: PhotoQuality[]; image_captured_at?: Array<string | null>;
 }, ownerContext?: LocalArchiveOwnerContext | null) {
   await ensureLocalSafReadable();
   const files = updates.image_files || [];
   if (files.length > 10) throw new Error("每次最多添加10张照片。");
   // Decode before the transaction. Conversion failure must not commit partial edits.
-  const prepared = await Promise.all(files.map((file, index) => prepareLocalImage(file, index)));
+  const prepared = await Promise.all(files.map((file, index) => prepareLocalImage(file, index, updates.image_qualities?.[index])));
   const currentRecord = await getRowById<LocalRecord>(RECORD_STORE, recordId);
   if (currentRecord) {
     const cloudParent = await getRowById<LocalArchive>(ARCHIVE_STORE, currentRecord.archive_id);
@@ -4450,7 +4457,7 @@ export async function resolveLocalArchiveDetail(
   ]);
 
   if (!archive) return { status: "not-found" as const, detail: null };
-  if (archive.saf_local_space_id && !safConnected) {
+  if (archive.saf_local_space_id && !safConnected && !isOwnerCloudSnapshot(archive, ownerContext)) {
     throw Error("Reconnect your LifeSpace data folder to read this project.");
   }
   const normalizedArchive = normalizeLocalArchive(archive);

@@ -74,3 +74,12 @@
 .row:lang(en).standard, .row:lang(en).experience {
   grid-template-columns: .55fr 1fr 1.2fr 1.1fr .9fr;
 }
+
+@media (max-width: 759px) {
+  :global(.offline-shell) .row.sticky {
+    display: flex;
+    min-width: 0;
+    scrollbar-width: none;
+  }
+  :global(.offline-shell) .row.sticky .button { flex: 1 1 auto; min-width: 0; padding-inline: 5px; }
+}

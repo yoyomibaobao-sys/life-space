@@ -58,7 +58,7 @@ test("W5 pending and cloud views share one logical project and original local id
   assert.equal(view.pending[0].summaries[0], pending);
   assert.equal(view.pending[0].local.id, "same-local");
   assert.equal(view.pending[0].cloud.id, "cloud-1");
-  assert.equal(view.normalLive.length, 0);
+  assert.deepEqual(view.normalLive.map(row => row.id), ["cloud-1"]);
   assert.deepEqual(view.localOnly.map(x => x.id), ["legacy-local"]);
   assert.equal(view.pendingCounts.record, 2);
   assert.equal(view.pendingCounts.image, 3);

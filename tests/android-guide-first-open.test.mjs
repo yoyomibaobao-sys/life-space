@@ -31,11 +31,10 @@ test("offline basic plant catalog never demands a verified membership to list it
   assert.doesNotMatch(effect, /setHasCloudAccess\(true\)/);
 });
 
-test("connected-but-cloud-unreachable notice offers owner-safe recovery rather than auto-upload", () => {
+test("offline badge replaces duplicate cloud notice and reconnect keeps pending data", () => {
   const shell = readFileSync("mobile-offline-src/main.tsx", "utf8");
-  assert.match(shell, /data-w5-connected-cloud-check-failed="true"/);
-  assert.match(shell, /serviceConnectivity\.transportStatus === "connected"/);
-  assert.match(shell, /serviceConnectivity\.serviceStatus === "unreachable"/);
+  assert.doesNotMatch(shell, /data-w5-connected-cloud-check-failed|重新检查云端/);
+  assert.match(shell, /!online \|\| offlineOwnerRead\) \? \(language === "zh" \? "离线"/);
   assert.match(shell, /const nextOnline = await recheckAndroidConnectivity\(\)/);
   assert.match(shell, /if \(nextOnline\) \{[\s\S]*await revalidateAndroidAuthSession\(\)/);
   const reconnectBlock = shell.slice(shell.indexOf("async function reconnect()"), shell.indexOf("function openDetail(", shell.indexOf("async function reconnect()")));
