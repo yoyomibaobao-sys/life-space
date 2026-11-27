@@ -57,5 +57,5 @@ test("Only My Space mobile header spacing shrinks, without shrinking controls or
   const guides = read("components/plant/GuideCategoryTabs.module.css");
   assert.match(filter, /\.sticky\s*\{[\s\S]*padding:\s*2px 0;/);
   assert.match(filter, /min-height:\s*40px/);
-  assert.match(guides, /\.tabs \{ padding:\s*2px 0; margin-bottom:\s*4px; \}/);
+  assert.match(guides, /\.tabs \{ padding:\s*2px 0; margin-bottom:\s*2px; \}/);
 });
