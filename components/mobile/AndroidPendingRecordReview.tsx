@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { normalizeLocalImageBlob } from "@/lib/local-image-blob";
 import { supabase } from "@/lib/supabase";
 import AppConfirmDialog from "@/components/mobile/AppConfirmDialog";
 import {
@@ -33,7 +34,7 @@ function safelyCancelable(record: LocalRecordWithImages) {
 }
 
 export default function AndroidPendingRecordReview({
-  archiveId, owner, language, onChanged, defaultExpanded = false, focused = false, onUploadRecord,
+  archiveId, owner, language, onChanged, defaultExpanded = false, focused = false, onEditRecord, onUploadRecord,
 }: {
   archiveId: string;
   owner: LocalArchiveOwnerContext;
@@ -41,6 +42,7 @@ export default function AndroidPendingRecordReview({
   onChanged?: () => void | Promise<void>;
   defaultExpanded?: boolean;
   focused?: boolean;
+  onEditRecord?: (recordId: string) => void;
   onUploadRecord?: (recordId: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded || focused);
@@ -57,8 +59,9 @@ export default function AndroidPendingRecordReview({
     for (const record of detail?.records || []) {
       if (!pendingRecord(record)) continue;
       for (const image of record.images) {
-        if (isPendingCloudSyncStatus(image.sync.status) && image.blob instanceof Blob) {
-          urls.set(image.id, URL.createObjectURL(image.blob));
+        const blob = normalizeLocalImageBlob(image.blob, image.mime_type);
+        if (blob) {
+          urls.set(image.id, URL.createObjectURL(blob));
         }
       }
     }
@@ -131,43 +134,45 @@ export default function AndroidPendingRecordReview({
     {!focused ? <button type="button" aria-expanded={expanded}
       onClick={() => { setExpanded((open) => !open); setSelectedId(null); setConfirmTarget(null); }}>
       {language === "zh"
-        ? (expanded ? "收起待上传记录" : "查看待上传记录（仅显示未完成同步的内容）")
+        ? (expanded ? "收起待上传记录" : "查看待上传记录")
         : (expanded ? "Hide pending records" : "View pending records only")}
     </button> : null}
     {expanded ? (
       <div style={{ padding: "8px 0" }}>
         {loading ? <p role="status">{language === "zh" ? "正在核对待上传记录…" : "Checking pending records..."}</p> : null}
         {!loading && !error && pending.length === 0 ? (
-          <p role="status">{language === "zh" ? "这里没有待上传记录；项目属性或上传队列可能仍有待处理项目。" : "No pending records; project changes may still be pending."}</p>
+          <p role="status">{language === "zh" ? "暂无待上传记录。" : "No pending records; project changes may still be pending."}</p>
         ) : null}
         {pending.map((record) => {
-          const opened = selectedId === record.id;
+          const opened = focused || selectedId === record.id;
           const outstandingPhotos = record.images.filter((image) =>
             isPendingCloudSyncStatus(image.sync.status)).length;
           return <div key={record.id} data-w5-pending-record-id={record.id}
             style={{ borderTop: "1px solid #dfe7dc", padding: "9px 0" }}>
-            <button type="button" onClick={() => setSelectedId(opened ? null : record.id)}
+            {!focused && <button type="button" onClick={() => setSelectedId(opened ? null : record.id)}
               aria-expanded={opened} style={{ display: "block", textAlign: "left", width: "100%" }}>
               {(record.note || "").trim().slice(0, 45) ||
                 (language === "zh" ? "未填写文字的记录" : "Record without text")}
               {" · "}{outstandingPhotos}{language === "zh" ? "张照片待上传" : " photos pending"}
-              {" · "}{record.sync.status === "failed" ? (language === "zh" ? "上传失败" : "Failed")
-                : (language === "zh" ? "待处理" : "Pending")}
-            </button>
+              {" · "}{language === "zh" ? "待上传" : "Pending upload"}
+            </button>}
             {opened ? <div style={{ padding: "8px 0" }}>
-              <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-                {record.note || (language === "zh" ? "（仅照片记录）" : "(Photo-only record)")}
-              </p>
-              <p>{language === "zh" ? "记录时间：" : "Record time: "}{record.record_time}</p>
-              {outstandingPhotos > 0 ? <div data-w5-pending-photo-preview="true"
+              {record.note && <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+                {record.note}
+              </p>}
+              <p>{language === "zh" ? "记录时间：" : "Record time: "}{new Date(record.record_time).toLocaleString(language === "zh" ? "zh-CN" : "en")}</p>
+              {record.images.length > 0 ? <div data-w5-pending-photo-preview="true"
                 style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {record.images.filter((image) => isPendingCloudSyncStatus(image.sync.status)).map((image) => (
+                {record.images.map((image) => (
                   imageUrls.has(image.id) ? <img key={image.id} src={imageUrls.get(image.id)!}
                     alt={language === "zh" ? "待上传照片" : "Pending photo"}
                     style={{ maxWidth: 120, maxHeight: 120, objectFit: "contain" }} />
                     : <span key={image.id}>{language === "zh" ? "照片暂不可预览" : "Photo preview unavailable"}</span>
                 ))}
               </div> : null}
+              {onEditRecord && record.sync.status === "pending-cloud-sync" && !record.sync.attempt_count ? (
+                <button type="button" disabled={Boolean(busyId)} onClick={() => onEditRecord(record.id)}>{language === "zh" ? "编辑" : "Edit"}</button>
+              ) : null}
               {onUploadRecord ? (
                 <button type="button" disabled={Boolean(busyId)} onClick={() => void upload(record)}>
                   {language === "zh" ? "上传" : "Upload"}

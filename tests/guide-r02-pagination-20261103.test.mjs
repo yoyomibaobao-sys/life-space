@@ -82,7 +82,7 @@ test("Plus RPC client is server-gated, never falls back to old full-table SELECT
  assert.doesNotMatch(plant,/supabase\.from\("plant_care_guides"\)/);
  assert.doesNotMatch(plant,/supabase\.from\("plant_growth_cycle"\)/);
  assert.match(ordinary,/get_member_guide_content/);
- assert.match(ordinary,/if \(!user\) \{[\s\S]*?return;\s*\}[\s\S]*?Promise\.resolve\(supabase\.rpc\("get_member_guide_content"/);
+ assert.match(ordinary,/authPromise\.then\(async \(\{ data \}\) => data\.user && !cancelled\s*\? await supabase\.rpc\("get_member_guide_content"/);
  assert.match(ordinary,/Array\.isArray\(\(rawFull as PublicGuideContent\)\.parameters\)/);
  assert.match(sql,/p_species_id uuid, p_language text default 'zh'/);
  assert.match(sql,/'parameters'/);assert.match(sql,/'growth_cycle'/);assert.match(sql,/'care_guide'/);

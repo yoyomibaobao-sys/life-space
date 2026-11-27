@@ -402,6 +402,9 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
         return;
       }
       const authPromise = supabase.auth.getUser().catch(() => ({ data: { user: null }, error: true }));
+      const memberRequest = authPromise.then(async ({ data }) => data.user && !cancelled
+        ? await supabase.rpc("get_member_guide_content", { p_id: id, p_language: language })
+        : { data: null, error: null }).catch((error: unknown) => ({ data: null, error }));
       const extended = await supabase.rpc("get_public_guide_catalog", { p_id: id }).maybeSingle();
 
       let row = extended.data as PublicGuideEntry | null;
@@ -451,8 +454,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
       }
       void Promise.resolve(supabase.from("user_guide_interests").select("guide_id").eq("user_id", user.id).eq("guide_id", row.id).maybeSingle())
         .then((result) => { if (!cancelled) setSaved(Boolean(result.data)); }).catch(() => undefined);
-      const memberResult = await Promise.resolve(supabase.rpc("get_member_guide_content", { p_id: row.id, p_language: language }))
-        .catch((error: unknown) => ({ data: null, error }));
+      const memberResult = await memberRequest;
       if (memberResult.error) console.warn("load member guide content failed:", memberResult.error);
       const rawFull = memberResult.error ? null : memberResult.data;
       const fullContent = rawFull && typeof rawFull === "object" && !Array.isArray(rawFull)
@@ -539,6 +541,10 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
   const rawNewProjectHref = displayEntry
     ? `/archive/new?category=${encodeURIComponent(displayEntry.category)}&system_name=${encodeURIComponent(displayEntry.name)}`
     : "/archive/new";
+  const handleCreateProject = displayEntry && onCreate ? (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    onCreate(offlineGuide || { label: displayEntry.name, category: displayEntry.category, source: "public_guide", id: displayEntry.id });
+  } : undefined;
   const newProjectHref = signedIn
     ? rawNewProjectHref
     : buildLoginHref(rawNewProjectHref);
@@ -621,7 +627,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
         onBack={onBack || (() => window.history.back())}
         ariaLabel={t.nav.back}
         right={
-          <InternalLink href={newProjectHref} onClick={offline && offlineGuide && onCreate ? (event) => { event.preventDefault(); onCreate(offlineGuide); } : undefined} className={styles.mobileNewProject}>
+          <InternalLink href={newProjectHref} data-shell-handled={handleCreateProject ? "true" : undefined} onClick={handleCreateProject} className={styles.mobileNewProject}>
             {copy.newProject}
           </InternalLink>
         }
@@ -632,7 +638,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
           <InternalLink href={fallbackHref} className={styles.desktopBack}>
             <UiIcon name="arrow-left" size={15} /> {copy.back}
           </InternalLink>
-          <InternalLink href={newProjectHref} onClick={offline && offlineGuide && onCreate ? (event) => { event.preventDefault(); onCreate(offlineGuide); } : undefined} className={styles.desktopNewProject}>
+          <InternalLink href={newProjectHref} data-shell-handled={handleCreateProject ? "true" : undefined} onClick={handleCreateProject} className={styles.desktopNewProject}>
             {copy.newProject}
           </InternalLink>
         </div>

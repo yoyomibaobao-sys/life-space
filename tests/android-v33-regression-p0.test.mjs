@@ -82,7 +82,7 @@ test("Pending project cancellation uses current owner, screen and queue identity
   assert.match(shell, /pendingCancelTarget\.ownerId === authenticatedOwnerContext\.userId/);
   assert.match(shell, /pendingCancelTarget\.ownerId === cloudUserId && pendingCancelTarget\.screen === screen/);
   assert.match(shell, /item\.summaries\[0\]\.local_archive_id === pendingCancelTarget\.archiveId/);
-  assert.match(shell, /item\.local\?\.local_owner_user_id === pendingCancelTarget\.ownerId/);
+  assert.match(shell, /\(item\.local \|\| item\.cache\)\?\.local_owner_user_id === pendingCancelTarget\.ownerId/);
   assert.match(shell, /<AppConfirmDialog\s+open=\{Boolean\(confirmedPendingProject\)\}/);
   assert.match(shell, /await cancelNeverUploadedCloudArchive\(item\.summaries\[0\]\.local_archive_id, authenticatedOwnerContext\)/);
   assert.doesNotMatch(shell, /window\.confirm\(language === "zh" \? "确认取消尚未上传/);

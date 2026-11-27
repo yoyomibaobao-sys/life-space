@@ -2,6 +2,7 @@ import { normalizePlantingRegion, type PlantingRegion } from "@/lib/planting-reg
 import { loadDefaultRecordLocation, normalizeRecordLocation, type RecordLocation } from "@/lib/record-location";
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import { isLocalDateBefore, toLocalDateEndIso } from "@/lib/archive-cycle-dates";
+import type { PhotoQuality } from "@/lib/record-photo-quality";
 import { standardizeRecordPhotoFile } from "@/lib/image-compression";
 import { localImageBlobForIndexedDb, normalizeLocalImageBlob } from "@/lib/local-image-blob";
 import { commitSafContent, readSafCommitted, type SafContent, type SafState } from "@/lib/local-saf-repository";
@@ -1955,6 +1956,11 @@ export async function listLocalArchiveCycleTrash(
     );
 }
 
+function isOwnerCloudSnapshot(row: LocalArchive, owner?: LocalArchiveOwnerContext | null) {
+  return Boolean(owner?.snapshotOnly && owner.userId && row.local_owner_user_id === owner.userId &&
+    classifyLegacySafArchive(row) !== "local-project");
+}
+
 export async function listVisibleLocalArchiveSummaries(
   ownerContext?: LocalArchiveOwnerContext | null,
   options: { includePendingCloud?: boolean } = {},
@@ -1968,7 +1974,7 @@ export async function listVisibleLocalArchiveSummaries(
   ]);
   const currentUserId = getOwnerUserId(ownerContext);
 
-  const normalizedArchives = archives.filter((row) => (safConnected || !row.saf_local_space_id) &&
+  const normalizedArchives = archives.filter((row) => (safConnected || !row.saf_local_space_id || isOwnerCloudSnapshot(row, ownerContext)) &&
       !(row.saf_local_space_id && classifyLegacySafArchive(row) !== "local-project" &&
         row.local_owner_user_id !== currentUserId))
     .map(normalizeLocalArchive);
@@ -2027,12 +2033,13 @@ export async function listPendingCloudSyncSummaries(
     getAllRows<LocalImage>(IMAGE_STORE, ownerContext?.snapshotOnly),
   ]);
 
-  if (!safConnected && archives.some((archive) => archive.saf_local_space_id &&
+  if (!ownerContext?.snapshotOnly && !safConnected && archives.some((archive) => archive.saf_local_space_id &&
       archive.local_owner_user_id === getOwnerUserId(ownerContext) &&
       classifyLegacySafArchive(archive) !== "local-project")) {
     throw Error("Reconnect your LifeSpace data folder to read pending cloud data.");
   }
   return archives
+    .filter(row => !row.saf_local_space_id || safConnected || isOwnerCloudSnapshot(row, ownerContext))
     .map(normalizeLocalArchive)
     .filter(
       (archive) =>
@@ -2408,12 +2415,13 @@ export async function listVisibleCloudOfflineArchiveSummaries(
     getAllRows<LocalImage>(IMAGE_STORE, ownerContext?.snapshotOnly),
   ]);
 
-  if (!safConnected && archives.some((archive) => archive.saf_local_space_id &&
+  if (!ownerContext?.snapshotOnly && !safConnected && archives.some((archive) => archive.saf_local_space_id &&
       archive.local_owner_user_id === getOwnerUserId(ownerContext) &&
       resolveLocalArchiveRole(archive) === "cloud-offline-cache")) {
     throw Error("Reconnect your LifeSpace data folder to read cloud offline data.");
   }
   const summaries = archives
+    .filter(row => !row.saf_local_space_id || safConnected || isOwnerCloudSnapshot(row, ownerContext))
     .map(normalizeLocalArchive)
     .filter(
       (archive) =>
@@ -3515,14 +3523,35 @@ export async function convertPendingCloudProjectToOfflineCache(
 
 export async function updateLocalRecordFields(recordId: string, updates: {
   note?: string | null; record_time?: string | null; cycle_id?: string | null;
+  remove_image_ids?: string[];
   visibility?: "public" | "private" | null;
-  location?: RecordLocation | null; image_files?: File[]; image_captured_at?: Array<string | null>;
+  location?: RecordLocation | null; image_files?: File[]; image_qualities?: PhotoQuality[]; image_captured_at?: Array<string | null>;
 }, ownerContext?: LocalArchiveOwnerContext | null) {
   await ensureLocalSafReadable();
   const files = updates.image_files || [];
+  const removed = new Set(updates.remove_image_ids || []);
+  function checkDraft(archive: LocalArchive, record: LocalRecord, images: LocalImage[]) {
+    if (isPendingCloudSyncStatus(record.sync.status) || removed.size) {
+      if (!ownerContext?.userId || archive.local_owner_user_id !== ownerContext.userId ||
+          archive.status !== "active" || record.sync.status !== "pending-cloud-sync" || record.sync.attempt_count) {
+        throw Error("待上传记录只读，请核对账号和上传状态。");
+      }
+      const attached = images.filter(image => image.record_id === recordId && image.archive_id === archive.id);
+      for (const id of removed) {
+        const image = attached.find(image => image.id === id);
+        if (!image) throw Error("照片已变更，请重新打开记录。");
+        const sync = normalizeLocalSyncMeta(image.sync);
+        if (sync.cloud_record_id && sync.cloud_record_id !== record.sync.cloud_record_id) throw Error("照片归属不匹配。");
+        // On an unsent photo the record ID identifies its parent, not a media receipt.
+        assertNeverUploaded({ ...sync, cloud_record_id: null }, "upload-image");
+      }
+      const count = attached.length - removed.size + files.length;
+      if (count > 10 || (!count && !(updates.note ?? record.note)?.trim())) throw Error("请保留文字或照片，照片最多10张。");
+    }
+  }
   if (files.length > 10) throw new Error("每次最多添加10张照片。");
   // Decode before the transaction. Conversion failure must not commit partial edits.
-  const prepared = await Promise.all(files.map((file, index) => prepareLocalImage(file, index)));
+  const prepared = await Promise.all(files.map((file, index) => prepareLocalImage(file, index, updates.image_qualities?.[index])));
   const currentRecord = await getRowById<LocalRecord>(RECORD_STORE, recordId);
   if (currentRecord) {
     const cloudParent = await getRowById<LocalArchive>(ARCHIVE_STORE, currentRecord.archive_id);
@@ -3535,6 +3564,7 @@ export async function updateLocalRecordFields(recordId: string, updates: {
         const archive = current.archive;
         const cycleId = updates.cycle_id === undefined ? record.cycle_id || null
           : normalizeOptionalText(updates.cycle_id);
+        checkDraft(archive, record, current.images);
         assertWritableCachedCloudRecord(archive, record, ownerContext);
         if (cycleId && !archive.cycles?.some((cycle) => cycle.id === cycleId)) {
           throw Error("选择的期次不属于这个本地项目。");
@@ -3583,7 +3613,7 @@ export async function updateLocalRecordFields(recordId: string, updates: {
           : { ...archive, updated_at: timestamp };
         return { value: nextRecord, next: { archive: nextArchive,
           records: current.records.map((row) => row.id === recordId ? nextRecord : row),
-          images: [...current.images, ...added] } };
+          images: [...current.images.filter(image => !removed.has(image.id)), ...added] } };
       });
       if (saved) { await refreshOptionalSafUsageHints(); return saved.value; }
     }
@@ -3627,6 +3657,7 @@ export async function updateLocalRecordFields(recordId: string, updates: {
     });
     if (durable) { await refreshOptionalSafUsageHints(); return durable.value; }
   }
+  const storedImageBlobs = await Promise.all(prepared.map(image => localImageBlobForIndexedDb(image.blob)));
   const db = await openLocalDb();
   const transaction = db.transaction([RECORD_STORE, ARCHIVE_STORE, IMAGE_STORE], "readwrite");
   const done = transactionDone(transaction);
@@ -3637,12 +3668,13 @@ export async function updateLocalRecordFields(recordId: string, updates: {
     const imageStore = transaction.objectStore(IMAGE_STORE);
     const record = await requestToPromise<LocalRecord | undefined>(recordStore.get(recordId));
     if (!record) throw new Error("本地记录不存在。");
-    if (isPendingCloudSyncStatus(record.sync?.status)) {
-      throw Error("待上传记录只读，请先上传或安全删除。");
-    }
     const archive = await requestToPromise<LocalArchive | undefined>(archiveStore.get(record.archive_id));
     if (!archive) throw new Error("本地项目不存在。");
     const normalizedArchive = normalizeLocalArchive(archive);
+    if (isPendingCloudSyncStatus(record.sync.status) || removed.size) {
+      checkDraft(normalizedArchive, record, await requestToPromise<LocalImage[]>(imageStore.getAll()));
+      for (const id of removed) await requestToPromise(imageStore.delete(id));
+    }
     const nextCycleId = updates.cycle_id === undefined ? record.cycle_id || null : normalizeOptionalText(updates.cycle_id);
     assertWritableCachedCloudRecord(normalizedArchive, record, ownerContext);
     if (updates.cycle_id !== undefined && nextCycleId && !normalizedArchive.cycles?.some((cycle) => cycle.id === nextCycleId)) throw new Error("选择的期次不属于这个本地项目。");
@@ -3691,7 +3723,7 @@ export async function updateLocalRecordFields(recordId: string, updates: {
       const order = Math.max(-1, ...previous.filter((image) => image.record_id === recordId).map((image) => image.sort_order || 0)) + 1;
       for (let index = 0; index < prepared.length; index++) {
         const capturedAt = updates.image_captured_at?.[index];
-        await requestToPromise(imageStore.add({ ...prepared[index], id: createId("local_image"), archive_id: record.archive_id, record_id: recordId,
+        await requestToPromise(imageStore.add({ ...prepared[index], blob: storedImageBlobs[index], id: createId("local_image"), archive_id: record.archive_id, record_id: recordId,
           sort_order: order + index, created_at: timestamp, captured_at: capturedAt && !Number.isNaN(new Date(capturedAt).getTime()) ? new Date(capturedAt).toISOString() : null,
           local_only: true,
           sync: archiveParticipatesInPendingCloudSync(normalizedArchive)
@@ -3705,7 +3737,7 @@ export async function updateLocalRecordFields(recordId: string, updates: {
                   : nextRecord.sync.client_operation_id,
               })
             : localSyncMeta(),
-        } satisfies LocalImage));
+        } satisfies Omit<LocalImage, "blob"> & { blob: typeof storedImageBlobs[number] }));
       }
     }
     await requestToPromise(recordStore.put(nextRecord));
@@ -4449,7 +4481,7 @@ export async function resolveLocalArchiveDetail(
   ]);
 
   if (!archive) return { status: "not-found" as const, detail: null };
-  if (archive.saf_local_space_id && !safConnected) {
+  if (archive.saf_local_space_id && !safConnected && !isOwnerCloudSnapshot(archive, ownerContext)) {
     throw Error("Reconnect your LifeSpace data folder to read this project.");
   }
   const normalizedArchive = normalizeLocalArchive(archive);
@@ -5677,10 +5709,10 @@ function ensureLocalImageFile(file: File) {
   }
 }
 
-async function prepareLocalImage(file: File, sortOrder: number) {
+async function prepareLocalImage(file: File, sortOrder: number, quality: PhotoQuality = "standard") {
   ensureLocalImageFile(file);
 
-  const standard = await standardizeRecordPhotoFile(file);
+  const standard = await standardizeRecordPhotoFile(file, { quality, requireSanitized: quality !== "standard" });
 
   return {
     blob: standard.file,
@@ -6314,6 +6346,7 @@ export async function createLocalRecord(input: {
   end_cycle_after_record?: boolean;
   note: string;
   image_files?: File[];
+  image_qualities?: PhotoQuality[];
   image_captured_at?: Array<string | null>;
   record_time?: string;
   visibility?: "public" | "private" | null;
@@ -6344,7 +6377,7 @@ export async function createLocalRecord(input: {
     sync: localSyncMeta(),
   };
   const preparedImages = await Promise.all(
-    files.map((file, index) => prepareLocalImage(file, index))
+    files.map((file, index) => prepareLocalImage(file, index, input.image_qualities?.[index]))
   );
   const images: LocalImage[] = preparedImages.map((image, index) => ({
     id: createId("local_image"),
@@ -6912,15 +6945,21 @@ function assertSafNeverUploadedCloudArchive(
   }
 }
 export async function cancelNeverUploadedCloudArchive(
-  archiveId: string, ownerContext: LocalArchiveOwnerContext
+  archiveId: string, ownerContext: LocalArchiveOwnerContext, discardFailedEmptyDraft = false
 ) {
   const ownerId = getOwnerUserId(ownerContext);
   if (!ownerId) throw Error("必须使用当前登录账号才能删除待上传项目。");
   await ensureCloudSafReadable(ownerContext);
+  function isFailedEmptyDraft(archive: LocalArchive, records: LocalRecord[], images: LocalImage[]) {
+    return discardFailedEmptyDraft && archive.id === archiveId && archive.local_owner_user_id === ownerId &&
+      !archive.source_cloud_archive_id && !archive.local_cloud_transfer && archive.sync.status === "failed" &&
+      archive.sync.operation_kind === "create-archive" && records.length === 0 && images.length === 0;
+  }
   const source = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
   if (source?.saf_local_space_id) {
-    const removed = await removeCloudSafArchive(ownerId, archiveId, (state) =>
-      assertSafNeverUploadedCloudArchive(state, archiveId, ownerId));
+    const removed = await removeCloudSafArchive(ownerId, archiveId, (state) => {
+      if (!isFailedEmptyDraft(state.archive, state.records, state.images)) assertSafNeverUploadedCloudArchive(state, archiveId, ownerId);
+    });
     if (!removed) throw Error("SAF原件未能安全删除，已保留数据。");
     await refreshOptionalSafUsageHints();
     return;
@@ -6943,9 +6982,9 @@ export async function cancelNeverUploadedCloudArchive(
         throw Error("项目归属或持久化来源不允许安全取消，已保留原件。");
       }
       const archive = normalizeLocalArchive(raw);
-      assertNeverUploaded(archive.sync, "create-archive");
       const children = records.filter((item) => item.archive_id === archiveId);
       const photos = images.filter((item) => item.archive_id === archiveId);
+      if (!isFailedEmptyDraft(archive, children, photos)) assertNeverUploaded(archive.sync, "create-archive");
       for (const item of children) {
         const sync = normalizeLocalSyncMeta(item.sync);
         if (sync.status === "pending-cloud-sync") assertNeverUploaded(sync, "create-record");

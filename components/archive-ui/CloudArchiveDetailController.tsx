@@ -310,15 +310,22 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
     } finally { setBusy(false); }
   }
 
+  const quarantined = suspended || authPaused || !hasLiveAccess() ||
+    writeProof.current.authority !== auth || writeProof.current.epoch !== access.current.epoch ||
+    (editorAuthorized.current && !hasPublicationAccess());
+  const [showVerificationAction, setShowVerificationAction] = useState(false);
+  useEffect(() => {
+    if (!quarantined || suspended) { setShowVerificationAction(false); return; }
+    const timer = window.setTimeout(() => setShowVerificationAction(true), 1800);
+    return () => window.clearTimeout(timer);
+  }, [quarantined, suspended, archiveId, userId]);
   if (identityRevoked || authDenied || rejectedOwner.current) {
     return <ArchiveProjectDetailStatus status="forbidden"
       title={language === "zh" ? "身份尚未核验" : "Identity not verified"}
       message={language === "zh" ? "请重新验证当前账号后再查看项目。" : "Verify the current account before viewing the project."}
       backLabel={t.nav.back} onBack={onBack} />;
   }
-  const quarantined = suspended || authPaused || !hasLiveAccess() ||
-    writeProof.current.authority !== auth || writeProof.current.epoch !== access.current.epoch ||
-    (editorAuthorized.current && !hasPublicationAccess());
+
 
   if (status === "loading") return <ArchiveProjectDetailLoading>{copy.loading}</ArchiveProjectDetailLoading>;
   if (status !== "ready" || !detail) return <ArchiveProjectDetailStatus
@@ -655,7 +662,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
         }, false);
       }}
     />
-  </fieldset>{quarantined && !suspended ? <p role="status">
+  </fieldset>{quarantined && !suspended && showVerificationAction ? <p role="status">
     {language === "zh" ? "账号与项目权限正在重新核验，编辑内容已暂停。" : "Revalidating account and project access. The editor is paused."}
     <button type="button" onClick={() => { void revalidateAndroidAuthSession().then(() => revalidateRecordPublication()).catch(() => undefined); }}>
       {language === "zh" ? "重新验证" : "Verify again"}
