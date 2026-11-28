@@ -700,6 +700,66 @@ test("logout keeps pending user-created work and hides it from another owner", a
   );
 });
 
+test("pre-upload pending cloud project edits preserve the queue identity, records and photos", async () => {
+  await fixture();
+  const initial = await dbModule.createLocalArchive({
+    title: "原项目名称", category: "system", system_name: "原关联指引",
+    local_owner_user_id: owner.userId, local_owner_email: owner.email,
+    sync_destination: "pending-cloud", migration_visibility: "private",
+  });
+  const operationId = initial.sync.client_operation_id;
+  await dbModule.createLocalRecord({
+    archive_id: initial.id, note: "需要保留的历史记录", image_files: [photo("保留原图.gif")],
+  });
+  const before = await dbModule.getLocalArchiveDetail(initial.id, owner);
+  const recordId = before.records[0].id;
+  const recordOperationId = before.records[0].sync.client_operation_id;
+  const imageId = before.records[0].images[0].id;
+  const imageOperationId = before.records[0].images[0].sync.client_operation_id;
+
+  const updated = await dbModule.updateLocalArchiveFields(initial.id, {
+    title: "修改后的项目名称",
+    category: "plant",
+    system_name: "番茄",
+    species_name: "番茄",
+    plant_id: "11111111-1111-4111-8111-111111111111",
+    plant_slug: "tomato",
+    planting_region: { country_code: "CN", country_name: "中国", region_name: "浙江省", city_name: "宁波市" },
+    migration_visibility: "public",
+    status: "ended",
+    ended_at: "2026-11-28T04:00:00.000Z",
+  }, owner);
+  const after = await dbModule.getLocalArchiveDetail(initial.id, owner);
+  const summaries = await dbModule.listPendingCloudSyncSummaries(owner);
+
+  assert.equal(updated.id, initial.id);
+  assert.equal(updated.sync.client_operation_id, operationId);
+  assert.equal(updated.sync.operation_kind, "create-archive");
+  assert.equal(updated.sync.status, "pending-cloud-sync");
+  assert.equal(updated.sync.attempt_count, 0);
+  assert.equal(updated.migration_visibility, "public");
+  assert.equal(updated.title, "修改后的项目名称");
+  assert.equal(updated.category, "plant");
+  assert.equal(updated.plant_id, "11111111-1111-4111-8111-111111111111");
+  assert.equal(updated.planting_region.city_name, "宁波市");
+  assert.equal(updated.status, "ended");
+  assert.equal(updated.ended_at, "2026-11-28T04:00:00.000Z");
+  assert.equal(after.archive.id, initial.id);
+  assert.equal(after.records.length, 1);
+  assert.equal(after.records[0].id, recordId);
+  assert.equal(after.records[0].sync.client_operation_id, recordOperationId);
+  assert.equal(after.records[0].images.length, 1);
+  assert.equal(after.records[0].images[0].id, imageId);
+  assert.equal(after.records[0].images[0].sync.client_operation_id, imageOperationId);
+  assert.deepEqual(new Uint8Array(await after.records[0].images[0].blob.arrayBuffer()), photoBytes);
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0].local_archive_id, initial.id);
+  assert.equal(summaries[0].cloud_archive_id, operationId);
+  assert.equal(summaries[0].archive_create_pending, true);
+  await assert.rejects(() => dbModule.updateLocalArchiveFields(initial.id, { group_name: "不可改" }, owner), /分组和分期只读/);
+  await assert.rejects(() => dbModule.updateLocalArchiveFields(initial.id, { cycle_enabled: true }, owner), /分组和分期只读/);
+});
+
 test("F01: in-flight project create freezes title, Owner and privacy until receipt", async () => {
   await fixture();
   const initial = await dbModule.createLocalArchive({
@@ -711,9 +771,13 @@ test("F01: in-flight project create freezes title, Owner and privacy until recei
   await dbModule.updateLocalArchiveCloudSyncOperation(
     initial.id, id, { status: "uploading", cloud_archive_id: id }, owner);
   await assert.rejects(() => dbModule.updateLocalArchiveFields(
-    initial.id, { title: "上传中改名" }, owner), /待上传项目只读/);
+    initial.id, { title: "上传中改名", migration_visibility: "public", status: "ended",
+      ended_at: "2026-11-28T04:00:00.000Z" }, owner), /待上传项目只读/);
   const before = await dbModule.getLocalArchiveDetail(initial.id, owner);
   assert.equal(before.archive.title, "before-upload");
+  assert.equal(before.archive.migration_visibility, "private");
+  assert.equal(before.archive.status, "active");
+  assert.equal(before.archive.ended_at || null, null);
   assert.equal(before.archive.sync.client_operation_id, id);
   assert.equal(before.archive.sync.attempt_count, 1);
   const mapped = await dbModule.persistLocalCloudArchiveMapping(initial.id, id, id, owner, initial);

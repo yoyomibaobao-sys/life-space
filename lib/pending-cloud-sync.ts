@@ -1049,22 +1049,14 @@ async function syncCreateArchive(params: {
   userId: string;
   ownerContext: LocalArchiveOwnerContext;
 }) {
-  const { archive } = params.detail;
-  const operationId = getOperationId(archive);
-  const visibility =
-    archive.migration_visibility === "private" ? "private" : "public";
-  const isPublic = visibility === "public";
-  const speciesId =
-    archive.category === "plant" && isStableCloudOperationId(archive.plant_id)
-      ? archive.plant_id
-      : null;
-  const systemName = cleanText(archive.system_name) || cleanText(archive.species_name);
-  if (!systemName) {
+  const initialArchive = params.detail.archive;
+  const operationId = getOperationId(initialArchive);
+  if (!cleanText(initialArchive.system_name) && !cleanText(initialArchive.species_name)) {
     throw new Error("关联指引不能为空。");
   }
 
   const claimed = await updateLocalArchiveCloudSyncOperation(
-    archive.id,
+    initialArchive.id,
     operationId,
     {
       status: "uploading",
@@ -1073,6 +1065,16 @@ async function syncCreateArchive(params: {
     params.ownerContext
   );
   assertUploadClaim(claimed, operationId);
+  // The atomic upload claim returns the latest archive row. Use it rather than
+  // the earlier list snapshot so edits completed just before the claim are
+  // included in the create payload; edits after the claim are rejected locally.
+  const archive = claimed;
+  const visibility = archive.migration_visibility === "private" ? "private" : "public";
+  const isPublic = visibility === "public";
+  const speciesId = archive.category === "plant" && isStableCloudOperationId(archive.plant_id)
+    ? archive.plant_id : null;
+  const systemName = cleanText(archive.system_name) || cleanText(archive.species_name);
+  if (!systemName) throw new Error("关联指引不能为空。");
 
   try {
     const taxonomy = resolvePendingCloudTaxonomy(archive, await loadCloudProjectTaxonomy(params.userId));
@@ -1098,6 +1100,8 @@ async function syncCreateArchive(params: {
         archive_summary: archive.archive_summary || null,
         cycle_enabled: Boolean(archive.cycle_enabled),
         next_cycle_name: archive.next_cycle_name || null,
+        status: archive.status === "ended" ? "ended" : "active",
+        ended_at: archive.status === "ended" ? archive.ended_at || null : null,
         user_id: params.userId,
         is_public: isPublic,
         default_record_visibility: visibility,

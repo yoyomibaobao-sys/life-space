@@ -457,6 +457,45 @@ test("editing a synced saved-copy record first persists its update-record operat
   assert.equal((await local.getLocalArchiveDetail("saved-edit", { userId: ownerA })).records[0].note, "new");
 });
 
+test("pre-upload pending cloud project edits commit to SAF and preserve upload identity and media", async () => {
+  await project();
+  const owner = { userId: ownerA };
+  const archive = await local.createLocalArchive({ title: "原项目", category: "system",
+    system_name: "原关联指引", local_owner_user_id: ownerA,
+    sync_destination: "pending-cloud", migration_visibility: "private" });
+  const operationId = archive.sync.client_operation_id;
+  await local.createLocalRecord({ archive_id: archive.id, note: "原记录",
+    image_files: [new File([Uint8Array.of(1, 3, 5, 7)], "original.jpg", { type: "image/jpeg" })] });
+  const before = await local.getLocalArchiveDetail(archive.id, owner);
+  const recordId = before.records[0].id;
+  const recordOperationId = before.records[0].sync.client_operation_id;
+  const imageId = before.records[0].images[0].id;
+  const changed = await local.updateLocalArchiveFields(archive.id, {
+    title: "修改后的项目", category: "plant", system_name: "番茄", species_name: "番茄",
+    plant_id: "11111111-1111-4111-8111-111111111111", plant_slug: "tomato",
+    planting_region: { country_code: "CN", country_name: "中国", region_name: "浙江省", city_name: "宁波市" },
+    migration_visibility: "public", status: "ended", ended_at: "2026-11-28T04:00:00.000Z",
+  }, owner);
+  const after = await local.getLocalArchiveDetail(archive.id, owner);
+  const entry = (await committed()).source.entries.find((row) => row.archive.id === archive.id);
+  assert.equal(changed.id, archive.id);
+  assert.equal(changed.sync.client_operation_id, operationId);
+  assert.equal(changed.sync.cloud_archive_id, operationId);
+  assert.equal(changed.migration_visibility, "public");
+  assert.equal(changed.status, "ended");
+  assert.equal(changed.ended_at, "2026-11-28T04:00:00.000Z");
+  assert.equal(after.records.length, 1);
+  assert.equal(after.records[0].id, recordId);
+  assert.equal(after.records[0].sync.client_operation_id, recordOperationId);
+  assert.equal(after.records[0].images[0].id, imageId);
+  assert.deepEqual(new Uint8Array(await after.records[0].images[0].blob.arrayBuffer()), Uint8Array.of(1, 3, 5, 7));
+  assert.equal(entry.archive.sync.client_operation_id, operationId);
+  assert.equal(entry.records[0].id, recordId);
+  assert.equal(entry.images[0].id, imageId);
+  await assert.rejects(() => local.updateLocalArchiveFields(archive.id, { group_name: "不允许" }, owner), /分组和分期只读/);
+  await assert.rejects(() => local.updateLocalArchiveFields(archive.id, { cycle_enabled: true }, owner), /分组和分期只读/);
+});
+
 test("pending cloud write failure before marker keeps the old mirror and head", async () => {
   await project();
   const previous = (await committed()).commit.revision;

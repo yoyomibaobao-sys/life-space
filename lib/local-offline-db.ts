@@ -818,6 +818,49 @@ export function isPendingCloudCreateArchive(archive: LocalArchive) {
   );
 }
 
+export function canEditPendingCloudCreateArchive(
+  archive: Pick<LocalArchive, "local_role" | "source_cloud_archive_id" | "sync">
+) {
+  return archive.local_role !== "cloud-offline-cache" &&
+    archive.sync.operation_kind === "create-archive" &&
+    archive.sync.status === "pending-cloud-sync" &&
+    (archive.sync.attempt_count || 0) === 0 &&
+    !archive.sync.last_attempt_outcome &&
+    !normalizeOptionalText(archive.source_cloud_archive_id) &&
+    Boolean(normalizeOptionalText(archive.sync.client_operation_id)) &&
+    (!normalizeOptionalText(archive.sync.cloud_archive_id) ||
+      normalizeOptionalText(archive.sync.cloud_archive_id) === normalizeOptionalText(archive.sync.client_operation_id));
+}
+
+function assertLocalArchiveFieldsEditable(
+  archive: Pick<LocalArchive, "local_role" | "source_cloud_archive_id" | "migration_visibility" | "local_owner_user_id" | "local_cloud_transfer" | "sync">,
+  updates: {
+    migration_visibility?: "private" | "public" | null;
+    subcategory?: string | null;
+    group_name?: string | null;
+    intended_cloud_sub_tag_id?: string | null;
+    intended_cloud_group_tag_id?: string | null;
+    cycle_enabled?: boolean;
+    next_cycle_name?: string | null;
+  },
+  owner?: LocalArchiveOwnerContext | null,
+) {
+  const editablePendingCreate = canEditPendingCloudCreateArchive(archive) && !archive.local_cloud_transfer && Boolean(owner?.userId && owner.userId === archive.local_owner_user_id);
+  if (isPendingCloudSyncStatus(archive.sync.status) && !editablePendingCreate) {
+    throw Error("待上传项目只读，请先上传或安全删除。");
+  }
+  if (updates.migration_visibility !== undefined &&
+      updates.migration_visibility !== archive.migration_visibility && !editablePendingCreate) {
+    throw Error("待上传项目可见范围只能在首次上传前修改。");
+  }
+  if (editablePendingCreate && [
+    updates.subcategory, updates.group_name, updates.intended_cloud_sub_tag_id,
+    updates.intended_cloud_group_tag_id, updates.cycle_enabled, updates.next_cycle_name,
+  ].some((value) => value !== undefined)) {
+    throw Error("待上传项目的分组和分期只读。");
+  }
+}
+
 export function localArchiveHasPendingCloudWork(
   archive: LocalArchive,
   records: Array<Pick<LocalRecord, "archive_id" | "sync">> = [],
@@ -2825,47 +2868,36 @@ export async function updateLocalArchiveFields(
     plant_id?: string | null;
     plant_slug?: string | null;
     source?: string | null;
-  planting_region?: PlantingRegion | null;
+    planting_region?: PlantingRegion | null;
     note?: string | null;
     archive_summary?: string | null;
     cycle_enabled?: boolean;
     next_cycle_name?: string | null;
-    migration_visibility?: "private" | "public";
     status?: "active" | "ended";
     ended_at?: string | null;
+    migration_visibility?: "private" | "public" | null;
   },
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
   if (updates.planting_region != null && !normalizePlantingRegion(updates.planting_region)) {
     throw new Error("种植地区无效 / Invalid planting region.");
   }
-  function locked(archive: LocalArchive) {
-    if (!isPendingCloudSyncStatus(archive.sync.status)) return false;
-    return !ownerContext?.userId || ownerContext.userId !== archive.local_owner_user_id ||
-      archive.sync.operation_kind !== "create-archive" || archive.sync.status !== "pending-cloud-sync" ||
-      Boolean(archive.sync.attempt_count || archive.source_cloud_archive_id || archive.local_cloud_transfer);
-  }
   const cloud = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
   const savedCloudCopy = cloud?.local_role === "saved-local-copy" && Boolean(cloud.source_cloud_archive_id);
-  if (cloud && locked(cloud)) {
-    throw Error("待上传项目只读，请先上传或安全删除。");
-  }
+  if (cloud) assertLocalArchiveFieldsEditable(cloud, updates, ownerContext);
   if (cloud?.local_owner_user_id && (savedCloudCopy ||
       classifyLegacySafArchive(cloud) === "pending-cloud-user-data") &&
       isAndroidSafAvailable() && (await getLocalSafDirectory()).available) {
     const apply = (current: CloudMaterialization): { value: LocalArchive; next: CloudMaterialization } => {
       const archive = current.archive;
       if (!isLocalArchiveVisibleToOwner(archive, ownerContext)) throw Error("没有权限修改这个本地项目。");
-      if (locked(archive)) {
-        throw Error("待上传项目只读，请先上传或安全删除。");
-      }
+      assertLocalArchiveFieldsEditable(archive, updates, ownerContext);
       const optional = (key: "subcategory" | "group_name" | "system_name" | "species_name" |
         "plant_id" | "plant_slug" | "source" | "note" | "archive_summary" |
         "intended_cloud_sub_tag_id" | "intended_cloud_group_tag_id") =>
         updates[key] === undefined ? archive[key] : normalizeOptionalText(updates[key]);
       const category = updates.category == null ? archive.category : normalizeLocalArchiveCategory(updates.category);
       let next: LocalArchive = { ...archive,
-      ...(updates.migration_visibility !== undefined && archive.sync.operation_kind === "create-archive" ? { migration_visibility: updates.migration_visibility } : {}),
         title: updates.title === undefined ? archive.title : normalizeOptionalText(updates.title) || archive.title,
         category, main_category: category,
         subcategory: optional("subcategory"), group_name: optional("group_name"),
@@ -2876,6 +2908,8 @@ export async function updateLocalArchiveFields(
         intended_cloud_group_tag_id: optional("intended_cloud_group_tag_id"),
         planting_region: updates.planting_region === undefined ? archive.planting_region
           : normalizePlantingRegion(updates.planting_region),
+        migration_visibility: updates.migration_visibility === undefined ? archive.migration_visibility || null
+          : updates.migration_visibility,
         cycle_enabled: updates.cycle_enabled === undefined ? archive.cycle_enabled : Boolean(updates.cycle_enabled),
         next_cycle_name: updates.next_cycle_name === undefined ? archive.next_cycle_name
           : normalizeOptionalText(updates.next_cycle_name)?.slice(0, 80) || null,
@@ -2914,9 +2948,7 @@ export async function updateLocalArchiveFields(
   const durable = await commitManagedLocalSaf(archiveId, (content, index) => {
     const entry = content.entries[index];
     const archive = entry.archive;
-    if (locked(archive)) {
-      throw Error("待上传项目只读，请先上传或安全删除。");
-    }
+    assertLocalArchiveFieldsEditable(archive, updates, ownerContext);
     const optional = (key: "subcategory" | "group_name" | "system_name" | "species_name" |
       "plant_id" | "plant_slug" | "source" | "note" | "archive_summary" |
       "intended_cloud_sub_tag_id" | "intended_cloud_group_tag_id") =>
@@ -2924,7 +2956,6 @@ export async function updateLocalArchiveFields(
     const category = updates.category == null ? archive.category : normalizeLocalArchiveCategory(updates.category);
     const next: LocalArchive = {
       ...archive,
-      ...(updates.migration_visibility !== undefined && archive.sync.operation_kind === "create-archive" ? { migration_visibility: updates.migration_visibility } : {}),
       title: updates.title === undefined ? archive.title : normalizeOptionalText(updates.title) || archive.title,
       category, main_category: category,
       subcategory: optional("subcategory"), group_name: optional("group_name"),
@@ -2935,6 +2966,8 @@ export async function updateLocalArchiveFields(
       intended_cloud_group_tag_id: optional("intended_cloud_group_tag_id"),
       planting_region: updates.planting_region === undefined
         ? archive.planting_region : normalizePlantingRegion(updates.planting_region),
+      migration_visibility: updates.migration_visibility === undefined ? archive.migration_visibility || null
+        : updates.migration_visibility,
       cycle_enabled: updates.cycle_enabled === undefined ? archive.cycle_enabled : Boolean(updates.cycle_enabled),
       next_cycle_name: updates.next_cycle_name === undefined ? archive.next_cycle_name
         : normalizeOptionalText(updates.next_cycle_name)?.slice(0, 80) || null,
@@ -2968,12 +3001,8 @@ export async function updateLocalArchiveFields(
       await done.catch(() => undefined);
       throw new Error("没有权限修改这个本地项目。");
     }
-    if (locked(normalizedArchive)) {
-      transaction.abort();
-      await done.catch(() => undefined);
-      throw Error("待上传项目只读，请先上传或安全删除。");
-    }
     try {
+      assertLocalArchiveFieldsEditable(normalizedArchive, updates, ownerContext);
       assertWritableCachedCloudArchive(normalizedArchive, ownerContext, updates);
     } catch (error) {
       transaction.abort();
@@ -2983,7 +3012,6 @@ export async function updateLocalArchiveFields(
 
     let nextArchive: LocalArchive = {
       ...normalizedArchive,
-      ...(updates.migration_visibility !== undefined && normalizedArchive.sync.operation_kind === "create-archive" ? { migration_visibility: updates.migration_visibility } : {}),
       title:
         updates.title === undefined
           ? normalizedArchive.title
@@ -3031,6 +3059,8 @@ export async function updateLocalArchiveFields(
           ? normalizedArchive.source
           : normalizeOptionalText(updates.source),
       planting_region: updates.planting_region === undefined ? normalizedArchive.planting_region : normalizePlantingRegion(updates.planting_region),
+      migration_visibility: updates.migration_visibility === undefined
+        ? normalizedArchive.migration_visibility || null : updates.migration_visibility,
       note:
         updates.note === undefined
           ? normalizedArchive.note
@@ -4618,12 +4648,73 @@ export async function getCloudOfflineCacheByCloudSource(
       .find(
         (archive) =>
           archive.source_cloud_archive_id === sourceId &&
+          archive.trashed_at == null &&
           resolveLocalArchiveRole(archive) === "cloud-offline-cache" &&
           isLocalArchiveVisibleToOwner(archive, ownerContext)
       ) || null
   );
 }
 
+
+export async function setCloudOfflineCacheTrashed(
+  cloudArchiveId: string,
+  trashed: boolean,
+  ownerContext: LocalArchiveOwnerContext,
+) {
+  const sourceId = normalizeOptionalText(cloudArchiveId);
+  const ownerUserId = normalizeOptionalText(ownerContext.userId);
+  if (!sourceId || !ownerUserId || ownerContext.snapshotOnly) return false;
+
+  await ensureCloudSafReadable(ownerContext);
+  const archives = await getAllRows<LocalArchive>(ARCHIVE_STORE);
+  const cache = archives.map(normalizeLocalArchive).find((archive) =>
+    archive.source_cloud_archive_id === sourceId &&
+    resolveLocalArchiveRole(archive) === "cloud-offline-cache" &&
+    archive.local_owner_user_id === ownerUserId &&
+    isLocalArchiveVisibleToOwner(archive, ownerContext)
+  );
+  if (!cache) return false;
+
+  const updatedAt = nowIso();
+  const trashedAt = trashed ? updatedAt : null;
+  const committed = await commitCloudSaf(ownerUserId, cache.id, (current) => {
+    const currentArchive = normalizeLocalArchive(current.archive);
+    if (resolveLocalArchiveRole(currentArchive) !== "cloud-offline-cache" ||
+        currentArchive.source_cloud_archive_id !== sourceId ||
+        currentArchive.local_owner_user_id !== ownerUserId) {
+      throw Error("Cloud offline cache owner or source changed during trash reconciliation.");
+    }
+    if (Boolean(currentArchive.trashed_at) === trashed) {
+      return { value: true, next: current, unchanged: true };
+    }
+    const nextArchive = { ...currentArchive, trashed_at: trashedAt, updated_at: updatedAt };
+    return {
+      value: true,
+      next: { ...current, archive: nextArchive },
+      baselineArchive: nextArchive,
+    };
+  }, true);
+  if (committed) return committed.value;
+
+  const existing = await getRowById<LocalArchive>(ARCHIVE_STORE, cache.id);
+  if (!existing) return false;
+  const normalized = normalizeLocalArchive(existing);
+  if (resolveLocalArchiveRole(normalized) !== "cloud-offline-cache" ||
+      normalized.source_cloud_archive_id !== sourceId ||
+      normalized.local_owner_user_id !== ownerUserId) {
+    throw Error("Cloud offline cache owner or source changed before local trash update.");
+  }
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    transaction.objectStore(ARCHIVE_STORE).put({ ...existing, trashed_at: trashedAt, updated_at: updatedAt });
+    await done;
+  } finally {
+    db.close();
+  }
+  return true;
+}
 
 async function deleteCloudOfflineCacheRows(
   cache: LocalArchive,
