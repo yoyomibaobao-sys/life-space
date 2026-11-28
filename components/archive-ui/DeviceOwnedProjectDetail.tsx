@@ -62,6 +62,7 @@ export default function DeviceOwnedProjectDetail({
   onAddRecord,
   onDeleteArchive,
   onDeleteRecord,
+  onEditPendingRecord, onUploadPendingRecord, uploadingPending,
   onTransferToCloud,
   extra,
   recordComposer,
@@ -75,6 +76,9 @@ export default function DeviceOwnedProjectDetail({
   onAddRecord: () => void;
   onDeleteArchive: () => void;
   onDeleteRecord: (recordId: string) => void;
+  onEditPendingRecord?: (id: string) => void;
+  onUploadPendingRecord?: (id: string) => Promise<void>;
+  uploadingPending?: boolean;
   onTransferToCloud?: () => void;
   extra?: ReactNode;
   recordComposer?: ReactNode;
@@ -95,9 +99,9 @@ export default function DeviceOwnedProjectDetail({
   const pendingCreate = archive.sync?.operation_kind === "create-archive" && !archive.source_cloud_archive_id;
   const projectBadge = pendingCreate ? (language === "zh" ? "待上传" : "Pending upload")
     : isCloudCache ? workspaceCopy.cloud_cache_copy : archiveCopy.local_project;
-  const canEditArchive = canEditLocalArchiveFields(archive, ownerContext);
+  const canEditArchive = canEditLocalArchiveFields(archive, ownerContext) && (!pendingCreate || (archive.sync.status === "pending-cloud-sync" && !archive.sync.attempt_count && ownerContext?.userId === archive.local_owner_user_id));
   const canAddRecord = canAddLocalArchiveRecord(archive);
-  const cycleEnabled = Boolean(archive.cycle_enabled);
+  const cycleEnabled = !pendingCreate && Boolean(archive.cycle_enabled);
   const [activeDetailTab, setActiveDetailTab] = useState<ArchiveProjectDetailTabId>("records");
   const [busy, setBusy] = useState(false);
   const [recordItems, setRecordItems] = useState<RecordItem[]>([]);
@@ -110,7 +114,7 @@ export default function DeviceOwnedProjectDetail({
   const currentOwnerId = ownerContext?.userId || null;
   const canConfirmArchiveDelete = !isCloudCache && canEditArchive && !busy &&
     deleteArchiveTarget?.archiveId === archive.id && deleteArchiveTarget.ownerId === currentOwnerId;
-  const confirmedRecord = !isCloudCache && !busy && recordToDelete &&
+  const confirmedRecord = (!isCloudCache || recordToDelete?.sync.operation_kind === "create-record") && !busy && recordToDelete &&
     recordDeleteScope?.archiveId === archive.id && recordDeleteScope.ownerId === currentOwnerId
     ? detail.records.find((item) => item.id === recordToDelete.id &&
         canEditLocalArchiveRecord(archive, item, ownerContext))
@@ -333,12 +337,13 @@ export default function DeviceOwnedProjectDetail({
             groupTagId={archive.group_name || null}
             subTags={subTags}
             groupTags={groupTags}
-            maxDepth={maxDepth}
+            maxDepth={pendingCreate ? 1 : maxDepth}
             ended={archive.status === "ended"}
-            isPublic={false}
+            isPublic={pendingCreate && archive.migration_visibility === "public"}
             canWrite={canEditArchive && !busy}
             busy={busy}
-            showVisibility={false}
+            showVisibility={pendingCreate}
+            onTogglePublic={() => void change(() => updateLocalArchiveFields(archive.id, { migration_visibility: archive.migration_visibility === "public" ? "private" : "public" }, ownerContext))}
             footerAction={onTransferToCloud && !isCloudCache ? {
               label: language === "zh" ? "上传到云端" : "Upload to cloud",
               onClick: onTransferToCloud,
@@ -356,7 +361,7 @@ export default function DeviceOwnedProjectDetail({
               }, ownerContext));
             }}
           />
-          {canEditArchive ? (
+          {canEditArchive && !pendingCreate ? (
             <ArchiveCycleSettings
               key={archive.id}
               enabled={cycleEnabled}
@@ -397,7 +402,9 @@ export default function DeviceOwnedProjectDetail({
       renderRecord={(record, index) => {
         const source = detail.records.find((item) => item.id === record.id);
         const editable = source ? canEditLocalArchiveRecord(archive, source, ownerContext) : false;
-        return (
+        const pending = source && (isPendingCloudSyncStatus(source.sync.status) || source.images.some(image => isPendingCloudSyncStatus(image.sync.status)));
+        const unattempted = pending && source.sync.status === "pending-cloud-sync" && !source.sync.attempt_count;
+        return (<div key={record.id}>
           <ArchiveRecordCard
             key={record.id}
             variant="local"
@@ -405,7 +412,7 @@ export default function DeviceOwnedProjectDetail({
             archive={localArchiveRecordShell}
             item={record}
             index={index}
-            mode={editable ? "owner" : "viewer"}
+            mode={editable && !pending ? "owner" : "viewer"}
             startTime={startTime}
             isHighlighted={false}
             sameTagLinks={[]}
@@ -439,7 +446,13 @@ export default function DeviceOwnedProjectDetail({
               await onChanged();
             } : undefined}
           />
-        );
+          {pending && onEditPendingRecord && <div className="action-row pending-record-actions">
+            <button type="button" aria-busy={uploadingPending} disabled={!onUploadPendingRecord || uploadingPending} onClick={() => void onUploadPendingRecord?.(record.id)}>{language === "zh" ? "上传" : "Upload"}</button>
+            <button type="button" disabled={!unattempted || uploadingPending} onClick={() => onEditPendingRecord(record.id)}>{language === "zh" ? "编辑" : "Edit"}</button>
+            <button type="button" disabled={!unattempted || source.sync.operation_kind !== "create-record" || uploadingPending}
+              onClick={() => { setRecordDeleteScope({ archiveId: archive.id, ownerId: currentOwnerId }); setRecordToDelete(source); }}>{language === "zh" ? "删除" : "Delete"}</button>
+          </div>}
+        </div>);
       }}
       lightbox={lightboxImages.length > 0 ? {
         images: lightboxImages,

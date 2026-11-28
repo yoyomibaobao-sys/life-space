@@ -181,7 +181,7 @@ export default function AddRecord({
       setCustomTime(restored.customTime);
       setSplitByDate(restored.splitByDate);
       setRecordVisibility(archiveIsPublic ? restored.visibility : "private");
-      setIsHelpRecord(restored.isHelpRecord);
+      setIsHelpRecord(!publicationAccess && restored.isHelpRecord);
       setSelectedCycleId(restored.selectedCycleId ?? undefined);
       setEndSelectedCycleAfterSave(restored.endSelectedCycleAfterSave);
       if (interrupted.phase === "submitting-unknown" || interrupted.phase === "reconcile-only") {
@@ -1512,7 +1512,7 @@ export default function AddRecord({
         )}
       </div>
 
-      <div style={{ marginTop: "10px" }}>
+      {!publicationAccess && (<div style={{ marginTop: "10px" }}>
         <label style={{ fontSize: 13, color: "#555" }}>
           <input
             type="checkbox"
@@ -1522,7 +1522,7 @@ export default function AddRecord({
           />
           {copy.ask_for_help}
         </label>
-      </div>
+      </div>)}
 
       {timeMode === "custom" && (
         <div style={{ marginTop: "10px" }}>

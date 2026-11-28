@@ -20,6 +20,7 @@ import {
   createLocalRecord,
   deleteLocalArchive,
   cancelNeverUploadedCloudArchive,
+  cancelNeverUploadedCloudRecord,
   deleteLocalRecord,
   resolveLocalArchiveDetail,
   listVisibleLocalArchiveSummaries,
@@ -238,8 +239,7 @@ type ShellSourceFilter = "all" | "cloud" | "pending" | "local";
 // local SAF data, cloud caches, or pending records.
 function w5WorkspaceSources(auth: "checking" | "signed-out" | "signed-in" | "offline-owner-read"): ShellSourceFilter[] {
   // W5 online Android never exposes the S6 independent local-space source, even to guests.
-  return auth === "checking" ? [] : auth === "signed-in" || auth === "offline-owner-read"
-    ? ["cloud", "pending"] : ["cloud"];
+  return auth === "checking" ? [] : ["cloud"];
 }
 
 type ShellSpaceProfile = {
@@ -898,8 +898,8 @@ function App() {
   const [experienceCardCount, setExperienceCardCount] = useState(0);
   const [archives, setArchives] = useState<LocalArchiveSummary[]>([]);
   const [cloudCaches, setCloudCaches] = useState<LocalArchiveSummary[]>([]);
-  const [sourceFilter, setSourceFilter] = useState<ShellSourceFilter>("all");
-  const [focusedPendingKey, setFocusedPendingKey] = useState<string | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<ShellSourceFilter>("cloud");
+
   const [unownedCount, setUnownedCount] = useState(0);
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [cloudPendingDetail, setCloudPendingDetail] = useState<LocalArchiveDetail | null>(null);
@@ -2031,10 +2031,12 @@ function App() {
     if (!ownerId || resolveAndroidReadOwner(getAndroidAuthSnapshot())?.userId !== ownerId ||
         screen.kind !== "detail" || screen.archiveId !== archiveId ||
         detail?.archive.id !== archiveId || detail.archive.local_owner_user_id !== ownerId ||
-        detail.archive.local_role === "cloud-offline-cache" ||
         !detail.records.some((record) => record.id === recordId && record.archive_id === archiveId)) return;
     try {
-      await deleteLocalRecord(recordId);
+      const record = detail.records.find(item => item.id === recordId)!;
+      if (isPendingCloudSyncStatus(record.sync.status)) await cancelNeverUploadedCloudRecord(recordId, { userId: ownerId });
+      else if (detail.archive.local_role !== "cloud-offline-cache") await deleteLocalRecord(recordId);
+      else return;
       await loadDetail(archiveId);
       await loadList();
       showToast(copy.deleted);
@@ -2326,10 +2328,11 @@ function App() {
   }
 
   function renderCloudProjectCard(archive: CloudArchiveSummary) {
+    const view = cloudProjectView(archive);
     return (
       <ArchiveProjectCard
         key={archive.id}
-        project={cloudProjectView(archive)}
+        project={{ ...view, storageLabel: pendingRecordLabel(archive.id) }}
         mobileMode
         compactOwnerHeader
         mobileShowCategoryBadge={false}
@@ -2343,11 +2346,16 @@ function App() {
       />
     );
   }
+  function pendingRecordLabel(cloudId?: string | null) {
+    const count = workspace.pending.find(item => item.key === `cloud:${cloudId}`)?.recordCount;
+    return count ? (language === "zh" ? `${count}条记录待上传` : `${count} records pending`) : undefined;
+  }
   function renderCloudCacheCard(archive: LocalArchiveSummary) {
     return <ArchiveProjectCard
       key={archive.id}
       project={{
         ...localArchiveToProjectView(archive, ownerContext, language, cloudDepths[archive.category]),
+        storageLabel: pendingRecordLabel(archive.source_cloud_archive_id),
         href: undefined,
       }}
       onClick={() => openDetail(archive.id)}
@@ -2392,37 +2400,20 @@ function App() {
       ? localArchiveToProjectView(local, ownerContext, language, cloudDepths[local.category])
       : item.cloud ? cloudProjectView(item.cloud) : null;
     if (!base) return null;
-    const badge = language === "zh" ? "待上传" : "Pending upload";
-    const counts = language === "zh"
-      ? `${item.recordCount} 条记录 · ${item.imageCount} 张照片待上传`
-      : `${item.recordCount} records · ${item.imageCount} photos to upload`;
-    const focused = sourceFilter === "pending" && focusedPendingKey === item.key;
-    return <div key={item.key}>{focused ? (
-      <section data-android-pending-only-detail="true" className="panel">
-        <button type="button" onClick={() => setFocusedPendingKey(null)}>{language === "zh" ? "返回临时空间" : "Back to temporary space"}</button>
-        <h2>{base.title}</h2>
-        {local?.status === "active" && local.local_owner_user_id === readOwnerContext?.userId ? (
-          <button type="button" onClick={() => setScreen({ kind: "new-record", archiveId: local.id })}>{copy.addRecord}</button>
-        ) : null}
-        {readOwnerContext ? item.summaries.map((row) => (
-          <AndroidPendingRecordReview key={row.local_archive_id} archiveId={row.local_archive_id}
-            owner={readOwnerContext} language={language} focused
-            onEditRecord={(recordId) => setScreen({ kind: "edit-record", archiveId: row.local_archive_id, recordId })}
-            onChanged={() => loadList(readOwnerContext)}
-            onUploadRecord={online && authenticatedOwnerContext ? (recordId) => uploadPendingRecord(recordId, row.local_archive_id) : undefined} />
-        )) : null}
-      </section>
-    ) : <ArchiveProjectCard
-      key={item.key}
-      project={{ ...base, href: undefined, visibilityLabel: badge, visibilityTone: "neutral", latestText: counts }}
-      onClick={() => { if (sourceFilter === "pending") { setFocusedPendingKey(item.key); } else if (local) openDetail(local.id); else if (item.cloud) setScreen({ kind: "cloud-detail", archiveId: item.cloud.id }); }}
-      mobileMode mobileShowCategoryBadge={false}
-    />}
-    {!focused && authenticatedOwnerContext ? <div className="action-row pending-project-actions">
-        {online ? <button type="button" className="secondary-button compact-card-action"
-          disabled={Boolean(syncingArchiveId)} onClick={() => void uploadPendingProject(item)}>
-          {syncingArchiveId === item.key || syncingArchiveId === item.summaries[0]?.local_archive_id ? (language === "zh" ? "上传中…" : "Uploading…") : (language === "zh" ? "上传" : "Upload")}
-        </button> : null}
+    const pendingLabel = language === "zh"
+      ? ["项目待上传", item.recordCount ? `${item.recordCount}条记录待上传` : ""].filter(Boolean).join("，")
+      : `Project pending · ${item.recordCount} records pending`;
+    const uploading = syncingArchiveId === item.key || syncingArchiveId === item.summaries[0]?.local_archive_id;
+    return <div key={item.key}>
+      <ArchiveProjectCard project={{ ...base, href: undefined, latestText: pendingLabel,
+        visibilityLabel: local?.migration_visibility === "public" ? (language === "zh" ? "公开" : "Public") : (language === "zh" ? "私密" : "Private") }}
+        onClick={() => { if (local) openDetail(local.id); }}
+        mobileMode compactOwnerHeader mobileShowCategoryBadge={false} />
+      <div className="action-row pending-project-actions">
+        <button type="button" className="secondary-button compact-card-action" aria-busy={uploading}
+          disabled={!online || !authenticatedOwnerContext || Boolean(syncingArchiveId)} onClick={() => void uploadPendingProject(item)}>
+          {language === "zh" ? (item.recordCount ? "上传项目及记录" : "上传项目") : (item.recordCount ? "Upload project and records" : "Upload project")}
+        </button>
         <button type="button" className="secondary-button compact-card-action"
           hidden={!canDiscardProject(item)}
           disabled={Boolean(syncingArchiveId)}
@@ -2431,7 +2422,7 @@ function App() {
               setPendingCancelTarget({ key: item.key, creating: item.creating, archiveId: item.summaries[0].local_archive_id, ownerId: authenticatedOwnerContext.userId, screen });
             }
           }}>{item.creating ? (language === "zh" ? "删除" : "Delete") : (language === "zh" ? "放弃修改" : "Discard changes")}</button>
-      </div> : null}
+      </div>
     </div>;
   }
   function renderProjectActions(archive: CloudArchiveSummary | LocalArchiveSummary, source: "cloud" | "local" | "cache") {
@@ -2710,7 +2701,7 @@ function App() {
             ...(value === "all"
               ? { label: copy.all, count: workspace.counts.all }
               : value === "cloud"
-                ? { label: copy.cloud, count: cloudSourceCount }
+                ? { label: language === "zh" ? "我的项目" : "My projects", count: cloudSourceCount }
                 : value === "pending"
                   ? { label: language === "zh" ? "临时空间" : "Temporary", count: workspace.pending.length }
                   : { label: copy.local, count: workspace.counts.local }),
@@ -2719,7 +2710,7 @@ function App() {
           packVisibleSources
           onSelectSource={(source) => {
             setSourceFilter(source);
-            setFocusedPendingKey(null);
+
             setSubcategoryFilter(null);
             setGroupFilter(null);
             setScreen({ kind: "list" });
@@ -2791,23 +2782,12 @@ function App() {
             </section>
           ) : null}
         >
-          {readOwnerContext && sourceFilter === "pending" && filteredPending.length > 0 ? (
-            <section data-android-cloud-pending="true" data-android-temporary-space="true">
-              {!focusedPendingKey && <div className="pending-upload-summary">
-                <strong>{language === "zh" ? `待上传记录 ${workspace.pendingCounts.record} 条` : `${workspace.pendingCounts.record} pending records`}</strong>
-                <div className="action-row" data-w5-upload-all-pending="true">
-                  <button type="button" className="secondary-button"
-                    disabled={!online || !authenticatedOwnerContext || !cloudUserId || Boolean(syncingArchiveId)}
-                    onClick={() => void uploadAllPending()}>
-                    {syncingArchiveId === "all"
-                      ? (language === "zh" ? "全部上传中…" : "Uploading all…")
-                      : (language === "zh" ? "全部上传" : "Upload all")}
-                  </button>
-                </div>
-              </div>}
-              <div className="project-list">{filteredPending.filter((item) => !focusedPendingKey || item.key === focusedPendingKey).map(renderPendingProjectCard)}</div>
-            </section>
-          ) : null}
+          {readOwnerContext && workspace.pending.length > 0 && <div className="pending-upload-summary">
+            <strong>{language === "zh" ? `待上传项目 ${workspace.pendingCounts.archive} · 记录 ${workspace.pendingCounts.record}` : `Pending projects ${workspace.pendingCounts.archive} · Records ${workspace.pendingCounts.record}`}</strong>
+            <button type="button" className="secondary-button" aria-busy={syncingArchiveId === "all"}
+              disabled={!online || !authenticatedOwnerContext || !cloudUserId || Boolean(syncingArchiveId)}
+              onClick={() => void uploadAllPending()}>{language === "zh" ? "一键上传" : "Upload all"}</button>
+          </div>}
           {sourceFilter === "cloud" && !offlineOwnerRead && auth.status !== "checking" && (auth.status !== "signed-in" || !canCreateMembershipContent(membership)) ? renderCloudAccessOptions() : null}
           {readOwnerContext && cloudReadable && sourceFilter !== "local" && sourceFilter !== "pending" ? (
             liveCloudWorkspace ? (
@@ -2988,6 +2968,9 @@ function App() {
                 onChanged={async () => { await loadDetail(detail.archive.id); await loadList(); }}
                 onBack={goList}
                 onAddRecord={() => setScreen({ kind: "new-record", archiveId: detail.archive.id })}
+                onEditPendingRecord={recordId => setScreen({ kind: "edit-record", archiveId: detail.archive.id, recordId })}
+                onUploadPendingRecord={online && authenticatedOwnerContext ? recordId => uploadPendingRecord(recordId, detail.archive.id) : undefined}
+                uploadingPending={syncingArchiveId === detail.archive.id}
                 onDeleteArchive={() => void handleDeleteArchive(detail.archive.id)}
                 onDeleteRecord={(recordId) => void handleDeleteRecord(recordId, detail.archive.id)}
                 onTransferToCloud={canOfferLocalCloudTransfer(detail.archive) &&
@@ -3068,22 +3051,10 @@ function App() {
             cloudPendingDetail.archive.local_owner_user_id === readOwnerContext?.userId ? (
             <section className="panel" data-w5-cloud-detail-pending-records="true">
               <strong>{language === "zh" ? "本机待上传记录" : "Pending local records"}</strong>
-              {cloudPendingDetail.records.filter((record) =>
-                isPendingCloudSyncStatus(record.sync.status) ||
-                record.images.some((image) => isPendingCloudSyncStatus(image.sync.status)))
-                .map((record) => (
-                <div className="action-row" key={record.id} data-w5-pending-record-actions={record.id}>
-                  <button type="button" className="secondary-button" onClick={() => {
-                    setSourceFilter("pending");
-                    openDetail(cloudPendingDetail.archive.id);
-                  }}>{record.note?.slice(0, 32) || record.record_time || (language === "zh" ? "查看记录" : "View record")}</button>
-                  <button type="button" className="secondary-button"
-                    disabled={!online || Boolean(syncingArchiveId)}
-                    onClick={() => void uploadPendingRecord(record.id, cloudPendingDetail.archive.id)}>
-                    {language === "zh" ? "上传" : "Upload"}
-                  </button>
-                </div>
-              ))}
+              <AndroidPendingRecordReview archiveId={cloudPendingDetail.archive.id} owner={readOwnerContext!}
+                focused language={language} onChanged={() => loadList(readOwnerContext)}
+                onEditRecord={recordId => setScreen({ kind: "edit-record", archiveId: cloudPendingDetail.archive.id, recordId })}
+                onUploadRecord={online && authenticatedOwnerContext ? recordId => uploadPendingRecord(recordId, cloudPendingDetail.archive.id) : undefined} />
             </section>
           ) : null}
         </MobileShellErrorBoundary>
@@ -4291,7 +4262,7 @@ function ProjectForm({
     if (guideEdited || archive) return;
     const inferred = inferProjectGuide(directory, title, category);
     setSelectedGuide(inferred || undefined);
-    setSystemName(inferred?.label || title.trim());
+    setSystemName(inferred?.label || "");
   }, [title, category, directory, guideEdited, archive]);
   const [source, setSource] = useState(archive?.source || "");
   const [plantingRegion, setPlantingRegion] = useState<PlantingRegion | null>(archive ? archive.planting_region || null : loadDefaultPlantingRegion(owner?.userId));

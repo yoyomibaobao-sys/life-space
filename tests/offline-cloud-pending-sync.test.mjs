@@ -946,3 +946,19 @@ test("W5 P0: SAF-marked mirrors cannot be canceled via IDB path", async () => {
   const saved = await dbModule.getLocalArchiveDetail(newArchive.id, owner);
   assert.equal(saved.archive.saf_local_space_id, "saf-persisted");
 });
+
+test("owner edits an unsent project without changing its operation or losing queued records", async () => {
+  await fixture();
+  const draft = await dbModule.createLocalArchive({ title: "原名", category: "system",
+    system_name: "堆肥", local_owner_user_id: owner.userId, sync_destination: "pending-cloud" });
+  const record = await dbModule.createLocalRecord({ archive_id: draft.id, note: "观察", image_files: [photo()] });
+  await assert.rejects(() => dbModule.updateLocalArchiveFields(draft.id, { title: "其他账号" }, { userId: "other" }));
+  await dbModule.updateLocalArchiveFields(draft.id, { title: "新名", migration_visibility: "private", status: "ended" }, owner);
+  const detail = await dbModule.getLocalArchiveDetail(draft.id, owner);
+  assert.equal(detail.archive.title, "新名");
+  assert.equal(detail.archive.status, "ended");
+  assert.equal(detail.archive.migration_visibility, "private");
+  assert.deepEqual(detail.archive.sync, draft.sync);
+  assert.equal(detail.records[0].id, record.id);
+  assert.equal(detail.records[0].images.length, 1);
+});

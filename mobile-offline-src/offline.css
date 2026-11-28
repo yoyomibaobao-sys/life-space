@@ -294,3 +294,13 @@ button:disabled { opacity: 0.55; }
 }
 [data-android-pending-only-detail] h2 { font-size: 18px; margin-block: 8px; }
 [data-android-pending-only-detail] p { margin: 4px 0; }
+
+.pending-upload-summary button[aria-busy="true"], .pending-project-actions button[aria-busy="true"] {
+  background: linear-gradient(90deg, #ebf4e6 25%, #b6d3aa 50%, #ebf4e6 75%);
+  background-size: 200% 100%;
+  animation: pending-upload-progress 1.5s linear infinite;
+}
+@keyframes pending-upload-progress { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .pending-upload-summary button[aria-busy="true"], .pending-project-actions button[aria-busy="true"] { animation: none; }
+}

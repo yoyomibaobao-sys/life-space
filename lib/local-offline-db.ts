@@ -2830,6 +2830,7 @@ export async function updateLocalArchiveFields(
     archive_summary?: string | null;
     cycle_enabled?: boolean;
     next_cycle_name?: string | null;
+    migration_visibility?: "private" | "public";
     status?: "active" | "ended";
     ended_at?: string | null;
   },
@@ -2838,9 +2839,15 @@ export async function updateLocalArchiveFields(
   if (updates.planting_region != null && !normalizePlantingRegion(updates.planting_region)) {
     throw new Error("种植地区无效 / Invalid planting region.");
   }
+  function locked(archive: LocalArchive) {
+    if (!isPendingCloudSyncStatus(archive.sync.status)) return false;
+    return !ownerContext?.userId || ownerContext.userId !== archive.local_owner_user_id ||
+      archive.sync.operation_kind !== "create-archive" || archive.sync.status !== "pending-cloud-sync" ||
+      Boolean(archive.sync.attempt_count || archive.source_cloud_archive_id || archive.local_cloud_transfer);
+  }
   const cloud = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
   const savedCloudCopy = cloud?.local_role === "saved-local-copy" && Boolean(cloud.source_cloud_archive_id);
-  if (cloud && isPendingCloudSyncStatus(cloud.sync?.status)) {
+  if (cloud && locked(cloud)) {
     throw Error("待上传项目只读，请先上传或安全删除。");
   }
   if (cloud?.local_owner_user_id && (savedCloudCopy ||
@@ -2849,7 +2856,7 @@ export async function updateLocalArchiveFields(
     const apply = (current: CloudMaterialization): { value: LocalArchive; next: CloudMaterialization } => {
       const archive = current.archive;
       if (!isLocalArchiveVisibleToOwner(archive, ownerContext)) throw Error("没有权限修改这个本地项目。");
-      if (isPendingCloudSyncStatus(archive.sync?.status)) {
+      if (locked(archive)) {
         throw Error("待上传项目只读，请先上传或安全删除。");
       }
       const optional = (key: "subcategory" | "group_name" | "system_name" | "species_name" |
@@ -2858,6 +2865,7 @@ export async function updateLocalArchiveFields(
         updates[key] === undefined ? archive[key] : normalizeOptionalText(updates[key]);
       const category = updates.category == null ? archive.category : normalizeLocalArchiveCategory(updates.category);
       let next: LocalArchive = { ...archive,
+      ...(updates.migration_visibility !== undefined && archive.sync.operation_kind === "create-archive" ? { migration_visibility: updates.migration_visibility } : {}),
         title: updates.title === undefined ? archive.title : normalizeOptionalText(updates.title) || archive.title,
         category, main_category: category,
         subcategory: optional("subcategory"), group_name: optional("group_name"),
@@ -2906,7 +2914,7 @@ export async function updateLocalArchiveFields(
   const durable = await commitManagedLocalSaf(archiveId, (content, index) => {
     const entry = content.entries[index];
     const archive = entry.archive;
-    if (isPendingCloudSyncStatus(archive.sync?.status)) {
+    if (locked(archive)) {
       throw Error("待上传项目只读，请先上传或安全删除。");
     }
     const optional = (key: "subcategory" | "group_name" | "system_name" | "species_name" |
@@ -2916,6 +2924,7 @@ export async function updateLocalArchiveFields(
     const category = updates.category == null ? archive.category : normalizeLocalArchiveCategory(updates.category);
     const next: LocalArchive = {
       ...archive,
+      ...(updates.migration_visibility !== undefined && archive.sync.operation_kind === "create-archive" ? { migration_visibility: updates.migration_visibility } : {}),
       title: updates.title === undefined ? archive.title : normalizeOptionalText(updates.title) || archive.title,
       category, main_category: category,
       subcategory: optional("subcategory"), group_name: optional("group_name"),
@@ -2959,7 +2968,7 @@ export async function updateLocalArchiveFields(
       await done.catch(() => undefined);
       throw new Error("没有权限修改这个本地项目。");
     }
-    if (isPendingCloudSyncStatus(normalizedArchive.sync?.status)) {
+    if (locked(normalizedArchive)) {
       transaction.abort();
       await done.catch(() => undefined);
       throw Error("待上传项目只读，请先上传或安全删除。");
@@ -2974,6 +2983,7 @@ export async function updateLocalArchiveFields(
 
     let nextArchive: LocalArchive = {
       ...normalizedArchive,
+      ...(updates.migration_visibility !== undefined && normalizedArchive.sync.operation_kind === "create-archive" ? { migration_visibility: updates.migration_visibility } : {}),
       title:
         updates.title === undefined
           ? normalizedArchive.title
